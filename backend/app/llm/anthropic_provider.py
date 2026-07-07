@@ -1,0 +1,99 @@
+"""Real LLM provider backed by the Anthropic Messages API.
+
+Uses the official ``anthropic`` SDK. A small explicit retry loop with
+exponential backoff wraps the call so transient errors (rate limits, 5xx,
+connection drops) are retried; non-retryable errors surface immediately.
+"""
+
+from __future__ import annotations
+
+import time
+
+from app.core.config import get_settings
+from app.core.exceptions import LLMError
+from app.core.logging import get_logger
+from app.llm.base import LLMProvider
+
+logger = get_logger(__name__)
+
+# Tasks that should use the cheaper/faster "quiz" model; everything else uses
+# the stronger planning model.
+_QUIZ_KINDS = {"quiz", "content"}
+
+
+class AnthropicProvider(LLMProvider):
+    def __init__(self) -> None:
+        import anthropic  # imported here so the mock path needs no SDK install
+
+        self._anthropic = anthropic
+        self._settings = get_settings()
+        # max_retries=0: we implement our own backoff loop below for clarity and
+        # testability.
+        self._client = anthropic.Anthropic(
+            api_key=self._settings.ANTHROPIC_API_KEY,
+            timeout=self._settings.LLM_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
+        self._retryable = tuple(
+            exc
+            for exc in (
+                getattr(anthropic, "RateLimitError", None),
+                getattr(anthropic, "APIConnectionError", None),
+                getattr(anthropic, "InternalServerError", None),
+                getattr(anthropic, "APITimeoutError", None),
+            )
+            if exc is not None
+        )
+
+    def _model_for(self, kind: str) -> str:
+        if kind in _QUIZ_KINDS:
+            return self._settings.LLM_MODEL_QUIZ
+        return self._settings.LLM_MODEL_PLAN
+
+    def complete(
+        self,
+        *,
+        kind: str,
+        system: str,
+        prompt: str,
+        context: dict | None = None,
+        max_tokens: int = 4096,
+    ) -> str:
+        model = self._model_for(kind)
+        attempts = max(1, self._settings.LLM_MAX_RETRIES)
+        last_exc: Exception | None = None
+
+        for attempt in range(attempts):
+            try:
+                response = self._client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return self._extract_text(response)
+            except self._retryable as exc:  # type: ignore[misc]
+                last_exc = exc
+                backoff = 2**attempt
+                logger.warning(
+                    "LLM call (%s) failed on attempt %d/%d: %s; retrying in %ss",
+                    kind, attempt + 1, attempts, exc, backoff,
+                )
+                if attempt < attempts - 1:
+                    time.sleep(backoff)
+            except Exception as exc:  # noqa: BLE001 - non-retryable
+                raise LLMError(f"LLM call failed: {exc}") from exc
+
+        raise LLMError(f"LLM call failed after {attempts} attempts: {last_exc}")
+
+    @staticmethod
+    def _extract_text(response) -> str:
+        parts = [
+            block.text
+            for block in getattr(response, "content", [])
+            if getattr(block, "type", None) == "text"
+        ]
+        text = "".join(parts).strip()
+        if not text:
+            raise LLMError("LLM returned no text content.")
+        return text

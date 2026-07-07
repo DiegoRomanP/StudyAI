@@ -1,0 +1,15 @@
+# --- Core (required to boot & run the MVP end-to-end) --------------------
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+SQLAlchemy>=2.0
+python-multipart>=0.0.9
+anthropic>=0.40
+alembic>=1.13
+
+# The app runs with just the packages above using the deterministic mock LLM,
+# a hashing embedder and an in-memory vector store.
+#
+# For real semantic RAG + PDF parsing + Claude, additionally install
+# requirements-rag.txt (heavier: PyMuPDF, sentence-transformers, chromadb).
