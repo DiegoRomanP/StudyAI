@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: StudyAI API
+  version: 0.1.0
+  description: >
+    Contrato mínimo de la API de StudyAI. El backend (FastAPI) sirve además el
+    esquema OpenAPI completo y en vivo en /openapi.json y Swagger UI en /docs.
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+
+  /documents/upload:
+    post:
+      summary: Sube un documento (.pdf o .md) e inicia su indexación
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Documento creado (status PENDING)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+        "400": { description: Tipo o tamaño inválido }
+
+  /documents:
+    get:
+      summary: Lista los documentos del usuario
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Document" }
+
+  /documents/{document_id}:
+    get:
+      summary: Detalle de un documento (para hacer polling del status)
+      parameters:
+        - { name: document_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Document" }
+
+  /goals:
+    post:
+      summary: Crea una meta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalCreate" }
+      responses:
+        "201":
+          description: Creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+    get:
+      summary: Lista metas
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Goal" }
+
+  /goals/{goal_id}:
+    get:
+      summary: Detalle de una meta
+      parameters:
+        - { name: goal_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+    put:
+      summary: Actualiza una meta
+      parameters:
+        - { name: goal_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalCreate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+
+  /plans/generate:
+    post:
+      summary: Inicia la generación asíncrona de un plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goal_id]
+              properties:
+                goal_id: { type: integer }
+                document_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "202":
+          description: Aceptado (status PROCESSING)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanStatus" }
+
+  /plans/{plan_id}/status:
+    get:
+      summary: Estado de generación del plan (para polling)
+      parameters:
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanStatus" }
+
+  /plans/{plan_id}:
+    get:
+      summary: Plan completo (temas + sesiones)
+      parameters:
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+
+  /sessions/{session_id}:
+    get:
+      summary: Detalle de una sesión (material incluido)
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+
+  /sessions/{session_id}/complete:
+    post:
+      summary: Marca una sesión como completada
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /quizzes/{session_id}:
+    get:
+      summary: Quiz de una sesión
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+
+  /quizzes/{quiz_id}/submit:
+    post:
+      summary: Envía respuestas; califica y actualiza SM-2
+      parameters:
+        - { name: quiz_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      question_id: { type: integer }
+                      selected_option: { type: string, nullable: true }
+                      quality: { type: integer, minimum: 0, maximum: 5, nullable: true }
+      responses:
+        "200": { description: Resultado del quiz }
+
+  /dashboard:
+    get:
+      summary: Métricas de progreso (scores, temas débiles, próximas revisiones)
+      responses:
+        "200": { description: OK }
+
+components:
+  schemas:
+    Document:
+      type: object
+      properties:
+        id: { type: integer }
+        filename: { type: string }
+        file_type: { type: string }
+        file_size: { type: integer }
+        status: { type: string, enum: [PENDING, INDEXED, FAILED] }
+        created_at: { type: string, format: date-time }
+    GoalCreate:
+      type: object
+      required: [title]
+      properties:
+        goal_type: { type: string, enum: [EXAM, LEARNING, MEMORIZATION] }
+        title: { type: string }
+        description: { type: string }
+    Goal:
+      allOf:
+        - $ref: "#/components/schemas/GoalCreate"
+        - type: object
+          properties:
+            id: { type: integer }
+            created_at: { type: string, format: date-time }
+    PlanStatus:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [PROCESSING, READY, FAILED] }
+        error_message: { type: string }
+    Plan:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        status: { type: string, enum: [PROCESSING, READY, FAILED] }
+        goal_id: { type: integer }
+        document_ids:
+          type: array
+          items: { type: integer }
+        topics:
+          type: array
+          items: { type: object }
+        sessions:
+          type: array
+          items: { type: object }
