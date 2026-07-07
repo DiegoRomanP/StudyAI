@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* Basic typography for LLM-rendered markdown study material. */
+.prose-study h1 { @apply text-2xl font-bold mt-4 mb-2; }
+.prose-study h2 { @apply text-xl font-semibold mt-4 mb-2; }
+.prose-study h3 { @apply text-lg font-semibold mt-3 mb-1; }
+.prose-study p { @apply my-2 leading-relaxed; }
+.prose-study ul { @apply list-disc pl-6 my-2; }
+.prose-study ol { @apply list-decimal pl-6 my-2; }
+.prose-study li { @apply my-1; }
+.prose-study blockquote { @apply border-l-4 border-brand-500 pl-4 italic text-slate-500 my-3; }
+.prose-study code { @apply bg-slate-100 px-1 rounded text-sm; }
+.prose-study strong { @apply font-semibold text-slate-900; }
