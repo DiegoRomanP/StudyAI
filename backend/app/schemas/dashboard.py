@@ -8,6 +8,10 @@ from pydantic import BaseModel
 
 
 class ScorePoint(BaseModel):
+    """
+    modelo de puntajes para mejorar
+    """
+
     session_id: int
     topic_name: str
     score: float
@@ -15,6 +19,10 @@ class ScorePoint(BaseModel):
 
 
 class WeakTopic(BaseModel):
+    """
+    tema que aun no se domina,
+    """
+
     topic_name: str
     score: float
 
