@@ -6,7 +6,7 @@ info:
     Contrato mínimo de la API de StudyAI. El backend (FastAPI) sirve además el
     esquema OpenAPI completo y en vivo en /openapi.json y Swagger UI en /docs.
 servers:
-  - url: http://localhost:8000
+  - url: http://localhost:8001
 
 paths:
   /health:
@@ -60,6 +60,13 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Document" }
+    delete:
+      summary: Elimina un documento (registro, archivo almacenado y vectores indexados)
+      parameters:
+        - { name: document_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Eliminado }
+        "404": { description: Documento no encontrado }
 
   /goals:
     post:
@@ -98,20 +105,31 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Goal" }
     put:
-      summary: Actualiza una meta
+      summary: Actualiza una meta (campos parciales; omitidos quedan sin cambios)
       parameters:
         - { name: goal_id, in: path, required: true, schema: { type: integer } }
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/GoalCreate" }
+            schema: { $ref: "#/components/schemas/GoalUpdate" }
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Goal" }
+        "404": { description: Meta no encontrada }
+    delete:
+      summary: >-
+        Elimina una meta. Cascada explícita: también elimina cualquier plan
+        generado a partir de ella (y, con ellos, sus sesiones, quizzes y
+        repasos de flashcards) — ver PlanService.delete_plan.
+      parameters:
+        - { name: goal_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Eliminada }
+        "404": { description: Meta no encontrada }
 
   /plans/generate:
     post:
@@ -158,6 +176,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Plan" }
+    delete:
+      summary: >-
+        Elimina un plan (sesiones, quizzes y repasos de flashcards asociados
+        se eliminan con él).
+      parameters:
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "204": { description: Eliminado }
+        "404": { description: Plan no encontrado }
 
   /sessions/{session_id}:
     get:
@@ -213,6 +240,162 @@ paths:
       responses:
         "200": { description: OK }
 
+  /llm-settings/catalog:
+    get:
+      summary: Metadatos estáticos de los proveedores LLM soportados (para construir el formulario)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProviderCatalogEntry" }
+
+  /llm-settings:
+    get:
+      summary: Lista las claves configuradas por el usuario (clave siempre enmascarada)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LLMCredential" }
+
+  /llm-settings/{provider}:
+    put:
+      summary: >-
+        Crea o reemplaza solo la clave de un proveedor. El selector de modelo
+        queda disponible de inmediato, pero el modelo/URL se guarda como
+        borrador con PATCH y se prueba después contra esa misma revisión.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key: { type: string, nullable: true, description: "Obligatoria salvo para OLLAMA" }
+                base_url: { type: string, description: "Override opcional, p. ej. para un endpoint regional de GLM" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMCredential" }
+        "400": { description: Clave inválida, URL base inválida o SSRF (resuelve a una IP privada/interna) }
+    delete:
+      summary: Elimina la clave guardada de un proveedor
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+      responses:
+        "204": { description: Eliminada }
+        "404": { description: No hay clave configurada para ese proveedor }
+
+  /llm-settings/{provider}/model:
+    patch:
+      summary: >-
+        Guarda el borrador de modelo y URL de una revisión vigente. No hace una
+        llamada externa; invalida la evidencia y desactiva la credencial si hay
+        un cambio real. Omitir base_url conserva la anterior; "" restaura la URL
+        predeterminada.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, expected_revision]
+              properties:
+                model: { type: string }
+                base_url: { type: string }
+                expected_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMCredential" }
+        "400": { description: Modelo vacío o URL base inválida/SSRF }
+        "404": { description: No hay clave configurada para ese proveedor }
+        "409": { description: La revisión esperada ya no es la configuración vigente }
+
+  /llm-settings/{provider}/activate:
+    post:
+      summary: >-
+        Activa una revisión ya verificada (y desactiva cualquier otra). Tener un
+        modelo no es evidencia: la prueba debe coincidir con la revisión y URL
+        efectivas.
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision]
+              properties:
+                expected_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMCredential" }
+        "404": { description: No hay clave configurada para ese proveedor }
+        "409": { description: Configuración desactualizada o sin evidencia vigente }
+
+  /llm-settings/{provider}/test:
+    post:
+      summary: Prueba con una llamada mínima el modelo y URL del borrador guardado
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision]
+              properties:
+                expected_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Evidencia guardada para la revisión probada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  credential: { $ref: "#/components/schemas/LLMCredential" }
+        "404": { description: No hay clave configurada para ese proveedor }
+        "409": { description: La configuración cambió durante o antes de la prueba }
+        "502": { description: La llamada al proveedor falló }
+
+  /llm-settings/deactivate-all:
+    post:
+      summary: Desactiva cualquier clave activa (vuelve a modo demo / .env)
+      responses:
+        "204": { description: OK }
+
+  /llm-settings/{provider}/models:
+    get:
+      summary: Lista los modelos instalados localmente en Ollama (excluye modelos cloud)
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [OLLAMA] } }
+      responses:
+        "200": { description: Inventario de modelos locales }
+        "400": { description: El proveedor no admite descubrimiento de modelos }
+        "502": { description: Ollama no está disponible o devolvió una respuesta inválida }
+
 components:
   schemas:
     Document:
@@ -227,6 +410,13 @@ components:
     GoalCreate:
       type: object
       required: [title]
+      properties:
+        goal_type: { type: string, enum: [EXAM, LEARNING, MEMORIZATION] }
+        title: { type: string }
+        description: { type: string }
+    GoalUpdate:
+      type: object
+      description: All fields optional — only the ones provided are changed.
       properties:
         goal_type: { type: string, enum: [EXAM, LEARNING, MEMORIZATION] }
         title: { type: string }
@@ -254,9 +444,54 @@ components:
         document_ids:
           type: array
           items: { type: integer }
+        error_message:
+          type: string
+          description: Motivo real del fallo (mensaje del proveedor LLM), vacío si status != FAILED.
         topics:
           type: array
           items: { type: object }
         sessions:
           type: array
           items: { type: object }
+    ProviderCatalogEntry:
+      type: object
+      properties:
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] }
+        label: { type: string }
+        requires_model_selection: { type: boolean }
+        default_model: { type: string }
+        default_base_url: { type: string, nullable: true }
+        common_models:
+          type: array
+          description: Ordenados con los modelos gratuitos primero, luego de más barato a más caro.
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              free: { type: boolean }
+        key_placeholder:
+          type: string
+          description: Sugerencia visual del formato de clave de este proveedor (p. ej. "hf_...").
+        requires_api_key: { type: boolean }
+        supports_model_discovery: { type: boolean }
+    LLMCredential:
+      type: object
+      description: La clave real nunca se expone; solo un fragmento enmascarado.
+      properties:
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] }
+        label: { type: string }
+        masked_api_key: { type: string, example: "sk-a••••••9f2k" }
+        model:
+          type: string
+          description: Borrador del modelo elegido; vacío si aún no se eligió uno.
+        base_url: { type: string }
+        is_active: { type: boolean }
+        config_revision: { type: integer, minimum: 1 }
+        is_verified:
+          type: boolean
+          description: Evidencia del servidor vigente para el modelo, URL y revisión actuales.
+        verified_at: { type: string, format: date-time, nullable: true }
+        requires_model_selection: { type: boolean }
+        requires_api_key: { type: boolean }
+        supports_model_discovery: { type: boolean }
+        created_at: { type: string, format: date-time }
