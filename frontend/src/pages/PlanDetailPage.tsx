@@ -34,9 +34,31 @@ export function PlanDetailPage() {
 
   if (plan.status === "FAILED") {
     return (
-      <Card>
-        <p className="font-medium text-red-600">La generación falló.</p>
-      </Card>
+      <div className="space-y-4">
+        <Link to="/plan" className="text-sm text-brand-600 hover:underline">
+          ← Volver
+        </Link>
+        <Card className="space-y-3">
+          <p className="font-medium text-red-600">La generación falló.</p>
+          {plan.error_message && (
+            <pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+              {plan.error_message}
+            </pre>
+          )}
+          <p className="text-sm text-slate-500">
+            Si el error menciona un límite de solicitudes ("rate limit") o una clave inválida,
+            revisa tu proveedor en{" "}
+            <Link className="underline" to="/settings">
+              Configuración
+            </Link>{" "}
+            e intenta generar el plan de nuevo desde{" "}
+            <Link className="underline" to="/plan">
+              Plan de estudio
+            </Link>
+            .
+          </p>
+        </Card>
+      </div>
     );
   }
 

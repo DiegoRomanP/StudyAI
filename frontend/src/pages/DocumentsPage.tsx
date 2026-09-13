@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 
 import type { DocumentDTO } from "../api/types";
-import { Badge, Card, Spinner } from "../components/ui";
-import { useDocuments, useUploadDocument } from "../hooks/queries";
+import { Badge, Button, Card, Spinner } from "../components/ui";
+import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/queries";
+import { useShowMore } from "../hooks/useShowMore";
 
 const STATUS_COLORS = {
   PENDING: "amber",
@@ -16,6 +17,7 @@ export function DocumentsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(documents);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -81,11 +83,23 @@ export function DocumentsPage() {
         {isLoading ? (
           <Spinner label="Cargando..." />
         ) : documents && documents.length > 0 ? (
-          <div className="grid gap-3">
-            {documents.map((doc) => (
-              <DocumentRow key={doc.id} doc={doc} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-3">
+              {visible.map((doc) => (
+                <DocumentRow key={doc.id} doc={doc} />
+              ))}
+            </div>
+            {hiddenCount > 0 && (
+              <Button variant="secondary" onClick={showMore}>
+                Mostrar {hiddenCount} más
+              </Button>
+            )}
+            {expanded && documents.length > 6 && (
+              <Button variant="ghost" onClick={showLess}>
+                Mostrar menos
+              </Button>
+            )}
+          </>
         ) : (
           <p className="text-sm text-slate-400">Aún no has subido documentos.</p>
         )}
@@ -95,6 +109,22 @@ export function DocumentsPage() {
 }
 
 function DocumentRow({ doc }: { doc: DocumentDTO }) {
+  const deleteDocument = useDeleteDocument();
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+    setError(null);
+    try {
+      await deleteDocument.mutateAsync(doc.id);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Error al eliminar el documento.");
+    }
+  }
+
   return (
     <Card className="flex items-center justify-between">
       <div className="min-w-0">
@@ -102,12 +132,24 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
         <p className="text-xs text-slate-400">
           {(doc.file_size / 1024).toFixed(1)} KB · .{doc.file_type}
         </p>
+        {doc.status === "FAILED" && doc.error_message && (
+          <p className="mt-1 text-xs text-red-600">{doc.error_message}</p>
+        )}
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
       <div className="flex items-center gap-3">
         {doc.status === "PENDING" && <Spinner />}
         <Badge color={STATUS_COLORS[doc.status]}>
           {doc.status === "INDEXED" ? "Indexado" : doc.status === "PENDING" ? "Procesando" : "Error"}
         </Badge>
+        <Button
+          variant="danger"
+          className="px-2.5 py-1 text-xs"
+          onClick={handleDelete}
+          disabled={deleteDocument.isPending}
+        >
+          {deleteDocument.isPending ? "Eliminando..." : "Eliminar"}
+        </Button>
       </div>
     </Card>
   );

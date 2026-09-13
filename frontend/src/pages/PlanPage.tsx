@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import type { PlanDTO } from "../api/types";
 import { Badge, Button, Card, Spinner } from "../components/ui";
 import {
+  useDeletePlan,
   useDocuments,
   useGeneratePlan,
   useGoals,
   usePlans,
 } from "../hooks/queries";
+import { useShowMore } from "../hooks/useShowMore";
 
 const STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
@@ -21,6 +24,7 @@ export function PlanPage() {
   const { data: plans, isLoading } = usePlans();
   const generate = useGeneratePlan();
   const navigate = useNavigate();
+  const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
 
   const [goalId, setGoalId] = useState<number | "">("");
   const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
@@ -116,28 +120,70 @@ export function PlanPage() {
         {isLoading ? (
           <Spinner />
         ) : plans && plans.length > 0 ? (
-          <div className="grid gap-3">
-            {plans.map((p) => {
-              const meta = STATUS[p.status];
-              return (
-                <Link key={p.id} to={`/plan/${p.id}`}>
-                  <Card className="flex items-center justify-between hover:border-brand-300">
-                    <div>
-                      <p className="font-medium text-slate-800">{p.title}</p>
-                      <p className="text-xs text-slate-400">
-                        {p.sessions.length} sesiones
-                      </p>
-                    </div>
-                    <Badge color={meta.color}>{meta.label}</Badge>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
+          <>
+            <div className="grid gap-3">
+              {visible.map((p) => (
+                <PlanRow key={p.id} plan={p} />
+              ))}
+            </div>
+            {hiddenCount > 0 && (
+              <Button variant="secondary" onClick={showMore}>
+                Mostrar {hiddenCount} más
+              </Button>
+            )}
+            {expanded && plans.length > 6 && (
+              <Button variant="ghost" onClick={showLess}>
+                Mostrar menos
+              </Button>
+            )}
+          </>
         ) : (
           <p className="text-sm text-slate-400">Aún no has generado planes.</p>
         )}
       </section>
     </div>
+  );
+}
+
+function PlanRow({ plan }: { plan: PlanDTO }) {
+  const deletePlan = useDeletePlan();
+  const [error, setError] = useState<string | null>(null);
+  const meta = STATUS[plan.status];
+
+  async function handleDelete() {
+    if (
+      !window.confirm(`¿Eliminar el plan "${plan.title}"? Esta acción no se puede deshacer.`)
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await deletePlan.mutateAsync(plan.id);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Error al eliminar el plan.");
+    }
+  }
+
+  return (
+    <Card className="space-y-1">
+      <div className="flex items-center justify-between gap-3">
+        <Link to={`/plan/${plan.id}`} className="min-w-0 flex-1">
+          <p className="truncate font-medium text-slate-800 hover:text-brand-600">{plan.title}</p>
+          <p className="text-xs text-slate-400">{plan.sessions.length} sesiones</p>
+        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Badge color={meta.color}>{meta.label}</Badge>
+          <Button
+            variant="danger"
+            className="px-2.5 py-1 text-xs"
+            onClick={handleDelete}
+            disabled={deletePlan.isPending}
+          >
+            {deletePlan.isPending ? "Eliminando..." : "Eliminar"}
+          </Button>
+        </div>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </Card>
   );
 }

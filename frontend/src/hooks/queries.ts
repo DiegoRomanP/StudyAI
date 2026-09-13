@@ -1,7 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
-import type { GoalCreate, QuizAnswer } from "../api/types";
+import type {
+  LLMCredentialDTO,
+  GoalCreate,
+  GoalUpdate,
+  LLMCredentialModelUpdate,
+  LLMCredentialUpsert,
+  LLMConnectionTest,
+  LLMProviderKey,
+  QuizAnswer,
+} from "../api/types";
+
+function replaceCachedLlmCredential(
+  qc: ReturnType<typeof useQueryClient>,
+  credential: LLMCredentialDTO,
+) {
+  const queryKey = ["llm-credentials"];
+  if (!qc.getQueryData<LLMCredentialDTO[]>(queryKey)) {
+    qc.invalidateQueries({ queryKey });
+    return;
+  }
+  qc.setQueryData<LLMCredentialDTO[]>(queryKey, (credentials) => {
+    if (!credentials) return credentials;
+    const exists = credentials.some((item) => item.provider === credential.provider);
+    return exists
+      ? credentials.map((item) => (item.provider === credential.provider ? credential : item))
+      : [...credentials, credential];
+  });
+}
 
 // --- Documents -------------------------------------------------------------
 export function useDocuments() {
@@ -22,6 +49,14 @@ export function useUploadDocument() {
   });
 }
 
+export function useDeleteDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteDocument(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
 // --- Goals -----------------------------------------------------------------
 export function useGoals() {
   return useQuery({ queryKey: ["goals"], queryFn: api.listGoals });
@@ -35,6 +70,27 @@ export function useCreateGoal() {
   });
 }
 
+export function useUpdateGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: GoalUpdate }) =>
+      api.updateGoal(id, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
+  });
+}
+
+export function useDeleteGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteGoal(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      // Deleting a goal cascades to its plans on the backend.
+      qc.invalidateQueries({ queryKey: ["plans"] });
+    },
+  });
+}
+
 // --- Plans -----------------------------------------------------------------
 export function usePlans() {
   return useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
@@ -45,6 +101,14 @@ export function useGeneratePlan() {
   return useMutation({
     mutationFn: ({ goalId, documentIds }: { goalId: number; documentIds: number[] }) =>
       api.generatePlan(goalId, documentIds),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+  });
+}
+
+export function useDeletePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deletePlan(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
   });
 }
@@ -92,4 +156,79 @@ export function useSubmitQuiz() {
 // --- Dashboard -------------------------------------------------------------
 export function useDashboard() {
   return useQuery({ queryKey: ["dashboard"], queryFn: api.getDashboard });
+}
+
+// --- LLM settings (bring-your-own-key) --------------------------------------
+export function useProviderCatalog() {
+  return useQuery({ queryKey: ["llm-provider-catalog"], queryFn: api.listProviderCatalog });
+}
+
+export function useLlmCredentials() {
+  return useQuery({ queryKey: ["llm-credentials"], queryFn: api.listLlmCredentials });
+}
+
+export function useSaveLlmCredential() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMCredentialUpsert }) =>
+      api.saveLlmCredential(provider, payload),
+    onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+  });
+}
+
+export function useUpdateLlmCredentialModel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      provider,
+      payload,
+    }: {
+      provider: LLMProviderKey;
+      payload: LLMCredentialModelUpdate;
+    }) => api.updateLlmCredentialModel(provider, payload),
+    onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+  });
+}
+
+export function useActivateLlmCredential() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, expectedRevision }: { provider: LLMProviderKey; expectedRevision: number }) =>
+      api.activateLlmCredential(provider, expectedRevision),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+  });
+}
+
+export function useDeactivateAllLlmCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.deactivateAllLlmCredentials(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+  });
+}
+
+export function useDeleteLlmCredential() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (provider: LLMProviderKey) => api.deleteLlmCredential(provider),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+  });
+}
+
+export function useTestLlmCredential() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMConnectionTest }) =>
+      api.testLlmCredential(provider, payload),
+    onSuccess: ({ credential }) => replaceCachedLlmCredential(qc, credential),
+  });
+}
+
+export function useOllamaModels(enabled: boolean) {
+  return useQuery({
+    queryKey: ["ollama-models"],
+    queryFn: api.listOllamaModels,
+    enabled,
+    retry: false,
+  });
 }

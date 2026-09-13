@@ -111,9 +111,7 @@ function StudyPhase({
           <span className="text-sm text-slate-500">tiempo de estudio</span>
         </div>
         <div className="flex gap-2">
-          {!running && remaining > 0 && (
-            <Button onClick={start}>▶ Iniciar</Button>
-          )}
+          {!running && remaining > 0 && <Button onClick={start}>▶ Iniciar</Button>}
           <Button variant="secondary" onClick={finish}>
             Saltar al receso →
           </Button>
@@ -121,6 +119,7 @@ function StudyPhase({
       </Card>
 
       <Card>
+        {" "}
         <div className="prose-study max-w-none">
           <ReactMarkdown>{markdown || "_Sin material._"}</ReactMarkdown>
         </div>
@@ -163,9 +162,7 @@ function BreakPhase({ onDone }: { onDone: () => void }) {
     <Card className="space-y-4 text-center">
       <h2 className="text-lg font-semibold">Receso activo (5 min)</h2>
       <p className="text-xl">{activity}</p>
-      <div className="text-3xl font-mono font-semibold text-brand-700">
-        {formatTime(remaining)}
-      </div>
+      <div className="text-3xl font-mono font-semibold text-brand-700">{formatTime(remaining)}</div>
       <div className="flex justify-center gap-2">
         {!running && remaining > 0 && <Button onClick={start}>▶ Iniciar receso</Button>}
         <Button variant="secondary" onClick={finish}>
@@ -182,7 +179,9 @@ function TestPhase({ sessionId, onDone }: { sessionId: number; onDone: () => voi
   const submit = useSubmitQuiz();
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, QuizAnswer>>({});
-  const [result, setResult] = useState<{ score: number; correct: number; total: number } | null>(null);
+  const [result, setResult] = useState<{ score: number; correct: number; total: number } | null>(
+    null,
+  );
 
   if (isLoading || !quiz) return <Spinner label="Cargando quiz…" />;
   if (quiz.questions.length === 0) {

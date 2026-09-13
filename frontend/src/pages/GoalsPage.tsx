@@ -1,8 +1,9 @@
 import { useState } from "react";
 
-import type { GoalType } from "../api/types";
+import type { GoalDTO, GoalType } from "../api/types";
 import { Badge, Button, Card, Spinner } from "../components/ui";
-import { useCreateGoal, useGoals } from "../hooks/queries";
+import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
+import { useShowMore } from "../hooks/useShowMore";
 
 const TEMPLATES: { type: GoalType; label: string; title: string; emoji: string }[] = [
   { type: "EXAM", label: "Sacar buena nota", title: "Aprobar el examen", emoji: "🏆" },
@@ -19,6 +20,7 @@ const TYPE_LABELS: Record<GoalType, string> = {
 export function GoalsPage() {
   const { data: goals, isLoading } = useGoals();
   const createGoal = useCreateGoal();
+  const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(goals);
 
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
   const [title, setTitle] = useState("");
@@ -101,23 +103,150 @@ export function GoalsPage() {
         {isLoading ? (
           <Spinner />
         ) : goals && goals.length > 0 ? (
-          <div className="grid gap-3">
-            {goals.map((g) => (
-              <Card key={g.id} className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium text-slate-800">{g.title}</p>
-                  {g.description && (
-                    <p className="mt-1 text-sm text-slate-500">{g.description}</p>
-                  )}
-                </div>
-                <Badge color="brand">{TYPE_LABELS[g.goal_type]}</Badge>
-              </Card>
-            ))}
-          </div>
+          <>
+            <div className="grid gap-3">
+              {visible.map((g) => (
+                <GoalRow key={g.id} goal={g} />
+              ))}
+            </div>
+            {hiddenCount > 0 && (
+              <Button variant="secondary" onClick={showMore}>
+                Mostrar {hiddenCount} más
+              </Button>
+            )}
+            {expanded && goals.length > 6 && (
+              <Button variant="ghost" onClick={showLess}>
+                Mostrar menos
+              </Button>
+            )}
+          </>
         ) : (
           <p className="text-sm text-slate-400">Aún no tienes metas.</p>
         )}
       </section>
     </div>
+  );
+}
+
+function GoalRow({ goal }: { goal: GoalDTO }) {
+  const updateGoal = useUpdateGoal();
+  const deleteGoal = useDeleteGoal();
+
+  const [editing, setEditing] = useState(false);
+  const [goalType, setGoalType] = useState<GoalType>(goal.goal_type);
+  const [title, setTitle] = useState(goal.title);
+  const [description, setDescription] = useState(goal.description);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit() {
+    setGoalType(goal.goal_type);
+    setTitle(goal.title);
+    setDescription(goal.description);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    if (!title.trim()) {
+      setError("El título no puede estar vacío.");
+      return;
+    }
+    setError(null);
+    try {
+      await updateGoal.mutateAsync({
+        id: goal.id,
+        payload: { goal_type: goalType, title: title.trim(), description },
+      });
+      setEditing(false);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Error al guardar los cambios.");
+    }
+  }
+
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        `¿Eliminar la meta "${goal.title}"? Esto también elimina los planes generados a partir de ella. Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await deleteGoal.mutateAsync(goal.id);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Error al eliminar la meta.");
+    }
+  }
+
+  if (editing) {
+    return (
+      <Card className="space-y-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
+          <select
+            value={goalType}
+            onChange={(e) => setGoalType(e.target.value as GoalType)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
+              <option key={t} value={t}>
+                {TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Título</label>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Descripción</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex items-center gap-2">
+          <Button onClick={handleSave} disabled={updateGoal.isPending}>
+            {updateGoal.isPending ? "Guardando..." : "Guardar cambios"}
+          </Button>
+          <Button variant="secondary" onClick={() => setEditing(false)}>
+            Cancelar
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="font-medium text-slate-800">{goal.title}</p>
+        {goal.description && <p className="mt-1 text-sm text-slate-500">{goal.description}</p>}
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Badge color="brand">{TYPE_LABELS[goal.goal_type]}</Badge>
+        <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={startEdit}>
+          Editar
+        </Button>
+        <Button
+          variant="danger"
+          className="px-2.5 py-1 text-xs"
+          onClick={handleDelete}
+          disabled={deleteGoal.isPending}
+        >
+          {deleteGoal.isPending ? "Eliminando..." : "Eliminar"}
+        </Button>
+      </div>
+    </Card>
   );
 }

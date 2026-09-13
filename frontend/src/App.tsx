@@ -7,6 +7,7 @@ import { GoalsPage } from "./pages/GoalsPage";
 import { PlanDetailPage } from "./pages/PlanDetailPage";
 import { PlanPage } from "./pages/PlanPage";
 import { SessionPage } from "./pages/SessionPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/plan/:planId" element={<PlanDetailPage />} />
         <Route path="/session/:sessionId" element={<SessionPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/documents" replace />} />
       </Routes>
     </AppShell>
