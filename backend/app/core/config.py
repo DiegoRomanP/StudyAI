@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Repository layout anchors so paths in .env can stay relative and portable.
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -41,7 +42,25 @@ class Settings(BaseSettings):
     LLM_MODEL_PLAN: str = "claude-opus-4-8"
     LLM_MODEL_QUIZ: str = "claude-haiku-4-5"
     LLM_MAX_RETRIES: int = 3
-    LLM_TIMEOUT_SECONDS: float = 60.0
+    # 4096-token generations on a large hosted model (NVIDIA NIM's 70B/405B
+    # models, free-tier OpenRouter models under load, etc.) can legitimately
+    # take well over a minute; plan generation runs as a background task, so
+    # a generous timeout costs nothing and avoids spurious "generation failed"
+    # results from calls that were simply still working.
+    LLM_TIMEOUT_SECONDS: float = 180.0
+    # Proactive pacing between successive LLM calls within a single plan
+    # generation (topic analysis, session planning, then one call per
+    # session) — a free-tier RPM limit (OpenRouter's ~8 req/min, etc.) can be
+    # exceeded by the pipeline's own normal call volume alone, before any
+    # single call even needs to retry. Skipped entirely for MockLLMProvider so
+    # local dev/tests stay instant. Raise this in `.env` for very tight tiers.
+    LLM_REQUEST_PACING_SECONDS: float = 2.0
+    # Ollama runs on the backend host, not in the browser. This URL is operator
+    # configuration rather than a user-provided override, so it cannot turn the
+    # settings API into an internal-network proxy.
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
+    OLLAMA_TIMEOUT_SECONDS: float = 600.0
+    OLLAMA_MAX_RETRIES: int = 1
 
     # --- Persistence ---------------------------------------------------------
     DATABASE_URL: str = f"sqlite:///{(BACKEND_DIR / 'studyai.db').as_posix()}"
@@ -55,11 +74,18 @@ class Settings(BaseSettings):
     # --- App -----------------------------------------------------------------
     APP_ENV: str = "development"
     SECRET_KEY: str = "change-me-in-production"
-    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # NoDecode: pydantic-settings otherwise tries to json.loads() env values for
+    # list-typed fields *before* the CSV validator below runs, so a plain
+    # comma-separated ".env" value (our documented format) would crash on boot.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
 
     # --- Study session tuning ------------------------------------------------
     # Ebbinghaus-inspired review offsets (days) used when scheduling sessions.
-    REVIEW_INTERVALS_DAYS: list[int] = Field(default_factory=lambda: [1, 3, 7, 14, 30])
+    REVIEW_INTERVALS_DAYS: Annotated[list[int], NoDecode] = Field(
+        default_factory=lambda: [1, 3, 7, 14, 30]
+    )
     SESSION_DURATION_MINUTES: int = 25
 
     @field_validator("CORS_ORIGINS", "REVIEW_INTERVALS_DAYS", mode="before")

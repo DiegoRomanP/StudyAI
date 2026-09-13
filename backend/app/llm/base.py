@@ -15,6 +15,9 @@ from abc import ABC, abstractmethod
 
 
 class LLMProvider(ABC):
+    # Local and mock providers do not need cloud rate-limit pacing.
+    requires_request_pacing = True
+
     @abstractmethod
     def complete(
         self,
@@ -27,3 +30,6 @@ class LLMProvider(ABC):
     ) -> str:
         """Return the raw text completion for ``prompt``."""
         ...
+
+    def close(self) -> None:
+        """Release provider resources after a short-lived operation."""

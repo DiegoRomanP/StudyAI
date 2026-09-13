@@ -15,6 +15,8 @@ from app.llm.base import LLMProvider
 
 
 class MockLLMProvider(LLMProvider):
+    requires_request_pacing = False
+
     def complete(
         self,
         *,
@@ -28,8 +30,7 @@ class MockLLMProvider(LLMProvider):
         handler = {
             "topic_analysis": self._topics,
             "session_plan": self._sessions,
-            "content": self._content,
-            "quiz": self._quiz,
+            "session_content": self._session_content,
         }.get(kind)
         if handler is None:
             return json.dumps({"note": "mock", "kind": kind})
@@ -77,9 +78,11 @@ class MockLLMProvider(LLMProvider):
             )
         return {"sessions": sessions}
 
-    def _content(self, ctx: dict) -> dict:
+    def _session_content(self, ctx: dict) -> dict:
         topic = ctx.get("topic", "el tema")
         goal = ctx.get("goal_title", "tu objetivo")
+        num_flashcards = int(ctx.get("flashcards", 5) or 0)
+        num_multiple_choice = int(ctx.get("multiple_choice", 5) or 0)
         markdown = (
             f"# {topic}\n\n"
             f"> _Contenido simulado (modo demo, sin clave de API)._\n\n"
@@ -94,22 +97,15 @@ class MockLLMProvider(LLMProvider):
             f"Si solo recuerdas una cosa de **{topic}**, que sea su idea principal "
             f"y cuándo aplicarla.\n"
         )
-        return {
-            "summary_markdown": markdown,
-            "youtube_keywords": [f"{topic} explicación", f"{topic} ejemplo", topic],
-        }
-
-    def _quiz(self, ctx: dict) -> dict:
-        topic = ctx.get("topic", "el tema")
         flashcards = [
             {
                 "question": f"¿Cuál es la idea principal de {topic}? (tarjeta {i + 1})",
                 "answer": f"La idea principal de {topic}, resumida en una frase.",
             }
-            for i in range(5)
+            for i in range(num_flashcards)
         ]
         multiple_choice = []
-        for i in range(5):
+        for i in range(num_multiple_choice):
             correct = f"Definición correcta de {topic}"
             options = [
                 correct,
@@ -124,4 +120,9 @@ class MockLLMProvider(LLMProvider):
                     "answer": correct,
                 }
             )
-        return {"flashcards": flashcards, "multiple_choice": multiple_choice}
+        return {
+            "summary_markdown": markdown,
+            "youtube_keywords": [f"{topic} explicación", f"{topic} ejemplo", topic],
+            "flashcards": flashcards,
+            "multiple_choice": multiple_choice,
+        }

@@ -21,6 +21,7 @@ from app.models import (  # noqa: E402,F401  (side-effect imports)
     document,
     flashcard,
     goal,
+    llm_credential,
     plan,
     quiz,
     session,

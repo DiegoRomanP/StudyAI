@@ -22,15 +22,23 @@ _QUIZ_KINDS = {"quiz", "content"}
 
 
 class AnthropicProvider(LLMProvider):
-    def __init__(self) -> None:
+    def __init__(self, *, api_key: str | None = None, model: str | None = None) -> None:
+        """``api_key``/``model`` are overrides for a user-supplied credential.
+
+        Left as ``None`` (the operator ``.env`` path), behaviour is unchanged:
+        the key and the plan/quiz model split come from ``Settings``. When a
+        user configures their own Anthropic key via the settings UI, ``model``
+        is fixed and used for every ``kind`` (no plan/quiz split for BYO keys).
+        """
         import anthropic  # imported here so the mock path needs no SDK install
 
         self._anthropic = anthropic
         self._settings = get_settings()
+        self._fixed_model = model
         # max_retries=0: we implement our own backoff loop below for clarity and
         # testability.
         self._client = anthropic.Anthropic(
-            api_key=self._settings.ANTHROPIC_API_KEY,
+            api_key=api_key or self._settings.ANTHROPIC_API_KEY,
             timeout=self._settings.LLM_TIMEOUT_SECONDS,
             max_retries=0,
         )
@@ -46,6 +54,8 @@ class AnthropicProvider(LLMProvider):
         )
 
     def _model_for(self, kind: str) -> str:
+        if self._fixed_model:
+            return self._fixed_model
         if kind in _QUIZ_KINDS:
             return self._settings.LLM_MODEL_QUIZ
         return self._settings.LLM_MODEL_PLAN
@@ -85,6 +95,13 @@ class AnthropicProvider(LLMProvider):
                 raise LLMError(f"LLM call failed: {exc}") from exc
 
         raise LLMError(f"LLM call failed after {attempts} attempts: {last_exc}")
+
+    def test_connection(self) -> None:
+        """Raise ``LLMError`` if the key/model don't actually work. Tiny call."""
+        self.complete(kind="test", system="Reply with the single word: ok", prompt="ping", max_tokens=5)
+
+    def close(self) -> None:
+        self._client.close()
 
     @staticmethod
     def _extract_text(response) -> str:

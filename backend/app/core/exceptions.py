@@ -19,6 +19,14 @@ class ValidationError(StudyAIError):
     """Input failed a business rule (distinct from Pydantic schema validation)."""
 
 
+class ConflictError(StudyAIError):
+    """The requested change conflicts with the credential's current state."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class UnsupportedFileTypeError(StudyAIError):
     """No processor is registered for the given file extension."""
 
