@@ -18,8 +18,8 @@ _SCHEMA = """{
     {
       "name": "string",
       "subtopics": ["string", "..."],
-      "difficulty": 1,          // entero 1..5
-      "relevance": 0.0          // decimal 0..1 respecto a la meta
+      "difficulty": 1,
+      "relevance": 0.0
     }
   ]
 }"""

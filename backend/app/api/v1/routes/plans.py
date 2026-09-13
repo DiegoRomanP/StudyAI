@@ -62,3 +62,13 @@ def get_plan(
 ) -> PlanResponse:
     service = PlanService(db)
     return PlanResponse.model_validate(service.get_plan(user.id, plan_id))
+
+
+@router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    service = PlanService(db)
+    service.delete_plan(user.id, plan_id)

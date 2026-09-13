@@ -53,5 +53,6 @@ class PlanResponse(BaseModel):
     goal_id: int
     document_ids: list[int]
     created_at: datetime
+    error_message: str = ""
     topics: list[PlanTopicResponse] = Field(default_factory=list)
     sessions: list[SessionSummary] = Field(default_factory=list)

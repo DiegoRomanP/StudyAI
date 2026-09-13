@@ -14,3 +14,7 @@ class PlanRepository(BaseRepository[Plan]):
     def list_for_user(self, user_id: int) -> list[Plan]:
         stmt = select(Plan).where(Plan.user_id == user_id).order_by(Plan.created_at.desc())
         return list(self.db.execute(stmt).scalars().all())
+
+    def list_for_goal(self, goal_id: int) -> list[Plan]:
+        stmt = select(Plan).where(Plan.goal_id == goal_id)
+        return list(self.db.execute(stmt).scalars().all())
