@@ -31,3 +31,4 @@ class Document(TimestampMixin, Base):
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus), default=DocumentStatus.PENDING, index=True
     )
+    error_message: Mapped[str] = mapped_column(String(1024), default="")

@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.models.document import Document, DocumentStatus
 from app.processors.factory import SUPPORTED_EXTENSIONS
 from app.processors.pipeline import IngestionPipeline
+from app.rag.vector_store import VectorStore
 from app.repositories.document_repository import DocumentRepository
 from app.db.session import SessionLocal
 
@@ -68,6 +69,28 @@ class DocumentService:
             raise NotFoundError("Documento no encontrado.")
         return document
 
+    def delete_document(self, user_id: int, document_id: int) -> None:
+        """Remove a document's DB row, stored file and indexed vectors.
+
+        Vector-store and file cleanup are best-effort: a stale chunk or an
+        already-missing file must not stop the DB row (the source of truth for
+        "does the user still see this document") from being deleted.
+        """
+        document = self.get_document(user_id, document_id)
+
+        if document.storage_path and os.path.exists(document.storage_path):
+            try:
+                os.remove(document.storage_path)
+            except OSError:
+                logger.warning("Could not remove stored file for document %s", document_id)
+
+        try:
+            VectorStore().delete_by_document_id(document_id)
+        except Exception:  # noqa: BLE001 - cleanup must not block deletion
+            logger.warning("Could not remove vectors for document %s", document_id, exc_info=True)
+
+        self.repo.delete(document)
+
 
 def index_document_task(document_id: int) -> None:
     """Background task: parse -> chunk -> embed -> store; update status.
@@ -89,6 +112,7 @@ def index_document_task(document_id: int) -> None:
         except Exception as exc:  # noqa: BLE001 - record failure, don't crash
             logger.exception("Failed to index document %s", document_id)
             document.status = DocumentStatus.FAILED
+            document.error_message = str(exc)[:1000]
         repo.save(document)
     finally:
         db.close()

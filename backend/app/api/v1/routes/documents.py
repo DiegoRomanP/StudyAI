@@ -50,3 +50,13 @@ def get_document(
 ) -> DocumentResponse:
     service = DocumentService(db)
     return DocumentResponse.model_validate(service.get_document(user.id, document_id))
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    service = DocumentService(db)
+    service.delete_document(user.id, document_id)

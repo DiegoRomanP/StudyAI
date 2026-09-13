@@ -12,6 +12,7 @@ from app.models.goal import Goal
 from app.models.user import User
 from app.repositories.goal_repository import GoalRepository
 from app.schemas.goal import GoalCreate, GoalResponse, GoalUpdate
+from app.services.plan_service import PlanService
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -67,6 +68,23 @@ def update_goal(
     if payload.description is not None:
         goal.description = payload.description
     return GoalResponse.model_validate(repo.save(goal))
+
+
+@router.delete("/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    goal = _get_owned_goal(db, user.id, goal_id)
+    # A goal's plans reference it by goal_id but nothing cascades that
+    # relationship at the ORM or DB level (see PlanService.delete_plan for
+    # why) — delete them explicitly first so no plan is left pointing at a
+    # goal that no longer exists.
+    plan_service = PlanService(db)
+    for plan in plan_service.repo.list_for_goal(goal.id):
+        plan_service.delete_plan(user.id, plan.id)
+    GoalRepository(db).delete(goal)
 
 
 def _get_owned_goal(db: Session, user_id: int, goal_id: int) -> Goal:

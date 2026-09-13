@@ -17,4 +17,5 @@ class DocumentResponse(BaseModel):
     file_type: str
     file_size: int
     status: DocumentStatus
+    error_message: str
     created_at: datetime
