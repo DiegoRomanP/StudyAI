@@ -10,7 +10,7 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="studyai_test_")
 
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{_TMP}/test.db")
-os.environ.setdefault("CHROMA_PERSIST_DIR", f"{_TMP}/chroma")
-os.environ.setdefault("UPLOAD_DIR", f"{_TMP}/uploads")
-os.environ.setdefault("ANTHROPIC_API_KEY", "")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
+os.environ["CHROMA_PERSIST_DIR"] = f"{_TMP}/chroma"
+os.environ["UPLOAD_DIR"] = f"{_TMP}/uploads"
+os.environ["ANTHROPIC_API_KEY"] = ""
