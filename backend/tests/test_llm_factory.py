@@ -11,6 +11,7 @@ from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.factory import get_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+from app.llm.request_profiles import OPENAI_O_SERIES_PROFILE, STANDARD_CHAT_PROFILE
 from app.models.llm_credential import LLMCredential, LLMProviderName
 
 DEMO_USER_ID = 1
@@ -67,6 +68,38 @@ def test_active_openai_credential_builds_openai_compatible_provider(client: Test
     provider = _provider_for_demo_user()
     assert isinstance(provider, OpenAICompatibleProvider)
     assert provider._model == "gpt-4o-mini"
+    assert provider._request_profile == STANDARD_CHAT_PROFILE
+
+
+def test_active_openai_o_series_credential_uses_its_request_profile(client: TestClient):
+    _configure_and_activate(client, "OPENAI", "o4-mini")
+
+    provider = _provider_for_demo_user()
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider._request_profile == OPENAI_O_SERIES_PROFILE
+
+
+def test_custom_openai_deployment_uses_standard_profile(client: TestClient, monkeypatch):
+    import socket
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))],
+    )
+    _configure_and_activate(
+        client,
+        "OPENAI",
+        "o4-custom-deployment",
+        {
+            "api_key": "sk-test-1234567890",
+            "base_url": "https://my-openai-gateway.example.com/v1",
+        },
+    )
+
+    provider = _provider_for_demo_user()
+    assert isinstance(provider, OpenAICompatibleProvider)
+    assert provider._request_profile == STANDARD_CHAT_PROFILE
 
 
 def test_unverified_active_credential_is_not_usable(client: TestClient):
@@ -131,3 +164,4 @@ def test_active_ollama_uses_local_settings_without_authentication(client: TestCl
     assert provider._model == "qwen3.5:9b"
     assert "authorization" not in provider._client.headers
     assert provider.requires_request_pacing is False
+    assert provider._request_profile == STANDARD_CHAT_PROFILE
