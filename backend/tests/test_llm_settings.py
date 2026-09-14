@@ -2,19 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from fastapi.testclient import TestClient
 
 import main
 from app.core.exceptions import LLMError
+from app.db.session import SessionLocal
+from app.models.llm_credential import LLMProviderName
+from app.services.llm_settings_service import LLMSettingsService
 
 
 class _TestProvider:
+    on_test: Callable[[], None] | None = None
+
     def __init__(self, model: str) -> None:
         self.model = model
         self.closed = False
 
     def test_connection(self) -> None:
+        callback = type(self).on_test
+        if callback is not None:
+            callback()
         if self.model == "unavailable-model":
             raise LLMError("simulated model access failure")
 
@@ -32,6 +42,7 @@ def client():
 def fake_provider(monkeypatch):
     from app.llm import factory
 
+    _TestProvider.on_test = None
     monkeypatch.setattr(
         factory,
         "build_provider_from_credential",
@@ -161,6 +172,34 @@ def test_stale_revision_cannot_replace_or_verify_a_draft(client: TestClient):
     )
     assert stale_test.status_code == 409
     assert draft["is_verified"] is False
+
+
+def test_inflight_test_cannot_verify_a_replaced_key(client: TestClient):
+    credential = _save_key(client, "OPENAI")
+    draft = _save_draft(client, "OPENAI", credential["config_revision"], "gpt-4o-mini")
+
+    def replace_key_while_testing() -> None:
+        db = SessionLocal()
+        try:
+            LLMSettingsService(db).upsert_credential(
+                user_id=1,
+                provider=LLMProviderName.OPENAI,
+                api_key="sk-replaced-1234567890",
+            )
+        finally:
+            db.close()
+
+    _TestProvider.on_test = replace_key_while_testing
+    stale_test = client.post(
+        "/llm-settings/OPENAI/test",
+        json={"expected_revision": draft["config_revision"]},
+    )
+
+    assert stale_test.status_code == 409
+    assert stale_test.json()["code"] == "LLM_CONFIGURATION_CHANGED"
+    persisted = next(item for item in client.get("/llm-settings").json() if item["provider"] == "OPENAI")
+    assert persisted["model"] == ""
+    assert persisted["is_verified"] is False
 
 
 def test_omitting_base_url_preserves_it_and_empty_string_restores_default(client: TestClient, monkeypatch):
