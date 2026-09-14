@@ -26,6 +26,7 @@ from app.llm.error_mapping import (
     map_http_error,
     map_transport_error,
 )
+from app.llm.request_profiles import RequestProfile, STANDARD_CHAT_PROFILE
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,7 @@ class OpenAICompatibleProvider(LLMProvider):
         json_response_kinds: frozenset[str] = frozenset(),
         requires_request_pacing: bool = True,
         disable_reasoning: bool = False,
-        test_max_tokens: int = 5,
+        request_profile: RequestProfile = STANDARD_CHAT_PROFILE,
         provider: str = "OPENAI",
     ) -> None:
         self._provider = provider
@@ -63,7 +64,7 @@ class OpenAICompatibleProvider(LLMProvider):
         self._json_response_kinds = json_response_kinds
         self.requires_request_pacing = requires_request_pacing
         self._disable_reasoning = disable_reasoning
-        self._test_max_tokens = test_max_tokens
+        self._request_profile = request_profile
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = httpx.Client(
             base_url=base_url.rstrip("/"),
@@ -91,7 +92,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            "max_tokens": max_tokens,
+            self._request_profile.token_limit_parameter: max_tokens,
         }
         if kind in self._json_response_kinds:
             payload["response_format"] = {"type": "json_object"}
@@ -199,14 +200,13 @@ class OpenAICompatibleProvider(LLMProvider):
     def test_connection(self) -> None:
         """Raise ``LLMError`` if the key/model/base_url don't actually work.
 
-        Deliberately tiny (``max_tokens=5``) so verifying a key costs almost
-        nothing.
+        Uses the bounded budget for this provider/model profile.
         """
         self.complete(
             kind="test",
             system="Reply with the single word: ok",
             prompt="ping",
-            max_tokens=self._test_max_tokens,
+            max_tokens=self._request_profile.test_max_tokens,
         )
 
     def close(self) -> None:
