@@ -176,7 +176,9 @@ Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido
 `o4-mini`) reciben `max_completion_tokens`, que abarca razonamiento y salida
 visible. Los demás proveedores OpenAI-compatible, incluido NVIDIA y Ollama,
 mantienen `max_tokens`; un ID personalizado usa ese perfil conservador hasta
-que se confirme su contrato.
+que se confirme su contrato. El perfil también define las capacidades de
+formato de respuesta: Ollama usa JSON estructurado solo para las operaciones
+que lo requieren y no recibe `reasoning_effort` no confirmado.
 
 Cambiar la clave, el modelo o la URL de un proveedor vuelve a exigir la
 verificación; una configuración anterior no se hereda a ciegas.
