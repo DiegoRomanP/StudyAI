@@ -23,6 +23,7 @@ from app.core.exceptions import (
 )
 from app.core.logging import configure_logging, get_logger
 from app.db.init_db import init_db
+from app.llm.async_runner import shutdown_async_runner
 from app.services.progress_service import register_handlers
 
 logger = get_logger(__name__)
@@ -34,7 +35,10 @@ async def lifespan(app: FastAPI):
     init_db()
     register_handlers()  # wire SM-2 updates to the session.completed event
     logger.info("StudyAI backend ready.")
-    yield
+    try:
+        yield
+    finally:
+        shutdown_async_runner()
 
 
 def create_app() -> FastAPI:
