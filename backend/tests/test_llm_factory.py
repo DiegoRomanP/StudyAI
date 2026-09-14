@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 import main
 from app.db.session import SessionLocal
 from app.llm.anthropic_provider import AnthropicProvider
-from app.llm.factory import get_llm_provider
+from app.llm.factory import build_provider_from_credential, get_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
-from app.llm.request_profiles import OPENAI_O_SERIES_PROFILE, STANDARD_CHAT_PROFILE
+from app.llm.request_profiles import (
+    OLLAMA_CHAT_PROFILE,
+    OPENAI_O_SERIES_PROFILE,
+    STANDARD_CHAT_PROFILE,
+)
 from app.models.llm_credential import LLMCredential, LLMProviderName
 
 DEMO_USER_ID = 1
@@ -33,6 +41,16 @@ def _provider_for_demo_user():
     db = SessionLocal()
     try:
         return get_llm_provider(db, DEMO_USER_ID)
+    finally:
+        db.close()
+
+
+def _credential_for_demo_user(provider: LLMProviderName) -> LLMCredential:
+    db = SessionLocal()
+    try:
+        credential = db.query(LLMCredential).filter(LLMCredential.provider == provider).one()
+        db.expunge(credential)
+        return credential
     finally:
         db.close()
 
@@ -77,6 +95,40 @@ def test_active_openai_o_series_credential_uses_its_request_profile(client: Test
     provider = _provider_for_demo_user()
     assert isinstance(provider, OpenAICompatibleProvider)
     assert provider._request_profile == OPENAI_O_SERIES_PROFILE
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "model", "url", "token_limit_parameter"),
+    [
+        ("OPENAI", "o4-mini", "https://api.openai.com/v1/chat/completions", "max_completion_tokens"),
+        ("NVIDIA", "meta/llama-3.1-70b-instruct", "https://integrate.api.nvidia.com/v1/chat/completions", "max_tokens"),
+        ("OLLAMA", "qwen3.5:9b", "http://127.0.0.1:11434/v1/chat/completions", "max_tokens"),
+    ],
+)
+@respx.mock
+def test_factory_profile_controls_the_final_transport_payload(
+    client: TestClient, provider_name: str, model: str, url: str, token_limit_parameter: str
+):
+    _configure_and_activate(client, provider_name, model, {} if provider_name == "OLLAMA" else None)
+    credential = _credential_for_demo_user(LLMProviderName(provider_name))
+    provider = build_provider_from_credential(credential)
+    route = respx.post(url).mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+
+    try:
+        provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
+    finally:
+        provider.close()
+
+    payload = json.loads(route.calls.last.request.content)
+    assert payload[token_limit_parameter] == 128
+    other_token_limit = (
+        "max_tokens" if token_limit_parameter == "max_completion_tokens" else "max_completion_tokens"
+    )
+    assert other_token_limit not in payload
+    assert "reasoning_effort" not in payload
+    assert set(payload) == {"model", "messages", token_limit_parameter}
 
 
 def test_custom_openai_deployment_uses_standard_profile(client: TestClient, monkeypatch):
@@ -164,4 +216,4 @@ def test_active_ollama_uses_local_settings_without_authentication(client: TestCl
     assert provider._model == "qwen3.5:9b"
     assert "authorization" not in provider._client.headers
     assert provider.requires_request_pacing is False
-    assert provider._request_profile == STANDARD_CHAT_PROFILE
+    assert provider._request_profile == OLLAMA_CHAT_PROFILE
