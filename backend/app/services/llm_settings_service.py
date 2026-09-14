@@ -214,9 +214,13 @@ class LLMSettingsService:
         if provider != LLMProviderName.OLLAMA:
             raise ValidationError("Solo Ollama permite descubrir modelos instalados.")
         settings = get_settings()
-        return OllamaClient(
+        client = OllamaClient(
             base_url=settings.OLLAMA_BASE_URL, timeout=settings.OLLAMA_TIMEOUT_SECONDS
-        ).list_local_models()
+        )
+        try:
+            return client.list_local_models()
+        finally:
+            client.close()
 
     def _get_owned(self, user_id: int, provider: LLMProviderName) -> LLMCredential:
         credential = self.repo.find_for_user_and_provider(user_id, provider)

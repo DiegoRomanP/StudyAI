@@ -55,3 +55,6 @@ class OllamaClient:
                 )
             )
         return sorted({model.id: model for model in discovered}.values(), key=lambda model: model.id)
+
+    def close(self) -> None:
+        self._client.close()

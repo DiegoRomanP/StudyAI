@@ -25,7 +25,11 @@ def test_discovers_only_installed_local_models():
             },
         )
     )
-    models = OllamaClient(base_url=BASE_URL, timeout=1).list_local_models()
+    client = OllamaClient(base_url=BASE_URL, timeout=1)
+    try:
+        models = client.list_local_models()
+    finally:
+        client.close()
     assert [model.id for model in models] == ["qwen3.5:9b"]
     assert models[0].parameter_size == "9.7B"
     assert models[0].context_length == 262144
@@ -34,5 +38,9 @@ def test_discovers_only_installed_local_models():
 @respx.mock
 def test_unavailable_daemon_raises_a_clear_error():
     respx.get(f"{BASE_URL}/api/tags").mock(return_value=httpx.Response(503))
-    with pytest.raises(LLMError, match="No se pudo consultar Ollama"):
-        OllamaClient(base_url=BASE_URL, timeout=1).list_local_models()
+    client = OllamaClient(base_url=BASE_URL, timeout=1)
+    try:
+        with pytest.raises(LLMError, match="No se pudo consultar Ollama"):
+            client.list_local_models()
+    finally:
+        client.close()
