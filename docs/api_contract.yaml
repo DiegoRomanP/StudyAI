@@ -311,10 +311,11 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [model, expected_revision]
               properties:
                 model: { type: string }
-                base_url: { type: string }
+                base_url: { type: string, nullable: true, description: "Omitida o null conserva la URL anterior; cadena vacía restaura la predeterminada" }
                 expected_revision: { type: integer, minimum: 1 }
       responses:
         "200":
@@ -340,6 +341,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [expected_revision]
               properties:
                 expected_revision: { type: integer, minimum: 1 }
@@ -363,6 +365,7 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
               required: [expected_revision]
               properties:
                 expected_revision: { type: integer, minimum: 1 }
@@ -378,7 +381,12 @@ paths:
                   credential: { $ref: "#/components/schemas/LLMCredential" }
         "404": { description: No hay clave configurada para ese proveedor }
         "409": { description: La configuración cambió durante o antes de la prueba }
-        "502": { description: La llamada al proveedor falló }
+        "422": { description: expected_revision inválida o campos no permitidos }
+        "502":
+          description: La llamada al proveedor falló con una clasificación segura.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMProviderError" }
 
   /llm-settings/deactivate-all:
     post:
@@ -446,7 +454,7 @@ components:
           items: { type: integer }
         error_message:
           type: string
-          description: Motivo real del fallo (mensaje del proveedor LLM), vacío si status != FAILED.
+          description: Mensaje saneado del fallo, vacío si status != FAILED.
         topics:
           type: array
           items: { type: object }
@@ -495,3 +503,17 @@ components:
         requires_api_key: { type: boolean }
         supports_model_discovery: { type: boolean }
         created_at: { type: string, format: date-time }
+    LLMProviderError:
+      type: object
+      required: [detail, code, retryable]
+      properties:
+        detail:
+          type: string
+          description: Mensaje público saneado; no contiene cuerpos upstream ni secretos.
+        code:
+          type: string
+          enum: [LLM_AUTHENTICATION_FAILED, LLM_ACCESS_DENIED, LLM_QUOTA_EXHAUSTED, LLM_MODEL_UNAVAILABLE, LLM_ENDPOINT_OR_MODEL_UNAVAILABLE, LLM_UNSUPPORTED_REQUEST, LLM_RATE_LIMITED, LLM_TIMEOUT, LLM_CONNECTION_FAILED, LLM_PROVIDER_UNAVAILABLE, LLM_INVALID_RESPONSE, LLM_PROVIDER_ERROR]
+        provider: { type: string, nullable: true }
+        upstream_status: { type: integer, nullable: true }
+        retryable: { type: boolean }
+        retry_after_seconds: { type: number, nullable: true }
