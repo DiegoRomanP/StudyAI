@@ -101,6 +101,41 @@ def test_410_model_and_unsupported_parameter_have_specific_codes():
     assert unsupported.code == "LLM_UNSUPPORTED_REQUEST"
 
 
+def test_structured_parameter_rejections_are_unsupported_requests_without_authentication():
+    max_tokens = map_http_error(
+        "OPENAI",
+        _response(400, {"error": {"code": "invalid_parameter", "param": "max_tokens"}}),
+    )
+    max_completion_tokens = map_http_error(
+        "OPENAI",
+        _response(
+            422,
+            {
+                "error": {
+                    "code": "bad_request",
+                    "type": "unsupported_parameter",
+                    "param": "max_completion_tokens",
+                }
+            },
+        ),
+    )
+
+    assert (max_tokens.code, max_tokens.retryable) == ("LLM_UNSUPPORTED_REQUEST", False)
+    assert (max_completion_tokens.code, max_completion_tokens.retryable) == (
+        "LLM_UNSUPPORTED_REQUEST",
+        False,
+    )
+
+
+def test_unknown_structured_parameter_is_not_classified_as_unsupported_request():
+    error = map_http_error(
+        "OPENAI",
+        _response(422, {"error": {"code": "bad_request", "param": "temperature"}}),
+    )
+
+    assert error.code == "LLM_PROVIDER_ERROR"
+
+
 def test_non_retryable_server_status_is_not_advertised_as_retryable():
     error = map_http_error("OPENAI", _response(501))
 
