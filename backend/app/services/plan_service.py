@@ -24,7 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.pareto import select_top_by_relevance
@@ -119,10 +119,18 @@ class _Generator:
         try:
             self._generate(plan)
             plan.status = PlanStatus.READY
-        except Exception as exc:  # noqa: BLE001 - record failure for the client
-            logger.exception("Plan generation failed for plan %s", plan_id)
+        except Exception as exc:  # noqa: BLE001 - record a safe failure for the client
+            if isinstance(exc, LLMError):
+                error_message = str(exc)
+                error_code = exc.code
+            else:
+                error_message = "No se pudo generar el plan. Inténtalo de nuevo."
+                error_code = "PLAN_GENERATION_FAILED"
+            logger.error("Plan generation failed for plan %s (code=%s)", plan_id, error_code)
             plan.status = PlanStatus.FAILED
-            plan.error_message = str(exc)[:1000]
+            plan.error_message = error_message
+        finally:
+            self.llm.close()
         self.db.add(plan)
         self.db.commit()
 
@@ -232,7 +240,12 @@ class _Generator:
                 max_tokens=1024,
             )
             sessions = parse_llm_json(raw).get("sessions", [])
-        except Exception:  # noqa: BLE001 - degrade to a deterministic layout
+        except LLMError as exc:
+            if exc.code != "LLM_INVALID_RESPONSE":
+                raise
+            logger.warning("Session plan output was invalid; using deterministic layout.")
+            sessions = []
+        except (TypeError, ValueError, KeyError):
             sessions = []
 
         if not sessions:
