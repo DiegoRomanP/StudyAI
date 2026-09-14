@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import io
 
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 import main
+from app.core.exceptions import LLMError
 from app.llm.mock_provider import MockLLMProvider
 
 
@@ -92,3 +95,100 @@ def test_mock_provider_pacing_is_skipped_so_generation_stays_fast(client: TestCl
 
     _build_ready_plan(client, "LEARNING", "Plan sin pacing")
     assert sleep_calls == []
+
+
+def test_plan_failure_persists_and_logs_only_the_safe_llm_message(client: TestClient, monkeypatch, caplog):
+    class FailingProvider:
+        requires_request_pacing = False
+
+        def complete(self, **_kwargs):
+            try:
+                raise RuntimeError("upstream body leaked-key-123")
+            except RuntimeError as cause:
+                raise LLMError(
+                    "El proveedor de IA rechazó el acceso al modelo.",
+                    code="LLM_ACCESS_DENIED",
+                    provider="NVIDIA",
+                    upstream_status=403,
+                ) from cause
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: FailingProvider())
+
+    goal_id = client.post(
+        "/goals", json={"goal_type": "LEARNING", "title": "Plan seguro", "description": ""}
+    ).json()["id"]
+    document_id = client.post(
+        "/documents/upload",
+        files={"file": ("seguro.md", io.BytesIO(b"# Tema\nContenido"), "text/markdown")},
+    ).json()["id"]
+    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [document_id]})
+    plan = client.get(f"/plans/{response.json()['id']}").json()
+
+    assert plan["status"] == "FAILED"
+    assert plan["error_message"] == "El proveedor de IA rechazó el acceso al modelo."
+    assert "leaked-key-123" not in caplog.text
+
+
+def test_session_plan_provider_failure_does_not_continue_with_session_content(client: TestClient, monkeypatch):
+    class FailingSessionPlanProvider(MockLLMProvider):
+        calls: list[str] = []
+
+        def complete(self, *, kind, **kwargs):
+            self.calls.append(kind)
+            if kind == "session_plan":
+                raise LLMError(
+                    "La cuota o el saldo del proveedor de IA se agotó.",
+                    code="LLM_QUOTA_EXHAUSTED",
+                    provider="OPENAI",
+                )
+            return super().complete(kind=kind, **kwargs)
+
+    provider = FailingSessionPlanProvider()
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+
+    goal_id = client.post(
+        "/goals", json={"goal_type": "LEARNING", "title": "Plan sin cuota", "description": ""}
+    ).json()["id"]
+    document_id = client.post(
+        "/documents/upload",
+        files={"file": ("cuota.md", io.BytesIO(b"# Tema\nContenido"), "text/markdown")},
+    ).json()["id"]
+    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [document_id]})
+    plan = client.get(f"/plans/{response.json()['id']}").json()
+
+    assert plan["status"] == "FAILED"
+    assert provider.calls == ["topic_analysis", "session_plan"]
+
+
+@respx.mock
+def test_adapter_failure_reaches_plan_storage_and_api_without_exposing_response_body(client: TestClient, monkeypatch):
+    from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+
+    secret = "secret-upstream-document-content"
+    provider = OpenAICompatibleProvider(
+        base_url="https://api.example.test/v1",
+        api_key="test-key",
+        model="test-model",
+        max_retries=1,
+    )
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+    respx.post("https://api.example.test/v1/chat/completions").mock(
+        return_value=httpx.Response(403, json={"error": {"message": secret}})
+    )
+
+    goal_id = client.post(
+        "/goals", json={"goal_type": "LEARNING", "title": "Plan fallo adaptador", "description": ""}
+    ).json()["id"]
+    document_id = client.post(
+        "/documents/upload",
+        files={"file": ("fallo.md", io.BytesIO(b"# Tema\nContenido"), "text/markdown")},
+    ).json()["id"]
+    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [document_id]})
+    plan_response = client.get(f"/plans/{response.json()['id']}")
+
+    assert plan_response.status_code == 200
+    assert plan_response.json()["error_message"] == "El proveedor de IA rechazó el acceso al modelo. Revisa permisos y disponibilidad."
+    assert secret not in plan_response.text
