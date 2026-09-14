@@ -175,6 +175,7 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
         ("OPENROUTER", "LLM_TIMEOUT"),
         ("HUGGINGFACE", "LLM_RATE_LIMITED"),
         ("ANTHROPIC", "LLM_PROVIDER_UNAVAILABLE"),
+        ("OPENAI", "LLM_UNSUPPORTED_REQUEST"),
     ],
 )
 def test_non_authentication_failures_do_not_revoke_verification(client: TestClient, provider: str, code: str):
@@ -201,6 +202,7 @@ def test_non_authentication_failures_do_not_revoke_verification(client: TestClie
 @respx.mock
 def test_openapi_declares_safe_llm_error_and_adapter_error_reaches_api(client: TestClient, monkeypatch):
     from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+    from app.llm.request_profiles import STANDARD_CHAT_PROFILE
 
     credential = _save_key(client, "OPENAI")
     draft = _save_draft(client, "OPENAI", credential["config_revision"], "gpt-4o-mini")
@@ -210,6 +212,7 @@ def test_openapi_declares_safe_llm_error_and_adapter_error_reaches_api(client: T
             base_url="https://api.example.test/v1",
             api_key="secret-test-key",
             model="gpt-4o-mini",
+            request_profile=STANDARD_CHAT_PROFILE,
             max_retries=1,
         ),
     )
