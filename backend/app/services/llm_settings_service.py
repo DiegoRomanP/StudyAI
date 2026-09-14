@@ -160,6 +160,11 @@ class LLMSettingsService:
         if not credential.model:
             raise ValidationError("Selecciona un modelo antes de probar la conexión.")
 
+        # Keep a detached snapshot for the network call. The conditional write
+        # below will reject it if another request changes or removes the draft.
+        self.db.expunge(credential)
+        self.db.rollback()
+
         instance = None
         try:
             instance = build_provider_from_credential(credential)
