@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 import math
 import httpx
 
@@ -32,6 +33,13 @@ _PROVIDER_CODES = {
     "ANTHROPIC": _ANTHROPIC_CODES,
 }
 _RETRYABLE_SERVER_STATUS_CODES = {500, 502, 503, 504}
+_TOKEN_LIMIT_PARAMETERS = frozenset({"max_tokens", "max_completion_tokens"})
+
+
+@dataclass(frozen=True)
+class _ErrorMetadata:
+    codes: frozenset[str] = frozenset()
+    parameter: str | None = None
 
 
 def map_http_error(provider: str, response: httpx.Response) -> LLMError:
@@ -39,7 +47,7 @@ def map_http_error(provider: str, response: httpx.Response) -> LLMError:
     return _map_status(
         provider,
         response.status_code,
-        _known_error_code(response),
+        _known_error_metadata(response),
         retry_after_seconds=_retry_after_seconds(response),
     )
 
@@ -49,10 +57,15 @@ def map_sdk_error(provider: str, error: BaseException) -> LLMError:
     error_name = type(error).__name__
     status = getattr(error, "status_code", None)
     body = getattr(error, "body", None)
-    known_code = _known_error_code_from_data(body)
+    metadata = _known_error_metadata_from_data(body)
 
     if isinstance(status, int):
-        return _map_status(provider, status, known_code or _code_from_sdk_name(error_name))
+        sdk_code = _code_from_sdk_name(error_name)
+        if sdk_code is not None:
+            metadata = _ErrorMetadata(
+                codes=metadata.codes | frozenset({sdk_code}), parameter=metadata.parameter
+            )
+        return _map_status(provider, status, metadata)
     if error_name in {"APITimeoutError", "TimeoutError"}:
         return _error(provider, "LLM_TIMEOUT", "La solicitud al proveedor de IA agotó el tiempo de espera.", retryable=True)
     if error_name in {"APIConnectionError", "ConnectionError"}:
@@ -79,11 +92,11 @@ def empty_response_error(provider: str) -> LLMError:
 def _map_status(
     provider: str,
     status: int,
-    known_code: str | None,
+    metadata: _ErrorMetadata,
     *,
     retry_after_seconds: float | None = None,
 ) -> LLMError:
-    codes = _PROVIDER_CODES.get(provider.upper(), {})
+    provider_codes = _PROVIDER_CODES.get(provider.upper(), {})
     if 500 <= status <= 599:
         return _error(
             provider,
@@ -100,17 +113,23 @@ def _map_status(
         return _error(provider, "LLM_QUOTA_EXHAUSTED", "La cuota o el saldo del proveedor de IA se agotó.", status)
     if status == 403:
         return _error(provider, "LLM_ACCESS_DENIED", "El proveedor de IA rechazó el acceso al modelo. Revisa permisos y disponibilidad.", status)
-    if status in {404, 410} and known_code in codes.get("model", frozenset()):
+    if status in {404, 410} and metadata.codes & provider_codes.get("model", frozenset()):
         return _error(provider, "LLM_MODEL_UNAVAILABLE", "El modelo seleccionado no está disponible en el proveedor de IA.", status)
     if status in {404, 410}:
         return _error(provider, "LLM_ENDPOINT_OR_MODEL_UNAVAILABLE", "No se encontró el endpoint o el modelo del proveedor de IA.", status)
-    if status == 400:
-        if known_code in codes.get("auth", frozenset()):
+    if status in {400, 422}:
+        if status == 400 and metadata.codes & provider_codes.get("auth", frozenset()):
             return _error(provider, "LLM_AUTHENTICATION_FAILED", "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.", status)
-        if known_code in codes.get("unsupported", frozenset()):
+        if (
+            metadata.codes & provider_codes.get("unsupported", frozenset())
+            or (
+                bool(provider_codes)
+                and metadata.parameter in _TOKEN_LIMIT_PARAMETERS
+            )
+        ):
             return _error(provider, "LLM_UNSUPPORTED_REQUEST", "El proveedor de IA no admite esta solicitud para el modelo seleccionado.", status)
     if status == 429:
-        if known_code in codes.get("quota", frozenset()):
+        if metadata.codes & provider_codes.get("quota", frozenset()):
             return _error(provider, "LLM_QUOTA_EXHAUSTED", "La cuota o el saldo del proveedor de IA se agotó.", status)
         return _error(provider, "LLM_RATE_LIMITED", "El proveedor de IA está limitando temporalmente las solicitudes.", status, retryable=True, retry_after_seconds=retry_after_seconds)
     return _error(provider, "LLM_PROVIDER_ERROR", "El proveedor de IA no pudo completar la solicitud.", status)
@@ -135,24 +154,28 @@ def _error(
     )
 
 
-def _known_error_code(response: httpx.Response) -> str | None:
+def _known_error_metadata(response: httpx.Response) -> _ErrorMetadata:
     try:
-        return _known_error_code_from_data(response.json())
+        return _known_error_metadata_from_data(response.json())
     except (ValueError, TypeError):
-        return None
+        return _ErrorMetadata()
 
 
-def _known_error_code_from_data(data: object) -> str | None:
+def _known_error_metadata_from_data(data: object) -> _ErrorMetadata:
     if not isinstance(data, Mapping):
-        return None
+        return _ErrorMetadata()
     error = data.get("error", data)
     if not isinstance(error, Mapping):
-        return None
+        return _ErrorMetadata()
+    codes = []
     for field in ("code", "type"):
         value = error.get(field)
         if isinstance(value, str):
-            return value.lower()
-    return None
+            codes.append(value.casefold())
+    parameter = error.get("param")
+    return _ErrorMetadata(
+        codes=frozenset(codes), parameter=parameter.casefold() if isinstance(parameter, str) else None
+    )
 
 
 def _code_from_sdk_name(error_name: str) -> str | None:
