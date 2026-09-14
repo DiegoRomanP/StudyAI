@@ -27,6 +27,7 @@ from app.llm.credential_state import is_verified
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
 from app.llm.providers_catalog import PROVIDER_CATALOG
+from app.llm.request_profiles import resolve_request_profile
 from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
 
@@ -51,19 +52,21 @@ def build_provider_from_credential(
             api_key=api_key, model=model_override or credential.model or meta.default_model
         )
 
+    model = model_override or credential.model or meta.default_model
+    request_profile = resolve_request_profile(credential.provider, model)
     settings = get_settings()
     if credential.provider == LLMProviderName.OLLAMA:
         return OpenAICompatibleProvider(
             base_url=f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1",
             api_key=None,
-            model=model_override or credential.model,
+            model=model,
             timeout=settings.OLLAMA_TIMEOUT_SECONDS,
             max_retries=settings.OLLAMA_MAX_RETRIES,
             max_rate_limit_retries=0,
             json_response_kinds=frozenset({"topic_analysis", "session_plan", "session_content"}),
             requires_request_pacing=False,
             disable_reasoning=True,
-            test_max_tokens=32,
+            request_profile=request_profile,
             provider=credential.provider.value,
         )
 
@@ -73,13 +76,13 @@ def build_provider_from_credential(
         # resolve differently than when the user first saved it.
         assert_safe_outbound_url(credential.base_url)
     base_url = credential.base_url or meta.default_base_url
-    model = model_override or credential.model or meta.default_model
     return OpenAICompatibleProvider(
         base_url=base_url,
         api_key=api_key,
         model=model,
         timeout=settings.LLM_TIMEOUT_SECONDS,
         max_retries=settings.LLM_MAX_RETRIES,
+        request_profile=request_profile,
         provider=credential.provider.value,
     )
 
