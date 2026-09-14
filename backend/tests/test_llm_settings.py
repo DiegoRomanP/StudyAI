@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
+import httpx
+import respx
 from fastapi.testclient import TestClient
 
 import main
@@ -17,8 +19,9 @@ from app.services.llm_settings_service import LLMSettingsService
 class _TestProvider:
     on_test: Callable[[], None] | None = None
 
-    def __init__(self, model: str) -> None:
+    def __init__(self, model: str, base_url: str) -> None:
         self.model = model
+        self.base_url = base_url
         self.closed = False
 
     def test_connection(self) -> None:
@@ -27,6 +30,8 @@ class _TestProvider:
             callback()
         if self.model == "unavailable-model":
             raise LLMError("simulated model access failure")
+        if self.base_url == "https://blocked-proxy.example/v1":
+            raise LLMError("simulated endpoint access failure")
 
     def close(self) -> None:
         self.closed = True
@@ -46,7 +51,7 @@ def fake_provider(monkeypatch):
     monkeypatch.setattr(
         factory,
         "build_provider_from_credential",
-        lambda credential: _TestProvider(credential.model),
+        lambda credential: _TestProvider(credential.model, credential.base_url),
     )
 
 
@@ -121,7 +126,110 @@ def test_failing_catalog_model_does_not_block_another_model_with_same_key(client
 
     assert verified["model"] == "meta/llama-3.1-70b-instruct"
     assert verified["is_verified"] is True
+
+
+def test_authentication_failure_revokes_only_the_tested_credential(client: TestClient):
+    credential = _save_key(client, "HUGGINGFACE")
+    draft = _save_draft(client, "HUGGINGFACE", credential["config_revision"], "test-model")
+    verified = _verify(client, "HUGGINGFACE", draft["config_revision"])
+    activated = client.post(
+        "/llm-settings/HUGGINGFACE/activate",
+        json={"expected_revision": verified["config_revision"]},
+    )
+    assert activated.status_code == 200
+
+    _TestProvider.on_test = lambda: (_ for _ in ()).throw(
+        LLMError(
+            "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.",
+            code="LLM_AUTHENTICATION_FAILED",
+            provider="HUGGINGFACE",
+            upstream_status=401,
+        )
+    )
+    response = client.post(
+        "/llm-settings/HUGGINGFACE/test",
+        json={"expected_revision": verified["config_revision"]},
+    )
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "detail": "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.",
+        "code": "LLM_AUTHENTICATION_FAILED",
+        "provider": "HUGGINGFACE",
+        "upstream_status": 401,
+        "retryable": False,
+        "retry_after_seconds": None,
+    }
+    stored = client.get("/llm-settings").json()
+    credential = next(item for item in stored if item["provider"] == "HUGGINGFACE")
+    assert credential["is_verified"] is False
+    assert credential["is_active"] is False
     assert verified["verified_at"] is not None
+
+
+@pytest.mark.parametrize(
+    ("provider", "code"),
+    [
+        ("GLM", "LLM_ACCESS_DENIED"),
+        ("NVIDIA", "LLM_QUOTA_EXHAUSTED"),
+        ("OPENROUTER", "LLM_TIMEOUT"),
+        ("HUGGINGFACE", "LLM_RATE_LIMITED"),
+        ("ANTHROPIC", "LLM_PROVIDER_UNAVAILABLE"),
+    ],
+)
+def test_non_authentication_failures_do_not_revoke_verification(client: TestClient, provider: str, code: str):
+    credential = _save_key(client, provider)
+    draft = _save_draft(client, provider, credential["config_revision"], "test-model")
+    verified = _verify(client, provider, draft["config_revision"])
+    assert client.post(
+        f"/llm-settings/{provider}/activate", json={"expected_revision": verified["config_revision"]}
+    ).status_code == 200
+
+    _TestProvider.on_test = lambda: (_ for _ in ()).throw(
+        LLMError("Fallo seguro.", code=code, provider=provider)
+    )
+    response = client.post(
+        f"/llm-settings/{provider}/test", json={"expected_revision": verified["config_revision"]}
+    )
+
+    assert response.status_code == 502
+    stored = next(item for item in client.get("/llm-settings").json() if item["provider"] == provider)
+    assert stored["is_verified"] is True
+    assert stored["is_active"] is True
+
+
+@respx.mock
+def test_openapi_declares_safe_llm_error_and_adapter_error_reaches_api(client: TestClient, monkeypatch):
+    from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+
+    credential = _save_key(client, "OPENAI")
+    draft = _save_draft(client, "OPENAI", credential["config_revision"], "gpt-4o-mini")
+    monkeypatch.setattr(
+        "app.llm.factory.build_provider_from_credential",
+        lambda _credential: OpenAICompatibleProvider(
+            base_url="https://api.example.test/v1",
+            api_key="secret-test-key",
+            model="gpt-4o-mini",
+            max_retries=1,
+        ),
+    )
+    respx.post("https://api.example.test/v1/chat/completions").mock(
+        return_value=httpx.Response(401, json={"error": {"message": "secret-test-key"}})
+    )
+
+    response = client.post("/llm-settings/OPENAI/test", json={"expected_revision": draft["config_revision"]})
+    schema = client.get("/openapi.json").json()
+    error_schema = schema["paths"]["/llm-settings/{provider}/test"]["post"]["responses"]["502"]
+    ollama_error_schema = schema["paths"]["/llm-settings/{provider}/models"]["get"]["responses"]["502"]
+
+    assert response.status_code == 502
+    assert "secret-test-key" not in response.text
+    assert error_schema["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/LLMProviderErrorResponse"
+    }
+    assert ollama_error_schema["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/LLMProviderErrorResponse"
+    }
 
 
 def test_activation_requires_evidence_for_the_current_draft(client: TestClient):
@@ -229,6 +337,53 @@ def test_omitting_base_url_preserves_it_and_empty_string_restores_default(client
     assert reset.json()["base_url"] == ""
 
 
+def test_a_failed_new_url_is_tested_as_the_saved_draft_and_stays_inactive(
+    client: TestClient, monkeypatch
+):
+    import socket
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))],
+    )
+    saved = client.put(
+        "/llm-settings/OPENAI",
+        json={"api_key": "sk-test-1234567890abcdef", "base_url": "https://working-proxy.example/v1"},
+    ).json()
+    working = _save_draft(client, "OPENAI", saved["config_revision"], "gpt-4o-mini")
+    verified = _verify(client, "OPENAI", working["config_revision"])
+    activated = client.post(
+        "/llm-settings/OPENAI/activate",
+        json={"expected_revision": verified["config_revision"]},
+    )
+    assert activated.status_code == 200
+
+    draft = client.patch(
+        "/llm-settings/OPENAI/model",
+        json={
+            "model": "gpt-4.1-mini",
+            "base_url": "https://blocked-proxy.example/v1",
+            "expected_revision": verified["config_revision"],
+        },
+    ).json()
+    failed_test = client.post(
+        "/llm-settings/OPENAI/test",
+        json={"expected_revision": draft["config_revision"], "base_url": "https://working-proxy.example/v1"},
+    )
+
+    assert failed_test.status_code == 422  # The test endpoint cannot receive a separate URL.
+    failed_test = client.post(
+        "/llm-settings/OPENAI/test",
+        json={"expected_revision": draft["config_revision"]},
+    )
+    assert failed_test.status_code == 502
+    persisted = next(item for item in client.get("/llm-settings").json() if item["provider"] == "OPENAI")
+    assert persisted["base_url"] == "https://blocked-proxy.example/v1"
+    assert persisted["is_verified"] is False
+    assert persisted["is_active"] is False
+
+
 def test_replacing_api_key_resets_the_draft_and_evidence(client: TestClient):
     credential = _save_key(client, "ANTHROPIC")
     draft = _save_draft(client, "ANTHROPIC", credential["config_revision"], "claude-haiku-4-5")
@@ -247,6 +402,23 @@ def test_model_update_and_activation_require_a_revision(client: TestClient):
     assert client.patch("/llm-settings/OPENAI/model", json={"model": "gpt-4o-mini"}).status_code == 422
     assert client.post("/llm-settings/OPENAI/activate", json={}).status_code == 422
     assert client.post("/llm-settings/OPENAI/test", json={}).status_code == 422
+
+
+def test_revisioned_requests_reject_unknown_fields(client: TestClient):
+    credential = _save_key(client, "NVIDIA")
+    revision = credential["config_revision"]
+    assert client.patch(
+        "/llm-settings/NVIDIA/model",
+        json={"model": "meta/llama-3.1-70b-instruct", "expected_revision": revision, "extra": True},
+    ).status_code == 422
+    assert client.post(
+        "/llm-settings/NVIDIA/test",
+        json={"expected_revision": revision, "model": "ignored"},
+    ).status_code == 422
+    assert client.post(
+        "/llm-settings/NVIDIA/activate",
+        json={"expected_revision": revision, "model": "ignored"},
+    ).status_code == 422
 
 
 def test_ollama_remains_keyless_but_requires_a_verified_installed_model(client: TestClient):
