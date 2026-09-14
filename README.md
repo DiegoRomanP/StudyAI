@@ -197,9 +197,16 @@ realmente necesita (mucho menos que el límite genérico anterior) y la
 recuperación de contexto (RAG) usa menos fragmentos. Entre llamadas hay una
 pausa configurable (`LLM_REQUEST_PACING_SECONDS`) para no agotar el límite de
 peticiones por minuto de un plan gratuito (p. ej. los modelos `:free` de
-OpenRouter, limitados a ~8 req/min). Si aun así tu proveedor responde 429, esa
-llamada específica reintenta respetando el `Retry-After` del proveedor con su
-propio presupuesto de reintentos.
+OpenRouter, limitados a ~8 req/min). Si el proveedor indica un límite temporal
+(`LLM_RATE_LIMITED`), la llamada puede reintentarse respetando `Retry-After`.
+Una cuota o saldo agotado (`LLM_QUOTA_EXHAUSTED`) no se reintenta.
+
+Los fallos de proveedores se exponen como respuestas `502` con un `detail`
+seguro y los campos `code`, `provider`, `upstream_status`, `retryable` y
+`retry_after_seconds`. Los códigos distinguen autenticación, permisos, cuota,
+modelo/endpoint, límite temporal, red y disponibilidad; no incluyen cuerpos de
+respuesta del proveedor, prompts ni claves. Un rechazo inequívoco de
+autenticación invalida la evidencia de la configuración guardada y la desactiva.
 
 ---
 
@@ -268,12 +275,13 @@ de proveedor de `get_llm_provider` (incluido Hugging Face y que hereda
 `/llm-settings`, el pipeline de generación de planes (recuento exacto de
 llamadas al LLM, conteos de flashcards/opción múltiple según la estrategia de
 meta), además de un test de integración end-to-end (upload → plan → sesión →
-quiz → dashboard) con el LLM mockeado. **86 tests en verde.**
+quiz → dashboard) con el LLM mockeado.
 
-Frontend — typecheck y build de producción:
+Frontend — pruebas, typecheck y build de producción:
 
 ```bash
 cd frontend
+npm run test
 npm run lint     # tsc --noEmit
 npm run build
 ```
