@@ -6,6 +6,7 @@ real network access, no API cost, fully deterministic.
 import httpx
 import pytest
 import respx
+import traceback
 
 from app.core.exceptions import LLMError
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
@@ -76,8 +77,9 @@ def test_zero_rate_limit_retries_fails_on_first_429():
         base_url=BASE_URL, api_key=None, model="local-model", max_rate_limit_retries=0
     )
     route = respx.post(f"{BASE_URL}/chat/completions").mock(return_value=httpx.Response(429))
-    with pytest.raises(LLMError, match="429"):
+    with pytest.raises(LLMError) as exc_info:
         provider.complete(kind="quiz", system="sys", prompt="prompt")
+    assert exc_info.value.code == "LLM_RATE_LIMITED"
     assert route.call_count == 1
 
 
@@ -121,6 +123,22 @@ def test_429_without_retry_after_header_uses_fixed_fallback_wait(monkeypatch):
     assert sleeps == [10.0]
 
 
+@pytest.mark.parametrize("retry_after", ["NaN", "Infinity"])
+@respx.mock
+def test_non_finite_retry_after_uses_a_safe_fallback_wait(monkeypatch, retry_after):
+    sleeps: list[float] = []
+    monkeypatch.setattr("app.llm.openai_compatible_provider.time.sleep", sleeps.append)
+    respx.post(f"{BASE_URL}/chat/completions").mock(
+        side_effect=[
+            httpx.Response(429, headers={"retry-after": retry_after}),
+            httpx.Response(200, json={"choices": [{"message": {"content": "ok now"}}]}),
+        ]
+    )
+
+    _provider().complete(kind="quiz", system="sys", prompt="prompt")
+    assert sleeps == [10.0]
+
+
 @respx.mock
 def test_429_has_its_own_retry_budget_separate_from_generic_max_retries():
     # max_retries=1 alone would forbid any retry at all — but 429s draw from
@@ -155,8 +173,9 @@ def test_429_exhausts_its_dedicated_retry_budget_and_raises():
     respx.post(f"{BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(429, json={"error": "still limited"})
     )
-    with pytest.raises(LLMError, match="429"):
+    with pytest.raises(LLMError) as exc_info:
         provider.complete(kind="quiz", system="sys", prompt="prompt")
+    assert exc_info.value.code == "LLM_RATE_LIMITED"
 
 
 @respx.mock
@@ -202,3 +221,31 @@ def test_test_connection_succeeds_silently():
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
     )
     _provider().test_connection()  # must not raise
+
+
+@respx.mock
+def test_safe_http_error_does_not_keep_request_or_body_in_exception_chain():
+    secret = "secret-key-and-prompt"
+    respx.post(f"{BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(401, json={"error": {"message": secret}})
+    )
+
+    with pytest.raises(LLMError) as exc_info:
+        _provider().complete(kind="quiz", system=secret, prompt=secret)
+
+    error = exc_info.value
+    rendered = "".join(traceback.format_exception(error))
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    assert secret not in rendered
+
+
+@respx.mock
+def test_501_is_not_retried_when_mapper_marks_it_non_retryable():
+    route = respx.post(f"{BASE_URL}/chat/completions").mock(return_value=httpx.Response(501))
+
+    with pytest.raises(LLMError) as exc_info:
+        _provider(max_retries=3).complete(kind="quiz", system="sys", prompt="prompt")
+
+    assert exc_info.value.retryable is False
+    assert route.call_count == 1
