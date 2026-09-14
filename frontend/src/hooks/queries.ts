@@ -30,6 +30,16 @@ function replaceCachedLlmCredential(
   });
 }
 
+function invalidateLlmCredentialsOnConflict(
+  qc: ReturnType<typeof useQueryClient>,
+  error: unknown,
+) {
+  const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
+  if (response?.status === 409 || response?.data?.code === "LLM_AUTHENTICATION_FAILED") {
+    qc.invalidateQueries({ queryKey: ["llm-credentials"] });
+  }
+}
+
 // --- Documents -------------------------------------------------------------
 export function useDocuments() {
   return useQuery({
@@ -173,6 +183,7 @@ export function useSaveLlmCredential() {
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMCredentialUpsert }) =>
       api.saveLlmCredential(provider, payload),
     onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -187,6 +198,7 @@ export function useUpdateLlmCredentialModel() {
       payload: LLMCredentialModelUpdate;
     }) => api.updateLlmCredentialModel(provider, payload),
     onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -196,6 +208,7 @@ export function useActivateLlmCredential() {
     mutationFn: ({ provider, expectedRevision }: { provider: LLMProviderKey; expectedRevision: number }) =>
       api.activateLlmCredential(provider, expectedRevision),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -221,6 +234,7 @@ export function useTestLlmCredential() {
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMConnectionTest }) =>
       api.testLlmCredential(provider, payload),
     onSuccess: ({ credential }) => replaceCachedLlmCredential(qc, credential),
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
