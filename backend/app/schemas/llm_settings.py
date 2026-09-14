@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.credential_state import is_verified
 from app.llm.providers_catalog import PROVIDER_CATALOG
@@ -29,16 +29,19 @@ class LLMCredentialModelUpdate(BaseModel):
     # Omitted preserves the stored override; an empty string restores default.
     base_url: str | None = Field(default=None, max_length=512)
     expected_revision: int = Field(ge=1)
+    model_config = ConfigDict(extra="forbid")
 
 
 class LLMConnectionTest(BaseModel):
     """Tests the stored configuration revision, never an ad-hoc candidate."""
 
     expected_revision: int = Field(ge=1)
+    model_config = ConfigDict(extra="forbid")
 
 
 class LLMActivationRequest(BaseModel):
     expected_revision: int = Field(ge=1)
+    model_config = ConfigDict(extra="forbid")
 
 
 class LLMCredentialResponse(BaseModel):
@@ -103,3 +106,14 @@ class OllamaModelResponse(BaseModel):
 class LLMConnectionTestResponse(BaseModel):
     ok: bool
     credential: LLMCredentialResponse
+
+
+class LLMProviderErrorResponse(BaseModel):
+    """Safe, typed envelope for an upstream LLM failure."""
+
+    detail: str
+    code: str
+    provider: LLMProviderName | None
+    upstream_status: int | None
+    retryable: bool
+    retry_after_seconds: float | None
