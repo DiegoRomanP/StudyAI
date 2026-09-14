@@ -11,8 +11,9 @@ import time
 
 from app.core.config import get_settings
 from app.core.exceptions import LLMError
-from app.core.logging import get_logger
+from app.core.logging import get_logger, safe_model_identifier
 from app.llm.base import LLMProvider
+from app.llm.error_mapping import empty_response_error, invalid_response_error, map_sdk_error
 
 logger = get_logger(__name__)
 
@@ -42,16 +43,6 @@ class AnthropicProvider(LLMProvider):
             timeout=self._settings.LLM_TIMEOUT_SECONDS,
             max_retries=0,
         )
-        self._retryable = tuple(
-            exc
-            for exc in (
-                getattr(anthropic, "RateLimitError", None),
-                getattr(anthropic, "APIConnectionError", None),
-                getattr(anthropic, "InternalServerError", None),
-                getattr(anthropic, "APITimeoutError", None),
-            )
-            if exc is not None
-        )
 
     def _model_for(self, kind: str) -> str:
         if self._fixed_model:
@@ -71,7 +62,7 @@ class AnthropicProvider(LLMProvider):
     ) -> str:
         model = self._model_for(kind)
         attempts = max(1, self._settings.LLM_MAX_RETRIES)
-        last_exc: Exception | None = None
+        last_error = None
 
         for attempt in range(attempts):
             try:
@@ -82,19 +73,29 @@ class AnthropicProvider(LLMProvider):
                     messages=[{"role": "user", "content": prompt}],
                 )
                 return self._extract_text(response)
-            except self._retryable as exc:  # type: ignore[misc]
-                last_exc = exc
-                backoff = 2**attempt
-                logger.warning(
-                    "LLM call (%s) failed on attempt %d/%d: %s; retrying in %ss",
-                    kind, attempt + 1, attempts, exc, backoff,
-                )
-                if attempt < attempts - 1:
+            except LLMError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - SDK exceptions vary by installed version
+                mapped_error = map_sdk_error("ANTHROPIC", exc)
+                last_error = mapped_error
+                if mapped_error.retryable and attempt < attempts - 1:
+                    backoff = 2**attempt
+                    logger.warning(
+                        "LLM call provider=ANTHROPIC model=%s operation=%s code=%s attempt=%d/%d; retrying in %ss",
+                        safe_model_identifier(model),
+                        kind,
+                        mapped_error.code,
+                        attempt + 1,
+                        attempts,
+                        backoff,
+                    )
                     time.sleep(backoff)
-            except Exception as exc:  # noqa: BLE001 - non-retryable
-                raise LLMError(f"LLM call failed: {exc}") from exc
+                    continue
+                last_error = mapped_error
+                break
 
-        raise LLMError(f"LLM call failed after {attempts} attempts: {last_exc}")
+        assert last_error is not None
+        raise last_error
 
     def test_connection(self) -> None:
         """Raise ``LLMError`` if the key/model don't actually work. Tiny call."""
@@ -105,12 +106,22 @@ class AnthropicProvider(LLMProvider):
 
     @staticmethod
     def _extract_text(response) -> str:
-        parts = [
-            block.text
-            for block in getattr(response, "content", [])
-            if getattr(block, "type", None) == "text"
-        ]
+        content = getattr(response, "content", None)
+        if not isinstance(content, (list, tuple)):
+            raise invalid_response_error("ANTHROPIC")
+
+        parts: list[str] = []
+        for block in content:
+            block_type = getattr(block, "type", None)
+            if not isinstance(block_type, str):
+                raise invalid_response_error("ANTHROPIC")
+            if block_type != "text":
+                continue
+            text = getattr(block, "text", None)
+            if not isinstance(text, str):
+                raise invalid_response_error("ANTHROPIC")
+            parts.append(text)
         text = "".join(parts).strip()
         if not text:
-            raise LLMError("LLM returned no text content.")
+            raise empty_response_error("ANTHROPIC")
         return text
