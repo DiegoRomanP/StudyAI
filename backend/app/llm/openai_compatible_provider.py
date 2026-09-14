@@ -26,7 +26,7 @@ from app.llm.error_mapping import (
     map_http_error,
     map_transport_error,
 )
-from app.llm.request_profiles import RequestProfile, STANDARD_CHAT_PROFILE
+from app.llm.request_profiles import RequestProfile
 
 logger = get_logger(__name__)
 
@@ -48,22 +48,18 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str,
         api_key: str | None,
         model: str,
+        request_profile: RequestProfile,
         timeout: float = 60.0,
         max_retries: int = 3,
         max_rate_limit_retries: int = _MAX_RATE_LIMIT_RETRIES,
-        json_response_kinds: frozenset[str] = frozenset(),
         requires_request_pacing: bool = True,
-        disable_reasoning: bool = False,
-        request_profile: RequestProfile = STANDARD_CHAT_PROFILE,
         provider: str = "OPENAI",
     ) -> None:
         self._provider = provider
         self._model = model
         self._max_retries = max(1, max_retries)
         self._max_rate_limit_retries = max(0, max_rate_limit_retries)
-        self._json_response_kinds = json_response_kinds
         self.requires_request_pacing = requires_request_pacing
-        self._disable_reasoning = disable_reasoning
         self._request_profile = request_profile
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = httpx.Client(
@@ -92,12 +88,8 @@ class OpenAICompatibleProvider(LLMProvider):
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            self._request_profile.token_limit_parameter: max_tokens,
+            **self._request_profile.payload_parameters(kind, max_tokens),
         }
-        if kind in self._json_response_kinds:
-            payload["response_format"] = {"type": "json_object"}
-        if self._disable_reasoning:
-            payload["reasoning_effort"] = "none"
         attempt = 0
         rate_limit_attempt = 0
 
