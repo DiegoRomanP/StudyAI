@@ -17,11 +17,14 @@ from app.schemas.llm_settings import (
     LLMActivationRequest,
     LLMConnectionTest,
     LLMConnectionTestResponse,
+    LLMProviderErrorResponse,
     ModelOptionResponse,
     OllamaModelResponse,
     ProviderCatalogEntry,
 )
 from app.services.llm_settings_service import LLMSettingsService
+
+LLM_ERROR_RESPONSE = {502: {"model": LLMProviderErrorResponse, "description": "Fallo seguro de un proveedor de IA."}}
 
 router = APIRouter(prefix="/llm-settings", tags=["llm-settings"])
 
@@ -106,7 +109,11 @@ def deactivate_all_credentials(
     service.deactivate_all(user.id)
 
 
-@router.get("/{provider}/models", response_model=list[OllamaModelResponse])
+@router.get(
+    "/{provider}/models",
+    response_model=list[OllamaModelResponse],
+    responses=LLM_ERROR_RESPONSE,
+)
 def list_ollama_models(
     provider: LLMProviderName,
     db: Session = Depends(get_db),
@@ -116,7 +123,11 @@ def list_ollama_models(
     return [OllamaModelResponse(**model.__dict__) for model in models]
 
 
-@router.post("/{provider}/test", response_model=LLMConnectionTestResponse)
+@router.post(
+    "/{provider}/test",
+    response_model=LLMConnectionTestResponse,
+    responses=LLM_ERROR_RESPONSE,
+)
 def test_credential(
     provider: LLMProviderName,
     payload: LLMConnectionTest,
