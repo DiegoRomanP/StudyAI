@@ -63,9 +63,7 @@ def build_provider_from_credential(
             timeout=settings.OLLAMA_TIMEOUT_SECONDS,
             max_retries=settings.OLLAMA_MAX_RETRIES,
             max_rate_limit_retries=0,
-            json_response_kinds=frozenset({"topic_analysis", "session_plan", "session_content"}),
             requires_request_pacing=False,
-            disable_reasoning=True,
             request_profile=request_profile,
             provider=credential.provider.value,
         )
