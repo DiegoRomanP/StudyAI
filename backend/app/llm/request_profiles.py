@@ -17,19 +17,38 @@ class RequestProfile:
     payload, keeping provider-specific protocol details at the boundary.
     """
 
+    identifier: str
+    version: str
     token_limit_parameter: Literal["max_tokens", "max_completion_tokens"]
     test_max_tokens: int
-    reasoning_effort_options: frozenset[str] = field(default_factory=frozenset)
+    json_response_kinds: frozenset[str] = field(default_factory=frozenset)
+
+    def payload_parameters(self, kind: str, max_tokens: int) -> dict[str, object]:
+        """Build every profile-controlled part of an outbound request."""
+        parameters: dict[str, object] = {self.token_limit_parameter: max_tokens}
+        if kind in self.json_response_kinds:
+            parameters["response_format"] = {"type": "json_object"}
+        return parameters
 
 
 STANDARD_CHAT_PROFILE = RequestProfile(
+    identifier="standard-chat",
+    version="v1",
     token_limit_parameter="max_tokens",
     test_max_tokens=32,
 )
+OLLAMA_CHAT_PROFILE = RequestProfile(
+    identifier="ollama-chat",
+    version="v1",
+    token_limit_parameter="max_tokens",
+    test_max_tokens=32,
+    json_response_kinds=frozenset({"topic_analysis", "session_plan", "session_content"}),
+)
 OPENAI_O_SERIES_PROFILE = RequestProfile(
+    identifier="openai-o-series",
+    version="v1",
     token_limit_parameter="max_completion_tokens",
     test_max_tokens=256,
-    reasoning_effort_options=frozenset({"low", "medium", "high"}),
 )
 
 # Keep this deliberately explicit. The settings UI permits arbitrary IDs, so a
@@ -52,6 +71,8 @@ def resolve_request_profile(
 ) -> RequestProfile:
     """Return a confirmed profile; unknown model IDs use the provider base."""
     provider_name = provider.value if isinstance(provider, LLMProviderName) else provider
+    if provider_name.upper() == LLMProviderName.OLLAMA.value:
+        return OLLAMA_CHAT_PROFILE
     if (
         provider_name.upper() == LLMProviderName.OPENAI.value
         and model.casefold() in _OPENAI_O_SERIES_MODELS
