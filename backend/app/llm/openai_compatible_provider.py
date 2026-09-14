@@ -6,20 +6,26 @@ name and API key — so one class serves all four rather than four near-duplicat
 provider classes. Written against ``httpx`` directly instead of adding the
 ``openai`` SDK as a new dependency.
 
-Only status codes and truncated error bodies are ever logged — never the
-request payload (which would include the user's document content) and never
-the ``Authorization`` header (which holds the API key).
+Only approved request metadata is logged — never provider response bodies, the
+request payload (which includes document content), or Authorization headers.
 """
 
 from __future__ import annotations
 
+import math
 import time
 
 import httpx
 
 from app.core.exceptions import LLMError
-from app.core.logging import get_logger
+from app.core.logging import get_logger, safe_model_identifier
 from app.llm.base import LLMProvider
+from app.llm.error_mapping import (
+    empty_response_error,
+    invalid_response_error,
+    map_http_error,
+    map_transport_error,
+)
 
 logger = get_logger(__name__)
 
@@ -48,7 +54,9 @@ class OpenAICompatibleProvider(LLMProvider):
         requires_request_pacing: bool = True,
         disable_reasoning: bool = False,
         test_max_tokens: int = 5,
+        provider: str = "OPENAI",
     ) -> None:
+        self._provider = provider
         self._model = model
         self._max_retries = max(1, max_retries)
         self._max_rate_limit_retries = max(0, max_rate_limit_retries)
@@ -93,14 +101,16 @@ class OpenAICompatibleProvider(LLMProvider):
         rate_limit_attempt = 0
 
         while True:
+            terminal_error: LLMError | None = None
             try:
                 response = self._client.post("/chat/completions", json=payload)
                 response.raise_for_status()
                 return self._extract_text(response.json())
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
+                mapped_error = map_http_error(self._provider, exc.response)
                 if (
-                    status_code == 429
+                    mapped_error.code == "LLM_RATE_LIMITED"
                     and rate_limit_attempt < self._max_rate_limit_retries
                 ):
                     rate_limit_attempt += 1
@@ -108,8 +118,12 @@ class OpenAICompatibleProvider(LLMProvider):
                         exc.response, rate_limit_attempt
                     )
                     logger.warning(
-                        "LLM call (%s) rate-limited (HTTP 429) on attempt %d/%d; retrying in %.1fs",
+                        "LLM call provider=%s model=%s operation=%s status=%d code=%s attempt=%d/%d; retrying in %.1fs",
+                        self._provider,
+                        safe_model_identifier(self._model),
                         kind,
+                        status_code,
+                        mapped_error.code,
                         rate_limit_attempt,
                         self._max_rate_limit_retries,
                         wait,
@@ -117,39 +131,51 @@ class OpenAICompatibleProvider(LLMProvider):
                     time.sleep(wait)
                     continue
                 if (
-                    status_code in _RETRYABLE_STATUS_CODES
+                    mapped_error.retryable
+                    and status_code in _RETRYABLE_STATUS_CODES
                     and attempt < self._max_retries - 1
                 ):
                     attempt += 1
                     backoff = 2**attempt
                     logger.warning(
-                        "LLM call (%s) failed with HTTP %d on attempt %d/%d; retrying in %ss",
+                        "LLM call provider=%s model=%s operation=%s status=%d code=%s attempt=%d/%d; retrying in %ss",
+                        self._provider,
+                        safe_model_identifier(self._model),
                         kind,
                         status_code,
+                        mapped_error.code,
                         attempt,
                         self._max_retries,
                         backoff,
                     )
                     time.sleep(backoff)
                     continue
-                raise LLMError(
-                    f"LLM call failed (HTTP {status_code}): {exc.response.text[:300]}"
-                ) from exc
+                terminal_error = mapped_error
             except httpx.HTTPError as exc:
-                if attempt < self._max_retries - 1:
+                mapped_error = map_transport_error(self._provider, exc)
+                if mapped_error.retryable and attempt < self._max_retries - 1:
                     attempt += 1
                     backoff = 2**attempt
                     logger.warning(
-                        "LLM call (%s) failed (%s) on attempt %d/%d; retrying in %ss",
+                        "LLM call provider=%s model=%s operation=%s code=%s attempt=%d/%d; retrying in %ss",
+                        self._provider,
+                        safe_model_identifier(self._model),
                         kind,
-                        exc.__class__.__name__,
+                        mapped_error.code,
                         attempt,
                         self._max_retries,
                         backoff,
                     )
                     time.sleep(backoff)
                     continue
-                raise LLMError(f"LLM call failed: {exc}") from exc
+                terminal_error = mapped_error
+            except ValueError:
+                terminal_error = invalid_response_error(self._provider)
+
+            # Raise after leaving the except block so the safe domain error does
+            # not retain an HTTP request, SDK body, or prompt in exception context.
+            assert terminal_error is not None
+            raise terminal_error
 
     @staticmethod
     def _rate_limit_wait_seconds(response: httpx.Response, attempt: int) -> float:
@@ -163,7 +189,9 @@ class OpenAICompatibleProvider(LLMProvider):
         retry_after = response.headers.get("retry-after")
         if retry_after:
             try:
-                return min(max(float(retry_after), 0.5), _MAX_RATE_LIMIT_WAIT_SECONDS)
+                seconds = float(retry_after)
+                if math.isfinite(seconds):
+                    return min(max(seconds, 0.5), _MAX_RATE_LIMIT_WAIT_SECONDS)
             except ValueError:
                 pass
         return min(10.0 * attempt, _MAX_RATE_LIMIT_WAIT_SECONDS)
@@ -184,12 +212,13 @@ class OpenAICompatibleProvider(LLMProvider):
     def close(self) -> None:
         self._client.close()
 
-    @staticmethod
-    def _extract_text(data: dict) -> str:
+    def _extract_text(self, data: dict) -> str:
         try:
             text = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"Unexpected LLM response shape: {data!r:.300}") from exc
-        if not text or not text.strip():
-            raise LLMError("LLM returned no text content.")
+        except (KeyError, IndexError, TypeError):
+            raise invalid_response_error(self._provider)
+        if not isinstance(text, str):
+            raise invalid_response_error(self._provider)
+        if not text.strip():
+            raise empty_response_error(self._provider)
         return text
