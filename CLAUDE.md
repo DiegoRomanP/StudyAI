@@ -221,24 +221,25 @@ that shortcut. Only `key_preview` (computed once at write time via `mask_secret(
 re-derived from a live decrypt) ever leaves the server. Provider code only ever logs status
 codes/truncated error bodies, never request payloads or the `Authorization` header.
 
-**429s get their own retry budget, separate from 5xx** (`OpenAICompatibleProvider.complete`,
-`app/llm/openai_compatible_provider.py`): a free-tier RPM rate limit (e.g. OpenRouter's
-`:free`-suffixed models cap at ~8 req/min) always clears on its own well under a minute, so it isn't
-"the server is down" — it gets `_MAX_RATE_LIMIT_RETRIES` (6) attempts that sleep for the response's
-`Retry-After` header (falling back to `10 * attempt` seconds, capped at 65s, if the header is
-absent) instead of sharing the few attempts (`LLM_MAX_RETRIES`, default 3) meant for genuine
-transient errors. **429 is deliberately excluded from `_RETRYABLE_STATUS_CODES`** — don't add it
-back in, or a rate limit would burn through both budgets redundantly. A multi-call pipeline (plan
-generation makes ~2 + 2×sessions distinct LLM calls) can legitimately spend a couple of minutes
-waiting out rate limits this way; that's intended — the alternative is failing the whole plan.
+**429s get their own generation retry budget, separate from 5xx** (`OpenAICompatibleProvider.complete`,
+`app/llm/openai_compatible_provider.py`). Quota/saldo errors are classified before retrying and never
+wait. A temporary 429 honours numeric or HTTP-date `Retry-After`; it falls back to `10 * attempt`
+seconds only when absent. Never cap or shorten a provider-directed wait: if it cannot fit in the
+remaining per-call budget, return `LLM_RATE_LIMITED` with `retry_after_seconds` and do not retry.
+Credential tests share a single transient retry across 429, 5xx and connection failures. **429 is
+deliberately excluded from `_RETRYABLE_STATUS_CODES`** — don't add it back, or it would burn both
+generation budgets. `asyncio.timeout_at` wraps the whole outbound operation, so the deadline covers
+connection, write, full response read, waits and parsing rather than only individual HTTPX phases.
+Plan generation makes `2 + N` calls, where N is the number of sessions.
 
 **`LLM_TIMEOUT_SECONDS` (`Settings`, default 180s) is threaded into `OpenAICompatibleProvider` via
 `factory.build_provider_from_credential`** — don't let this regress to a hardcoded value in the
-provider's own `__init__` default. A trivial `test_connection()` call (`max_tokens=5`) always
-returns fast regardless of timeout, but a real generation call (`max_tokens=4096`, a full
-system+user prompt) on a large hosted model can legitimately take well over a minute — a too-short
-timeout there reads to the user as "the key works but generation still fails," which is
-indistinguishable from an actual provider outage without a longer timeout to rule it out first.
+provider's own `__init__` default. A trivial `test_connection()` call uses its request-profile
+budget: 32 tokens for conventional chat/Ollama and 256 for confirmed OpenAI o-series models. A
+real generation call (`max_tokens=4096`, a full system+user prompt) on a large hosted model can
+legitimately take well over a minute — a too-short timeout there reads to the user as "the key
+works but generation still fails," which is indistinguishable from an actual provider outage
+without a longer timeout to rule it out first.
 
 **`PlanResponse` (`app/schemas/plan.py`) carries `error_message`** — `Plan.error_message` was, for a
 while, only exposed via `PlanStatusResponse` (the polling endpoint nothing in the frontend actually

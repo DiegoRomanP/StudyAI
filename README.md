@@ -105,11 +105,19 @@ npm run dev                            # http://localhost:5173
 | `ANTHROPIC_API_KEY` | *(vacío)* | Vacío ⇒ **modo demo** con LLM mock (sin gastar tokens). Con clave ⇒ usa Claude. |
 | `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para generar el plan de estudio. |
 | `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para generar quizzes. |
-| `LLM_MAX_RETRIES` | `3` | Reintentos para errores transitorios (5xx/timeout). Los 429 tienen su propio presupuesto de 6 reintentos, aparte. |
-| `LLM_TIMEOUT_SECONDS` | `180` | Timeout por llamada — deliberadamente generoso para modelos grandes lentos (p. ej. NVIDIA NIM 70B/405B) en una tarea de fondo. |
+| `LLM_MAX_RETRIES` | `3` | Intentos máximos de generación para errores transitorios (5xx/timeout). |
+| `LLM_MAX_RATE_LIMIT_RETRIES` | `6` | Reintentos máximos de un 429 temporal durante una generación; no aplica a cuota/saldo agotado. |
+| `LLM_TIMEOUT_SECONDS` | `180` | Timeout de conexión, lectura, escritura y pool de cada intento de generación. |
+| `LLM_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada externa de generación, incluidos intentos y esperas; no es una garantía del tiempo de respuesta del proveedor. |
+| `LLM_TEST_CONNECT_TIMEOUT_SECONDS` | `5` | Timeout de conexión de una prueba de credencial externa. |
+| `LLM_TEST_READ_TIMEOUT_SECONDS` | `30` | Timeout de lectura de una prueba de credencial externa. |
+| `LLM_TEST_TOTAL_BUDGET_SECONDS` | `45` | Presupuesto total de una prueba, incluidos intentos y esperas. |
+| `LLM_TEST_MAX_RETRIES` | `1` | Reintentos transitorios después del primer intento de prueba. |
+| `LLM_TEST_MAX_RATE_LIMIT_RETRIES` | `1` | Reintentos de 429 temporal durante una prueba. |
 | `LLM_REQUEST_PACING_SECONDS` | `2.0` | Pausa proactiva entre llamadas sucesivas al LLM dentro de una misma generación de plan, para no agotar límites de tasa por minuto de proveedores gratuitos. Se ignora con el LLM mock. Súbela si tu proveedor tiene un límite muy ajustado. |
 | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Endpoint de Ollama visto por el proceso backend. No se configura desde la interfaz. |
 | `OLLAMA_TIMEOUT_SECONDS` | `600` | Timeout para inferencia local, que puede incluir la carga inicial del modelo. |
+| `OLLAMA_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada local; Ollama no reintenta 429. |
 | `OLLAMA_MAX_RETRIES` | `1` | Intentos por llamada local; evita repetir cargas costosas de CPU/GPU. |
 | `DATABASE_URL` | `sqlite:///./studyai.db` | Cadena de conexión SQLAlchemy. |
 | `CHROMA_PERSIST_DIR` | `./storage/chroma` | Directorio de persistencia del vector store. |
@@ -180,6 +188,17 @@ que se confirme su contrato. El perfil también define las capacidades de
 formato de respuesta: Ollama usa JSON estructurado solo para las operaciones
 que lo requieren y no recibe `reasoning_effort` no confirmado.
 
+Las pruebas de conectividad usan un presupuesto explícito de 32 tokens para
+chat convencional y Ollama, y 256 para los modelos OpenAI o-series. Una
+respuesta que alcanza ese límite se informa como presupuesto de salida
+insuficiente; no se interpreta como una clave inválida ni se aumenta el límite
+indefinidamente. Las respuestas HTTP 200 también se validan: contenido vacío o
+con estructura inválida, una salida truncada y un rechazo del modelo devuelven
+errores diferenciados y no se entregan al generador de planes. Solo se acepta
+una finalización terminal con uso de tokens válido cuando el contrato del
+proveedor lo exige; las pausas, llamadas de herramientas y estados desconocidos
+no se confunden con una respuesta completa.
+
 Cambiar la clave, el modelo o la URL de un proveedor vuelve a exigir la
 verificación; una configuración anterior no se hereda a ciegas.
 
@@ -206,8 +225,10 @@ recuperación de contexto (RAG) usa menos fragmentos. Entre llamadas hay una
 pausa configurable (`LLM_REQUEST_PACING_SECONDS`) para no agotar el límite de
 peticiones por minuto de un plan gratuito (p. ej. los modelos `:free` de
 OpenRouter, limitados a ~8 req/min). Si el proveedor indica un límite temporal
-(`LLM_RATE_LIMITED`), la llamada puede reintentarse respetando `Retry-After`.
-Una cuota o saldo agotado (`LLM_QUOTA_EXHAUSTED`) no se reintenta.
+(`LLM_RATE_LIMITED`), la llamada puede reintentarse respetando `Retry-After`,
+numérico o fecha HTTP. Si la espera indicada no cabe en el presupuesto restante,
+StudyAI devuelve el límite temporal y su espera sugerida sin adelantar otro
+intento. Una cuota o saldo agotado (`LLM_QUOTA_EXHAUSTED`) no se reintenta.
 
 Los fallos de proveedores se exponen como respuestas `502` con un `detail`
 seguro y los campos `code`, `provider`, `upstream_status`, `retryable` y
@@ -276,8 +297,8 @@ Cubren SM-2, Pareto, chunker, parsers de salida del LLM, `ProcessorFactory`,
 `GoalStrategy`, borrado de documentos/metas/planes (incluida la cascada
 meta → planes → sesiones/quizzes/repasos de flashcards), cifrado/enmascarado
 de claves, el proveedor OpenAI-compatible (mockeado con `respx`, sin red
-real) incluyendo su manejo de rate-limit (HTTP 429 con `Retry-After`, con
-presupuesto de reintentos propio y separado de los errores 5xx), la selección
+real) incluyendo su manejo de rate-limit (HTTP 429 con `Retry-After` numérico o
+fecha HTTP, cuota sin reintento y presupuesto total acotado), la selección
 de proveedor de `get_llm_provider` (incluido Hugging Face y que hereda
 `LLM_TIMEOUT_SECONDS`/`LLM_MAX_RETRIES` de la config) y los endpoints de
 `/llm-settings`, el pipeline de generación de planes (recuento exacto de
