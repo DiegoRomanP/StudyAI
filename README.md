@@ -172,6 +172,12 @@ Los modelos sugeridos se ordenan con los **gratuitos primero** (marcados
 "Configuración avanzada" hay un override opcional de URL base (útil, por
 ejemplo, para un endpoint regional de GLM).
 
+Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido
+`o4-mini`) reciben `max_completion_tokens`, que abarca razonamiento y salida
+visible. Los demás proveedores OpenAI-compatible, incluido NVIDIA y Ollama,
+mantienen `max_tokens`; un ID personalizado usa ese perfil conservador hasta
+que se confirme su contrato.
+
 Cambiar la clave, el modelo o la URL de un proveedor vuelve a exigir la
 verificación; una configuración anterior no se hereda a ciegas.
 
