@@ -10,8 +10,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, LLMError, NotFoundError, ValidationError
 from app.core.security import SecretDecryptionError, encrypt_secret, mask_secret
 from app.core.config import get_settings
 from app.core.url_safety import assert_safe_outbound_url
@@ -52,13 +53,14 @@ class LLMSettingsService:
 
         existing = self.repo.find_for_user_and_provider(user_id, provider)
         if existing is not None:
-            existing.encrypted_api_key = encrypted
-            existing.key_preview = preview
-            existing.model = ""
-            existing.base_url = base_url
-            existing.config_revision += 1
-            self._invalidate_verification(existing)
-            return self.repo.save(existing)
+            replaced = self.repo.replace_credential(
+                existing,
+                encrypted_api_key=encrypted,
+                key_preview=preview,
+                base_url=base_url,
+            )
+            if replaced is not None:
+                return replaced
 
         credential = LLMCredential(
             user_id=user_id,
@@ -69,7 +71,22 @@ class LLMSettingsService:
             base_url=base_url,
             config_revision=1,
         )
-        return self.repo.save(credential)
+        try:
+            return self.repo.save(credential)
+        except IntegrityError:
+            self.db.rollback()
+            existing = self.repo.find_for_user_and_provider(user_id, provider)
+            if existing is None:
+                raise
+            replaced = self.repo.replace_credential(
+                existing,
+                encrypted_api_key=encrypted,
+                key_preview=preview,
+                base_url=base_url,
+            )
+            if replaced is None:
+                raise ConflictError("No se pudo reemplazar la clave. Inténtalo de nuevo.", "LLM_CONFIGURATION_CHANGED")
+            return replaced
 
     def update_model(
         self,
@@ -172,8 +189,13 @@ class LLMSettingsService:
             raise ValidationError("No se pudo desencriptar la clave almacenada.") from exc
         try:
             instance.test_connection()
+        except LLMError as exc:
+            if exc.code == "LLM_AUTHENTICATION_FAILED":
+                self.repo.revoke_verification(credential, expected_revision=expected_revision)
+            raise
         finally:
-            instance.close()
+            if instance is not None:
+                instance.close()
 
         verified = self.repo.mark_verified(
             credential,
