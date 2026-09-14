@@ -23,7 +23,7 @@ def parse_llm_json(raw_text: str) -> dict:
     (trailing commas, leading/trailing prose). Raises ``LLMError`` on failure.
     """
     if not raw_text or not raw_text.strip():
-        raise LLMError("LLM returned empty output.")
+        raise LLMError("El proveedor de IA no devolvió contenido utilizable.", code="LLM_INVALID_RESPONSE")
 
     candidate = _extract_candidate(raw_text)
 
@@ -33,8 +33,9 @@ def parse_llm_json(raw_text: str) -> dict:
         repaired = _TRAILING_COMMA_RE.sub(r"\1", candidate)
         try:
             return _loads_object(repaired)
-        except json.JSONDecodeError as exc:
-            raise LLMError(f"Could not parse JSON from LLM output: {exc}") from exc
+        except json.JSONDecodeError:
+            pass
+    raise LLMError("El proveedor de IA devolvió una respuesta inválida.", code="LLM_INVALID_RESPONSE")
 
 
 def _extract_candidate(raw_text: str) -> str:
@@ -53,5 +54,5 @@ def _extract_candidate(raw_text: str) -> str:
 def _loads_object(text: str) -> dict:
     data = json.loads(text)
     if not isinstance(data, dict):
-        raise LLMError("Expected a JSON object at the top level.")
+        raise LLMError("El proveedor de IA devolvió una respuesta inválida.", code="LLM_INVALID_RESPONSE")
     return data
