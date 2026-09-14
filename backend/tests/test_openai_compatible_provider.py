@@ -4,12 +4,15 @@ real network access, no API cost, fully deterministic.
 """
 
 import httpx
+import json
 import pytest
 import respx
 import traceback
 
 from app.core.exceptions import LLMError
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+from app.llm.request_profiles import resolve_request_profile
+from app.models.llm_credential import LLMProviderName
 
 BASE_URL = "https://api.example.com/v1"
 
@@ -43,9 +46,63 @@ def test_sends_bearer_auth_header_and_requested_model():
 
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer test-key"
-    import json as _json
+    assert json.loads(request.content)["model"] == "test-model"
 
-    assert _json.loads(request.content)["model"] == "test-model"
+
+@respx.mock
+def test_openai_o_series_uses_max_completion_tokens_only():
+    route = respx.post(f"{BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+    provider = OpenAICompatibleProvider(
+        base_url=BASE_URL,
+        api_key="test-key",
+        model="o4-mini",
+        request_profile=resolve_request_profile(LLMProviderName.OPENAI, "o4-mini"),
+    )
+
+    provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
+    provider.test_connection()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["max_completion_tokens"] == 128
+    assert "max_tokens" not in payload
+    test_payload = json.loads(route.calls[1].request.content)
+    assert test_payload["max_completion_tokens"] == 256
+    assert "max_tokens" not in test_payload
+
+
+@respx.mock
+def test_nvidia_uses_the_standard_max_tokens_profile():
+    route = respx.post(f"{BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+    provider = OpenAICompatibleProvider(
+        base_url=BASE_URL,
+        api_key="test-key",
+        model="meta/llama-3.1-70b-instruct",
+        provider="NVIDIA",
+        request_profile=resolve_request_profile(
+            LLMProviderName.NVIDIA, "meta/llama-3.1-70b-instruct"
+        ),
+    )
+
+    provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
+    provider.test_connection()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["max_tokens"] == 128
+    assert "max_completion_tokens" not in payload
+    test_payload = json.loads(route.calls[1].request.content)
+    assert test_payload["max_tokens"] == 32
+    assert "max_completion_tokens" not in test_payload
+
+
+@pytest.mark.parametrize("model", ["my-gateway-model", "o4-custom-deployment"])
+def test_unknown_openai_model_uses_the_conservative_standard_profile(model):
+    profile = resolve_request_profile(LLMProviderName.OPENAI, model)
+
+    assert profile.token_limit_parameter == "max_tokens"
 
 
 @respx.mock
@@ -65,10 +122,11 @@ def test_omits_authentication_and_requests_json_for_local_provider():
 
     request = route.calls.last.request
     assert "Authorization" not in request.headers
-    import json as _json
-
-    assert _json.loads(request.content)["response_format"] == {"type": "json_object"}
-    assert _json.loads(request.content)["reasoning_effort"] == "none"
+    payload = json.loads(request.content)
+    assert payload["response_format"] == {"type": "json_object"}
+    assert payload["reasoning_effort"] == "none"
+    assert payload["max_tokens"] == 4096
+    assert "max_completion_tokens" not in payload
 
 
 @respx.mock
