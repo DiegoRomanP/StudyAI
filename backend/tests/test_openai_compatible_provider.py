@@ -11,7 +11,11 @@ import traceback
 
 from app.core.exceptions import LLMError
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
-from app.llm.request_profiles import resolve_request_profile
+from app.llm.request_profiles import (
+    OLLAMA_CHAT_PROFILE,
+    STANDARD_CHAT_PROFILE,
+    resolve_request_profile,
+)
 from app.models.llm_credential import LLMProviderName
 
 BASE_URL = "https://api.example.com/v1"
@@ -25,7 +29,11 @@ def _no_sleep(monkeypatch):
 
 def _provider(max_retries: int = 3) -> OpenAICompatibleProvider:
     return OpenAICompatibleProvider(
-        base_url=BASE_URL, api_key="test-key", model="test-model", max_retries=max_retries
+        base_url=BASE_URL,
+        api_key="test-key",
+        model="test-model",
+        request_profile=STANDARD_CHAT_PROFILE,
+        max_retries=max_retries,
     )
 
 
@@ -114,9 +122,8 @@ def test_omits_authentication_and_requests_json_for_local_provider():
         base_url=BASE_URL,
         api_key=None,
         model="local-model",
-        json_response_kinds=frozenset({"topic_analysis"}),
+        request_profile=OLLAMA_CHAT_PROFILE,
         requires_request_pacing=False,
-        disable_reasoning=True,
     )
     provider.complete(kind="topic_analysis", system="sys", prompt="prompt")
 
@@ -124,15 +131,19 @@ def test_omits_authentication_and_requests_json_for_local_provider():
     assert "Authorization" not in request.headers
     payload = json.loads(request.content)
     assert payload["response_format"] == {"type": "json_object"}
-    assert payload["reasoning_effort"] == "none"
     assert payload["max_tokens"] == 4096
     assert "max_completion_tokens" not in payload
+    assert set(payload) == {"model", "messages", "response_format", "max_tokens"}
 
 
 @respx.mock
 def test_zero_rate_limit_retries_fails_on_first_429():
     provider = OpenAICompatibleProvider(
-        base_url=BASE_URL, api_key=None, model="local-model", max_rate_limit_retries=0
+        base_url=BASE_URL,
+        api_key=None,
+        model="local-model",
+        request_profile=STANDARD_CHAT_PROFILE,
+        max_rate_limit_retries=0,
     )
     route = respx.post(f"{BASE_URL}/chat/completions").mock(return_value=httpx.Response(429))
     with pytest.raises(LLMError) as exc_info:
@@ -206,6 +217,7 @@ def test_429_has_its_own_retry_budget_separate_from_generic_max_retries():
         base_url=BASE_URL,
         api_key="test-key",
         model="test-model",
+        request_profile=STANDARD_CHAT_PROFILE,
         max_retries=1,
         max_rate_limit_retries=2,
     )
@@ -226,6 +238,7 @@ def test_429_exhausts_its_dedicated_retry_budget_and_raises():
         base_url=BASE_URL,
         api_key="test-key",
         model="test-model",
+        request_profile=STANDARD_CHAT_PROFILE,
         max_rate_limit_retries=1,
     )
     respx.post(f"{BASE_URL}/chat/completions").mock(
