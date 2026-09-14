@@ -10,7 +10,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -31,6 +31,13 @@ class LLMCredential(TimestampMixin, Base):
     __tablename__ = "llm_credentials"
     __table_args__ = (
         UniqueConstraint("user_id", "provider", name="uq_llm_credential_user_provider"),
+        Index(
+            "uq_llm_credential_active_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("is_active = 1"),
+            postgresql_where=text("is_active"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
