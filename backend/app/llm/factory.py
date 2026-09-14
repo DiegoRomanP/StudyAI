@@ -19,7 +19,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.logging import get_logger
+from app.core.logging import get_logger, safe_model_identifier
 from app.core.security import SecretDecryptionError, decrypt_secret
 from app.core.url_safety import assert_safe_outbound_url
 from app.llm.base import LLMProvider
@@ -64,6 +64,7 @@ def build_provider_from_credential(
             requires_request_pacing=False,
             disable_reasoning=True,
             test_max_tokens=32,
+            provider=credential.provider.value,
         )
 
     if credential.base_url:
@@ -79,6 +80,7 @@ def build_provider_from_credential(
         model=model,
         timeout=settings.LLM_TIMEOUT_SECONDS,
         max_retries=settings.LLM_MAX_RETRIES,
+        provider=credential.provider.value,
     )
 
 
@@ -87,7 +89,7 @@ def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
     if credential is not None and is_verified(credential):
         try:
             logger.info("Using user-configured %s provider (model: %s)",
-                        credential.provider.value, credential.model or "<default>")
+                        credential.provider.value, safe_model_identifier(credential.model) if credential.model else "<default>")
             return build_provider_from_credential(credential)
         except SecretDecryptionError:
             logger.warning(
@@ -96,8 +98,7 @@ def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
             )
         except Exception:  # noqa: BLE001 - never let a bad stored credential crash boot
             logger.warning(
-                "Could not build provider for stored credential %s; falling back.",
-                credential.provider.value, exc_info=True,
+                "Could not build provider for stored credential %s; falling back.", credential.provider.value
             )
     elif credential is not None:
         logger.warning("Ignoring active but unverified %s credential.", credential.provider.value)
@@ -108,13 +109,10 @@ def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
             from app.llm.anthropic_provider import AnthropicProvider
 
             logger.info("Using .env Anthropic provider (models: %s / %s)",
-                        settings.LLM_MODEL_PLAN, settings.LLM_MODEL_QUIZ)
+                        safe_model_identifier(settings.LLM_MODEL_PLAN), safe_model_identifier(settings.LLM_MODEL_QUIZ))
             return AnthropicProvider()
-        except Exception as exc:  # noqa: BLE001 - never let a bad key crash boot
-            logger.warning(
-                "Could not initialise Anthropic provider (%s); falling back to mock.",
-                exc,
-            )
+        except Exception:  # noqa: BLE001 - never let a bad key crash boot
+            logger.warning("Could not initialise Anthropic provider; falling back to mock.")
     else:
         logger.info("No LLM credential configured — using deterministic mock LLM provider.")
     return MockLLMProvider()
