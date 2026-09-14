@@ -85,7 +85,17 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(LLMError)
     async def _llm(_: Request, exc: LLMError) -> JSONResponse:
-        return JSONResponse(status_code=502, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=502,
+            content={
+                "detail": str(exc),
+                "code": exc.code,
+                "provider": exc.provider,
+                "upstream_status": exc.upstream_status,
+                "retryable": exc.retryable,
+                "retry_after_seconds": exc.retry_after_seconds,
+            },
+        )
 
     @app.exception_handler(StudyAIError)
     async def _generic(_: Request, exc: StudyAIError) -> JSONResponse:
