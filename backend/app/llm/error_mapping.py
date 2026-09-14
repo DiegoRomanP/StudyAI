@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import math
 import httpx
 
@@ -34,6 +36,9 @@ _PROVIDER_CODES = {
 }
 _RETRYABLE_SERVER_STATUS_CODES = {500, 502, 503, 504}
 _TOKEN_LIMIT_PARAMETERS = frozenset({"max_tokens", "max_completion_tokens"})
+_RESPONSE_DESERIALIZATION_ERROR_NAMES = frozenset(
+    {"APIResponseValidationError", "JSONDecodeError", "ResponseValidationError"}
+)
 
 
 @dataclass(frozen=True)
@@ -55,9 +60,12 @@ def map_http_error(provider: str, response: httpx.Response) -> LLMError:
 def map_sdk_error(provider: str, error: BaseException) -> LLMError:
     """Map SDK errors by their public type/status metadata, never their text."""
     error_name = type(error).__name__
+    if _is_response_deserialization_error(error, error_name):
+        return invalid_response_error(provider)
     status = getattr(error, "status_code", None)
     body = getattr(error, "body", None)
     metadata = _known_error_metadata_from_data(body)
+    retry_after_seconds = _retry_after_seconds(getattr(error, "response", None))
 
     if isinstance(status, int):
         sdk_code = _code_from_sdk_name(error_name)
@@ -65,12 +73,22 @@ def map_sdk_error(provider: str, error: BaseException) -> LLMError:
             metadata = _ErrorMetadata(
                 codes=metadata.codes | frozenset({sdk_code}), parameter=metadata.parameter
             )
-        return _map_status(provider, status, metadata)
+        return _map_status(
+            provider, status, metadata, retry_after_seconds=retry_after_seconds
+        )
     if error_name in {"APITimeoutError", "TimeoutError"}:
         return _error(provider, "LLM_TIMEOUT", "La solicitud al proveedor de IA agotó el tiempo de espera.", retryable=True)
     if error_name in {"APIConnectionError", "ConnectionError"}:
         return _error(provider, "LLM_CONNECTION_FAILED", "No se pudo conectar con el proveedor de IA.", retryable=True)
     return _error(provider, "LLM_PROVIDER_ERROR", "El proveedor de IA no pudo completar la solicitud.")
+
+
+def _is_response_deserialization_error(error: BaseException, error_name: str) -> bool:
+    if error_name in _RESPONSE_DESERIALIZATION_ERROR_NAMES:
+        return True
+    return error_name == "ValidationError" and type(error).__module__.startswith(
+        ("pydantic", "pydantic_core")
+    )
 
 
 def map_transport_error(provider: str, error: httpx.HTTPError) -> LLMError:
@@ -87,6 +105,31 @@ def invalid_response_error(provider: str) -> LLMError:
 
 def empty_response_error(provider: str) -> LLMError:
     return _error(provider, "LLM_INVALID_RESPONSE", "El proveedor de IA no devolvió contenido utilizable.")
+
+
+def output_limit_error(provider: str) -> LLMError:
+    return _error(
+        provider,
+        "LLM_OUTPUT_LIMIT",
+        "El proveedor de IA agotó el presupuesto de salida antes de completar la respuesta.",
+    )
+
+
+def refusal_error(provider: str) -> LLMError:
+    return _error(
+        provider,
+        "LLM_REFUSED",
+        "El proveedor de IA rechazó generar esta respuesta.",
+    )
+
+
+def timeout_error(provider: str) -> LLMError:
+    return _error(
+        provider,
+        "LLM_TIMEOUT",
+        "La solicitud al proveedor de IA agotó el tiempo de espera.",
+        retryable=True,
+    )
 
 
 def _map_status(
@@ -109,6 +152,8 @@ def _map_status(
     # treating a proxy's misleading code as proof that a credential is invalid.
     if status == 401:
         return _error(provider, "LLM_AUTHENTICATION_FAILED", "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.", status)
+    if metadata.codes & provider_codes.get("quota", frozenset()):
+        return _error(provider, "LLM_QUOTA_EXHAUSTED", "La cuota o el saldo del proveedor de IA se agotó.", status)
     if status == 402:
         return _error(provider, "LLM_QUOTA_EXHAUSTED", "La cuota o el saldo del proveedor de IA se agotó.", status)
     if status == 403:
@@ -188,12 +233,22 @@ def _code_from_sdk_name(error_name: str) -> str | None:
     }.get(error_name)
 
 
-def _retry_after_seconds(response: httpx.Response) -> float | None:
-    value = response.headers.get("retry-after")
-    if value is None:
+def _retry_after_seconds(response: object) -> float | None:
+    headers = getattr(response, "headers", None)
+    get_header = getattr(headers, "get", None)
+    if not callable(get_header):
+        return None
+    value = get_header("retry-after")
+    if not isinstance(value, str):
         return None
     try:
         seconds = float(value)
     except ValueError:
-        return None
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max((retry_at - datetime.now(timezone.utc)).total_seconds(), 0.0)
     return max(seconds, 0.0) if math.isfinite(seconds) else None

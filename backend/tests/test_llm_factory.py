@@ -8,9 +8,12 @@ import httpx
 import pytest
 import respx
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 import main
 from app.db.session import SessionLocal
+from app.core.config import LLMCallPolicy, Settings
+from app.core.exceptions import LLMError
 from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.factory import build_provider_from_credential, get_llm_provider
 from app.llm.mock_provider import MockLLMProvider
@@ -113,7 +116,13 @@ def test_factory_profile_controls_the_final_transport_payload(
     credential = _credential_for_demo_user(LLMProviderName(provider_name))
     provider = build_provider_from_credential(credential)
     route = respx.post(url).mock(
-        return_value=httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"finish_reason": "stop", "message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+            },
+        )
     )
 
     try:
@@ -217,3 +226,37 @@ def test_active_ollama_uses_local_settings_without_authentication(client: TestCl
     assert "authorization" not in provider._client.headers
     assert provider.requires_request_pacing is False
     assert provider._request_profile == OLLAMA_CHAT_PROFILE
+    assert provider._generation_policy.max_attempts == 1
+    assert provider._generation_policy.max_rate_limit_retries == 0
+    assert provider._test_policy == provider._generation_policy
+
+
+@respx.mock
+def test_factory_ollama_policy_never_retries_a_429(client: TestClient):
+    _configure_and_activate(client, "OLLAMA", "qwen3.5:9b", {})
+    provider = _provider_for_demo_user()
+    route = respx.post("http://127.0.0.1:11434/v1/chat/completions").mock(
+        return_value=httpx.Response(429)
+    )
+
+    with pytest.raises(LLMError) as exc_info:
+        provider.complete(kind="quiz", system="sys", prompt="prompt")
+
+    assert exc_info.value.code == "LLM_RATE_LIMITED"
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["LLM_TIMEOUT_SECONDS", "LLM_TOTAL_BUDGET_SECONDS", "LLM_REQUEST_PACING_SECONDS"],
+)
+def test_settings_reject_non_finite_time_limits(field: str):
+    with pytest.raises(ValidationError):
+        Settings(**{field: float("inf")})
+
+
+def test_call_policy_rejects_non_finite_or_invalid_values():
+    with pytest.raises(ValueError):
+        LLMCallPolicy(float("inf"), 1.0, 1.0, 1, 0)
+    with pytest.raises(ValueError):
+        LLMCallPolicy(1.0, 1.0, 1.0, 0, 0)

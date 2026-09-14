@@ -63,6 +63,8 @@ def build_provider_from_credential(
             timeout=settings.OLLAMA_TIMEOUT_SECONDS,
             max_retries=settings.OLLAMA_MAX_RETRIES,
             max_rate_limit_retries=0,
+            generation_policy=settings.ollama_policy,
+            test_policy=settings.ollama_policy,
             requires_request_pacing=False,
             request_profile=request_profile,
             provider=credential.provider.value,
@@ -80,6 +82,9 @@ def build_provider_from_credential(
         model=model,
         timeout=settings.LLM_TIMEOUT_SECONDS,
         max_retries=settings.LLM_MAX_RETRIES,
+        max_rate_limit_retries=settings.LLM_MAX_RATE_LIMIT_RETRIES,
+        generation_policy=settings.external_generation_policy,
+        test_policy=settings.external_test_policy,
         request_profile=request_profile,
         provider=credential.provider.value,
     )

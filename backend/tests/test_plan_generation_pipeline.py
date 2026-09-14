@@ -194,3 +194,45 @@ def test_adapter_failure_reaches_plan_storage_and_api_without_exposing_response_
     assert plan_response.status_code == 200
     assert plan_response.json()["error_message"] == "El proveedor de IA rechazó el acceso al modelo. Revisa permisos y disponibilidad."
     assert secret not in plan_response.text
+
+
+@respx.mock
+def test_truncated_llm_output_fails_generation_before_json_parsing(client: TestClient, monkeypatch):
+    from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+    from app.llm.request_profiles import STANDARD_CHAT_PROFILE
+
+    provider = OpenAICompatibleProvider(
+        base_url="https://api.example.test/v1",
+        api_key="test-key",
+        model="test-model",
+        request_profile=STANDARD_CHAT_PROFILE,
+        max_retries=1,
+    )
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+    route = respx.post("https://api.example.test/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length",
+                        "message": {"content": '{"topics": ['},
+                    }
+                ]
+            },
+        )
+    )
+
+    goal_id = client.post(
+        "/goals", json={"goal_type": "LEARNING", "title": "Plan truncado", "description": ""}
+    ).json()["id"]
+    document_id = client.post(
+        "/documents/upload",
+        files={"file": ("truncado.md", io.BytesIO(b"# Tema\nContenido"), "text/markdown")},
+    ).json()["id"]
+    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [document_id]})
+    plan = client.get(f"/plans/{response.json()['id']}").json()
+
+    assert plan["status"] == "FAILED"
+    assert plan["error_message"] == "El proveedor de IA agotó el presupuesto de salida antes de completar la respuesta."
+    assert route.call_count == 1

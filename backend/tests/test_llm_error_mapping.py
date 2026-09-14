@@ -1,8 +1,11 @@
 """Regression coverage for safe, stable upstream LLM failure classification."""
 
 import httpx
+import pytest
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
-from app.llm.error_mapping import map_http_error, map_transport_error
+from app.llm.error_mapping import map_http_error, map_sdk_error, map_transport_error
 
 
 def _response(
@@ -77,14 +80,55 @@ def test_non_finite_retry_after_is_discarded():
     assert error.retry_after_seconds is None
 
 
+def test_http_date_retry_after_is_converted_to_a_wait(monkeypatch):
+    now = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime:
+        @classmethod
+        def now(cls, tz):
+            assert tz is timezone.utc
+            return now
+
+    monkeypatch.setattr("app.llm.error_mapping.datetime", FrozenDateTime)
+    error = map_http_error(
+        "OPENAI",
+        _response(
+            429,
+            headers={"retry-after": format_datetime(now + timedelta(seconds=30), usegmt=True)},
+        ),
+    )
+
+    assert error.retry_after_seconds == 30.0
+
+
+def test_sdk_rate_limit_preserves_retry_after():
+    class RateLimitError(Exception):
+        status_code = 429
+        body = {"error": {"code": "rate_limit_error"}}
+        response = _response(429, headers={"retry-after": "20"})
+
+    error = map_sdk_error("ANTHROPIC", RateLimitError())
+
+    assert (error.code, error.retry_after_seconds) == ("LLM_RATE_LIMITED", 20.0)
+
+
 def test_explicit_statuses_win_over_contradictory_provider_codes():
     quota = map_http_error("OPENAI", _response(402, {"error": {"code": "invalid_api_key"}}))
     access = map_http_error("OPENAI", _response(403, {"error": {"code": "insufficient_quota"}}))
     unavailable = map_http_error("OPENAI", _response(503, {"error": {"code": "invalid_api_key"}}))
 
     assert quota.code == "LLM_QUOTA_EXHAUSTED"
-    assert access.code == "LLM_ACCESS_DENIED"
+    assert access.code == "LLM_QUOTA_EXHAUSTED"
     assert unavailable.code == "LLM_PROVIDER_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("status", [400, 403])
+def test_known_quota_codes_are_classified_outside_429(status):
+    error = map_http_error(
+        "OPENAI", _response(status, {"error": {"code": "insufficient_quota"}})
+    )
+
+    assert (error.code, error.retryable) == ("LLM_QUOTA_EXHAUSTED", False)
 
 
 def test_provider_rules_do_not_trust_openai_codes_from_unknown_proxies():

@@ -176,6 +176,9 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
         ("HUGGINGFACE", "LLM_RATE_LIMITED"),
         ("ANTHROPIC", "LLM_PROVIDER_UNAVAILABLE"),
         ("OPENAI", "LLM_UNSUPPORTED_REQUEST"),
+        ("OPENAI", "LLM_OUTPUT_LIMIT"),
+        ("OPENAI", "LLM_REFUSED"),
+        ("OPENAI", "LLM_INVALID_RESPONSE"),
     ],
 )
 def test_non_authentication_failures_do_not_revoke_verification(client: TestClient, provider: str, code: str):
@@ -233,6 +236,55 @@ def test_openapi_declares_safe_llm_error_and_adapter_error_reaches_api(client: T
     assert ollama_error_schema["content"]["application/json"]["schema"] == {
         "$ref": "#/components/schemas/LLMProviderErrorResponse"
     }
+
+
+@respx.mock
+def test_truncated_adapter_response_keeps_prior_verification_active(client: TestClient, monkeypatch):
+    from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+    from app.llm.request_profiles import STANDARD_CHAT_PROFILE
+
+    credential = _save_key(client, "OPENAI")
+    draft = _save_draft(client, "OPENAI", credential["config_revision"], "gpt-4o-mini")
+    verified = _verify(client, "OPENAI", draft["config_revision"])
+    assert client.post(
+        "/llm-settings/OPENAI/activate",
+        json={"expected_revision": verified["config_revision"]},
+    ).status_code == 200
+
+    monkeypatch.setattr(
+        "app.llm.factory.build_provider_from_credential",
+        lambda _credential: OpenAICompatibleProvider(
+            base_url="https://api.example.test/v1",
+            api_key="secret-test-key",
+            model="gpt-4o-mini",
+            request_profile=STANDARD_CHAT_PROFILE,
+            max_retries=1,
+        ),
+    )
+    respx.post("https://api.example.test/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length",
+                        "message": {"content": "partial"},
+                    }
+                ]
+            },
+        )
+    )
+
+    response = client.post(
+        "/llm-settings/OPENAI/test",
+        json={"expected_revision": verified["config_revision"]},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "LLM_OUTPUT_LIMIT"
+    stored = next(item for item in client.get("/llm-settings").json() if item["provider"] == "OPENAI")
+    assert stored["is_verified"] is True
+    assert stored["is_active"] is True
 
 
 def test_activation_requires_evidence_for_the_current_draft(client: TestClient):

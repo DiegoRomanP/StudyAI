@@ -24,7 +24,7 @@ def test_request_profile_version_change_invalidates_verification(monkeypatch):
 
     monkeypatch.setattr(
         "app.llm.credential_state.resolve_request_profile",
-        lambda *_: replace(OPENAI_O_SERIES_PROFILE, version="v2"),
+        lambda *_: replace(OPENAI_O_SERIES_PROFILE, version="v3"),
     )
 
     assert is_verified(credential) is False

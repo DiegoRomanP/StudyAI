@@ -1,4 +1,4 @@
-"""Small, explicit request profiles for OpenAI-compatible providers."""
+"""Small, explicit request profiles for provider/model families."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ class RequestProfile:
     version: str
     token_limit_parameter: Literal["max_tokens", "max_completion_tokens"]
     test_max_tokens: int
+    requires_usage: bool = True
     json_response_kinds: frozenset[str] = field(default_factory=frozenset)
 
     def payload_parameters(self, kind: str, max_tokens: int) -> dict[str, object]:
@@ -33,20 +34,21 @@ class RequestProfile:
 
 STANDARD_CHAT_PROFILE = RequestProfile(
     identifier="standard-chat",
-    version="v1",
+    version="v2",
     token_limit_parameter="max_tokens",
     test_max_tokens=32,
 )
 OLLAMA_CHAT_PROFILE = RequestProfile(
     identifier="ollama-chat",
-    version="v1",
+    version="v2",
     token_limit_parameter="max_tokens",
     test_max_tokens=32,
+    requires_usage=False,
     json_response_kinds=frozenset({"topic_analysis", "session_plan", "session_content"}),
 )
 OPENAI_O_SERIES_PROFILE = RequestProfile(
     identifier="openai-o-series",
-    version="v1",
+    version="v2",
     token_limit_parameter="max_completion_tokens",
     test_max_tokens=256,
 )
