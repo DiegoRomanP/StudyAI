@@ -189,9 +189,25 @@ export interface LLMConnectionTestResponse {
   credential: LLMCredentialDTO;
 }
 
+export type LLMProviderErrorCode =
+  | "LLM_ACCESS_DENIED"
+  | "LLM_AUTHENTICATION_FAILED"
+  | "LLM_CONNECTION_FAILED"
+  | "LLM_ENDPOINT_OR_MODEL_UNAVAILABLE"
+  | "LLM_INVALID_RESPONSE"
+  | "LLM_MODEL_UNAVAILABLE"
+  | "LLM_OUTPUT_LIMIT"
+  | "LLM_PROVIDER_ERROR"
+  | "LLM_PROVIDER_UNAVAILABLE"
+  | "LLM_QUOTA_EXHAUSTED"
+  | "LLM_RATE_LIMITED"
+  | "LLM_REFUSED"
+  | "LLM_TIMEOUT"
+  | "LLM_UNSUPPORTED_REQUEST";
+
 export interface LLMProviderErrorDTO {
   detail: string;
-  code: string;
+  code: LLMProviderErrorCode;
   provider: LLMProviderKey | null;
   upstream_status: number | null;
   retryable: boolean;

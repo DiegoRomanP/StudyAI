@@ -121,6 +121,32 @@ describe("SettingsPage", () => {
     });
   });
 
+  it.each([
+    ["LLM_OUTPUT_LIMIT", "El proveedor agotó el presupuesto de salida."],
+    ["LLM_REFUSED", "El proveedor rechazó generar la respuesta."],
+  ])("renders the safe %s diagnostic", async (code, detail) => {
+    api.testLlmCredential.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: {
+          detail,
+          code,
+          provider: "OPENAI",
+          upstream_status: null,
+          retryable: false,
+          retry_after_seconds: null,
+        },
+      },
+    });
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Probar configuración guardada" }));
+
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+  });
+
   it("shows an actionable error when the settings queries fail", async () => {
     api.listProviderCatalog.mockRejectedValue({
       isAxiosError: true,
