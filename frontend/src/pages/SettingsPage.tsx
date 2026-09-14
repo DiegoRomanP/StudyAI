@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { getApiErrorMessage } from "../api/errors";
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../api/types";
 import { Badge, Button, Card, Spinner } from "../components/ui";
 import {
@@ -17,12 +18,46 @@ import {
 const CUSTOM_MODEL_VALUE = "__custom__";
 
 export function SettingsPage() {
-  const { data: catalog, isLoading: catalogLoading } = useProviderCatalog();
-  const { data: credentials, isLoading: credentialsLoading } = useLlmCredentials();
+  const {
+    data: catalog,
+    isLoading: catalogLoading,
+    error: catalogError,
+    refetch: refreshCatalog,
+  } = useProviderCatalog();
+  const {
+    data: credentials,
+    isLoading: credentialsLoading,
+    error: credentialsError,
+    refetch: refreshCredentials,
+  } = useLlmCredentials();
   const deactivateAll = useDeactivateAllLlmCredentials();
+  const [deactivationError, setDeactivationError] = useState<string | null>(null);
 
   const activeCredential = credentials?.find((c) => c.is_active);
   const isLoading = catalogLoading || credentialsLoading;
+  const loadingError = catalogError
+    ? getApiErrorMessage(catalogError, "No se pudo cargar el catálogo de proveedores.")
+    : credentialsError
+      ? getApiErrorMessage(credentialsError, "No se pudieron cargar las configuraciones guardadas.")
+      : null;
+
+  async function handleDeactivateAll() {
+    setDeactivationError(null);
+    try {
+      await deactivateAll.mutateAsync();
+    } catch (error: unknown) {
+      setDeactivationError(getApiErrorMessage(error, "No se pudo desactivar el proveedor activo."));
+    }
+  }
+
+  async function handleRefreshSettings() {
+    setDeactivationError(null);
+    const [catalogResult, credentialsResult] = await Promise.all([refreshCatalog(), refreshCredentials()]);
+    const refreshError = catalogResult.error ?? credentialsResult.error;
+    if (refreshError) {
+      setDeactivationError(getApiErrorMessage(refreshError, "No se pudo actualizar la configuración."));
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -51,13 +86,22 @@ export function SettingsPage() {
         {activeCredential && (
           <Button
             variant="secondary"
-            onClick={() => deactivateAll.mutate()}
+            onClick={handleDeactivateAll}
             disabled={deactivateAll.isPending}
           >
             {deactivateAll.isPending ? "..." : "Volver a modo demo"}
           </Button>
         )}
       </Card>
+
+      {(loadingError || deactivationError) && (
+        <Card className="flex items-center justify-between gap-3 border border-red-200 text-sm text-red-700">
+          <span>{loadingError ?? deactivationError}</span>
+          <Button variant="secondary" onClick={handleRefreshSettings} disabled={isLoading}>
+            Reintentar
+          </Button>
+        </Card>
+      )}
 
       <p className="text-xs text-slate-400">
         Las claves de API se guardan cifradas en el servidor. Ollama usa los modelos instalados en
@@ -73,6 +117,7 @@ export function SettingsPage() {
               key={entry.provider}
               catalogEntry={entry}
               credential={credentials?.find((c) => c.provider === entry.provider)}
+              refreshCredentials={refreshCredentials}
             />
           ))}
         </div>
@@ -84,9 +129,11 @@ export function SettingsPage() {
 function ProviderCard({
   catalogEntry,
   credential,
+  refreshCredentials,
 }: {
   catalogEntry: ProviderCatalogEntry;
   credential: LLMCredentialDTO | undefined;
+  refreshCredentials: () => Promise<{ data?: LLMCredentialDTO[]; error?: unknown }>;
 }) {
   const save = useSaveLlmCredential();
   const updateModel = useUpdateLlmCredentialModel();
@@ -116,20 +163,49 @@ function ProviderCard({
   const [customModel, setCustomModel] = useState(initialIsCommon ? "" : initialModel);
   const [showAdvanced, setShowAdvanced] = useState(Boolean(credential?.base_url));
   const [baseUrl, setBaseUrl] = useState(credential?.base_url ?? "");
+  const [syncedRevision, setSyncedRevision] = useState(credential?.config_revision);
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
+  const [hasRemoteConflict, setHasRemoteConflict] = useState(false);
 
-  useEffect(() => {
-    if (!credential) return;
-    const savedModel = credential.model || catalogEntry.default_model;
+  function syncDraft(source: LLMCredentialDTO) {
+    const savedModel = source.model || catalogEntry.default_model;
     const savedIsCommon = modelOptions.some((model) => model.id === savedModel);
     setModelChoice(savedIsCommon ? savedModel : CUSTOM_MODEL_VALUE);
     setCustomModel(savedIsCommon ? "" : savedModel);
-    setBaseUrl(credential.base_url);
-  }, [credential?.config_revision]);
+    setBaseUrl(source.base_url);
+    setSyncedRevision(source.config_revision);
+    setIsDraftDirty(false);
+    setHasRemoteConflict(false);
+  }
 
+  useEffect(() => {
+    if (!credential) return;
+    if (credential.config_revision === syncedRevision) return;
+    if (isDraftDirty) {
+      setHasRemoteConflict(true);
+      return;
+    }
+    syncDraft(credential);
+  }, [credential?.config_revision]);
   const resolvedModel = modelChoice === CUSTOM_MODEL_VALUE ? customModel.trim() : modelChoice;
   const showKeyForm = catalogEntry.requires_api_key && (!credential || changingKey);
-  const verifying =
-    save.isPending || test.isPending || updateModel.isPending || ollamaModels.isFetching;
+  const operationPending =
+    save.isPending ||
+    test.isPending ||
+    updateModel.isPending ||
+    activate.isPending ||
+    deactivateAll.isPending ||
+    deleteCredential.isPending;
+  const verifying = operationPending || ollamaModels.isFetching;
+
+  function handleMutationError(error: unknown, fallback: string) {
+    const status =
+      typeof error === "object" && error !== null && "response" in error
+        ? (error.response as { status?: number } | undefined)?.status
+        : undefined;
+    if (status === 409) setHasRemoteConflict(true);
+    setError(getApiErrorMessage(error, fallback));
+  }
 
   async function handleSaveKey() {
     setError(null);
@@ -145,8 +221,8 @@ function ProviderCard({
       });
       setApiKey("");
       setChangingKey(false);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "No se pudo verificar la clave.");
+    } catch (e: unknown) {
+      handleMutationError(e, "No se pudo guardar la clave.");
     }
   }
 
@@ -162,10 +238,12 @@ function ProviderCard({
       return;
     }
     try {
-      const savedCredential = credential ?? await save.mutateAsync({
-        provider: catalogEntry.provider,
-        payload: {},
-      });
+      const savedCredential =
+        credential ??
+        (await save.mutateAsync({
+          provider: catalogEntry.provider,
+          payload: {},
+        }));
       const draft = await updateModel.mutateAsync({
         provider: catalogEntry.provider,
         payload: { model: resolvedModel, expected_revision: savedCredential.config_revision },
@@ -175,8 +253,8 @@ function ProviderCard({
         payload: { expected_revision: draft.config_revision },
       });
       setTestMessage(`Modelo local ${verified.credential.model} verificado.`);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "No se pudo conectar con Ollama.");
+    } catch (e: unknown) {
+      handleMutationError(e, "No se pudo conectar con Ollama.");
     }
   }
 
@@ -197,13 +275,16 @@ function ProviderCard({
           expected_revision: credential.config_revision,
         },
       });
+      setSyncedRevision(draft.config_revision);
+      setIsDraftDirty(false);
+      setHasRemoteConflict(false);
       const verified = await test.mutateAsync({
         provider: catalogEntry.provider,
         payload: { expected_revision: draft.config_revision },
       });
       setTestMessage(`Modelo ${verified.credential.model} guardado y verificado.`);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al guardar el modelo.");
+    } catch (e: unknown) {
+      handleMutationError(e, "Error al guardar el modelo.");
     }
   }
 
@@ -215,8 +296,8 @@ function ProviderCard({
         provider: catalogEntry.provider,
         expectedRevision: credential.config_revision,
       });
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al activar el proveedor.");
+    } catch (e: unknown) {
+      handleMutationError(e, "Error al activar el proveedor.");
     }
   }
 
@@ -232,8 +313,8 @@ function ProviderCard({
     setError(null);
     try {
       await deleteCredential.mutateAsync(catalogEntry.provider);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al eliminar la clave.");
+    } catch (e: unknown) {
+      handleMutationError(e, "Error al eliminar la clave.");
     }
   }
 
@@ -247,9 +328,18 @@ function ProviderCard({
         payload: { expected_revision: credential.config_revision },
       });
       setTestMessage(`Configuración de ${verified.credential.model} verificada.`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setTestMessage(null);
-      setError(e?.response?.data?.detail ?? "No se pudo conectar con este proveedor.");
+      handleMutationError(e, "No se pudo conectar con este proveedor.");
+    }
+  }
+
+  async function handleDeactivate() {
+    setError(null);
+    try {
+      await deactivateAll.mutateAsync();
+    } catch (e: unknown) {
+      handleMutationError(e, "No se pudo desactivar el proveedor.");
     }
   }
 
@@ -290,43 +380,54 @@ function ProviderCard({
       )}
 
       {credential && catalogEntry.requires_model_selection && (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Modelo</label>
-            <select
-              value={modelChoice}
-              onChange={(e) => setModelChoice(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            >
-              <option value="">Selecciona un modelo</option>
-              {modelOptions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.id}
-                  {!isOllama && m.free ? " — gratis" : ""}
-                </option>
-              ))}
-              {!isOllama && <option value={CUSTOM_MODEL_VALUE}>Personalizado…</option>}
-            </select>
-            {modelChoice === CUSTOM_MODEL_VALUE && !isOllama && (
-              <input
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                placeholder="ID exacto del modelo"
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-              />
-            )}
-            {isOllama && (
-              <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
-                <span>{ollamaModels.data?.length ?? 0} modelos locales disponibles</span>
-                <button
-                  type="button"
-                  onClick={() => ollamaModels.refetch()}
-                  className="font-medium text-brand-600 hover:text-brand-700"
-                >
-                  Actualizar modelos
-                </button>
-              </div>
-            )}
-          </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Modelo</label>
+          <select
+            value={modelChoice}
+            onChange={(e) => {
+              setModelChoice(e.target.value);
+              setIsDraftDirty(true);
+            }}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          >
+            <option value="">Selecciona un modelo</option>
+            {modelOptions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.id}
+                {!isOllama && m.free ? " — gratis" : ""}
+              </option>
+            ))}
+            {!isOllama && <option value={CUSTOM_MODEL_VALUE}>Personalizado…</option>}
+          </select>
+          {modelChoice === CUSTOM_MODEL_VALUE && !isOllama && (
+            <input
+              value={customModel}
+              onChange={(e) => {
+                setCustomModel(e.target.value);
+                setIsDraftDirty(true);
+              }}
+              placeholder="ID exacto del modelo"
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          )}
+          {isOllama && (
+           <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
+              <span>{ollamaModels.data?.length ?? 0} modelos locales disponibles</span>
+              <button
+                type="button"
+                onClick={() => ollamaModels.refetch()}
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                Actualizar modelos
+              </button>
+            </div>
+          )}
+          {isOllama && ollamaModels.error && (
+            <p className="mt-2 text-xs text-red-600">
+              {getApiErrorMessage(ollamaModels.error, "No se pudieron descubrir los modelos de Ollama.")}
+            </p>
+          )}
+        </div>
       )}
 
       {!isOllama && (
@@ -341,7 +442,10 @@ function ProviderCard({
           {showAdvanced && (
             <input
               value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
+              onChange={(e) => {
+                setBaseUrl(e.target.value);
+                setIsDraftDirty(true);
+              }}
               placeholder={catalogEntry.default_base_url ?? "URL base personalizada"}
               className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
@@ -351,6 +455,30 @@ function ProviderCard({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {testMessage && <p className="text-sm text-green-600">{testMessage}</p>}
+      {hasRemoteConflict && credential && (
+        <div className="flex items-center gap-2 text-sm text-amber-700">
+          <span>La configuración cambió en otra pestaña. Tu borrador local no se sobrescribió.</span>
+          <button
+            type="button"
+              onClick={async () => {
+                try {
+                  const result = await refreshCredentials();
+                  if (result.error) {
+                    handleMutationError(result.error, "No se pudo actualizar la configuración remota.");
+                    return;
+                  }
+                  const latest = result.data?.find((item) => item.provider === catalogEntry.provider);
+                  if (latest) syncDraft(latest);
+                } catch (e: unknown) {
+                  handleMutationError(e, "No se pudo actualizar la configuración remota.");
+                }
+              }}
+            className="font-medium underline"
+          >
+            Usar configuración remota
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {isOllama ? (
@@ -366,7 +494,7 @@ function ProviderCard({
               <Button
                 variant="secondary"
                 onClick={handleActivate}
-                disabled={activate.isPending || !isVerified}
+                disabled={operationPending || !isVerified}
               >
                 {activate.isPending ? "..." : "Activar"}
               </Button>
@@ -374,8 +502,8 @@ function ProviderCard({
             {credential?.is_active && (
               <Button
                 variant="secondary"
-                onClick={() => deactivateAll.mutate()}
-                disabled={deactivateAll.isPending}
+                onClick={handleDeactivate}
+                disabled={operationPending}
               >
                 Desactivar
               </Button>
@@ -390,13 +518,13 @@ function ProviderCard({
             )}
             {credential && (
               <>
-                <Button onClick={handleSaveModel} disabled={verifying || changingKey}>
+                <Button onClick={handleSaveModel} disabled={operationPending || changingKey}>
                   {verifying ? "Verificando..." : "Guardar y verificar modelo"}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={handleTest}
-                  disabled={test.isPending || changingKey}
+                  disabled={operationPending || changingKey}
                 >
                   {test.isPending ? "Probando..." : "Probar configuración guardada"}
                 </Button>
@@ -404,15 +532,15 @@ function ProviderCard({
                   <Button
                     variant="secondary"
                     onClick={handleActivate}
-                    disabled={activate.isPending || !isVerified || changingKey}
+                    disabled={operationPending || !isVerified || changingKey}
                   >
                     {activate.isPending ? "..." : "Activar"}
                   </Button>
                 ) : (
                   <Button
                     variant="secondary"
-                    onClick={() => deactivateAll.mutate()}
-                    disabled={deactivateAll.isPending}
+                    onClick={handleDeactivate}
+                    disabled={operationPending}
                   >
                     Desactivar
                   </Button>
@@ -446,7 +574,7 @@ function ProviderCard({
           </>
         )}
         {credential && (
-          <Button variant="danger" onClick={handleDelete} disabled={deleteCredential.isPending}>
+          <Button variant="danger" onClick={handleDelete} disabled={operationPending}>
             Eliminar
           </Button>
         )}
