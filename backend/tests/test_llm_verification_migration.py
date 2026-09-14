@@ -37,3 +37,18 @@ def test_legacy_active_credentials_are_migrated_as_unverified_and_inactive(monke
             text("SELECT config_revision, verified_revision, is_active FROM llm_credentials WHERE id = 1")
         ).one()
     assert row == (1, None, 0)
+
+
+def test_legacy_plans_get_the_error_message_column(monkeypatch, tmp_path):
+    from app.db import init_db
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy_plans.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE plans (id INTEGER PRIMARY KEY, title VARCHAR(255))"))
+
+    monkeypatch.setattr(init_db, "engine", engine)
+    init_db._ensure_plan_error_message_column()
+    init_db._ensure_plan_error_message_column()
+
+    columns = {column["name"] for column in inspect(engine).get_columns("plans")}
+    assert "error_message" in columns
