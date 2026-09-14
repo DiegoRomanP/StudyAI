@@ -176,7 +176,7 @@ export interface LLMCredentialUpsert {
 
 export interface LLMCredentialModelUpdate {
   model: string;
-  base_url?: string;
+  base_url?: string | null;
   expected_revision: number;
 }
 
@@ -187,6 +187,15 @@ export interface LLMConnectionTest {
 export interface LLMConnectionTestResponse {
   ok: boolean;
   credential: LLMCredentialDTO;
+}
+
+export interface LLMProviderErrorDTO {
+  detail: string;
+  code: string;
+  provider: LLMProviderKey | null;
+  upstream_status: number | null;
+  retryable: boolean;
+  retry_after_seconds: number | null;
 }
 
 export interface OllamaModel {
