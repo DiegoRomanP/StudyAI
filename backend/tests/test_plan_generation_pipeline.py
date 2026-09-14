@@ -166,12 +166,14 @@ def test_session_plan_provider_failure_does_not_continue_with_session_content(cl
 @respx.mock
 def test_adapter_failure_reaches_plan_storage_and_api_without_exposing_response_body(client: TestClient, monkeypatch):
     from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+    from app.llm.request_profiles import STANDARD_CHAT_PROFILE
 
     secret = "secret-upstream-document-content"
     provider = OpenAICompatibleProvider(
         base_url="https://api.example.test/v1",
         api_key="test-key",
         model="test-model",
+        request_profile=STANDARD_CHAT_PROFILE,
         max_retries=1,
     )
     monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
