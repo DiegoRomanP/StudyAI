@@ -10,9 +10,8 @@ from hashlib import sha256
 
 from app.core.config import get_settings
 from app.llm.providers_catalog import PROVIDER_CATALOG
+from app.llm.request_profiles import resolve_request_profile
 from app.models.llm_credential import LLMCredential, LLMProviderName
-
-_REQUEST_PROFILE_VERSION = "v1"
 
 
 def effective_base_url(credential: LLMCredential) -> str:
@@ -24,13 +23,15 @@ def effective_base_url(credential: LLMCredential) -> str:
 
 def verification_fingerprint(credential: LLMCredential) -> str:
     """Hash the configuration that a successful connection test proves."""
+    request_profile = resolve_request_profile(credential.provider, credential.model)
     payload = "\x1f".join(
         (
             credential.provider.value,
             str(credential.config_revision),
             credential.model,
             effective_base_url(credential).rstrip("/"),
-            _REQUEST_PROFILE_VERSION,
+            request_profile.identifier,
+            request_profile.version,
         )
     )
     return sha256(payload.encode("utf-8")).hexdigest()
