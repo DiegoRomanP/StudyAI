@@ -102,7 +102,7 @@ npm run dev                            # http://localhost:5173
 
 | Variable | Por defecto | Descripción |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | *(vacío)* | Vacío ⇒ **modo demo** con LLM mock (sin gastar tokens). Con clave ⇒ usa Claude. |
+| `ANTHROPIC_API_KEY` | *(vacío)* | Alternativa del servidor: con clave usa Claude cuando no hay una credencial de usuario activa; sin clave, la alternativa es el LLM mock. |
 | `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para generar el plan de estudio. |
 | `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para generar quizzes. |
 | `LLM_MAX_RETRIES` | `3` | Intentos máximos de generación para errores transitorios (5xx/timeout). |
@@ -206,7 +206,11 @@ Solo una clave puede estar **activa** a la vez — esa es la que usa el
 generador de planes para todas las llamadas (no hay ya distinción de modelo
 "barato" vs "caro" por tarea cuando usas tu propia clave; se usa el modelo que
 elijas para todo). Sin ninguna clave activa, se conserva el orden de
-prioridad existente: `.env` → mock.
+prioridad existente: `.env` → mock. La pantalla consulta `GET /llm-settings/runtime`
+para mostrar la fuente que se resolvería en ese momento: configuración de usuario,
+Anthropic del servidor o modo demo. Es información de selección, no una prueba de
+conectividad; si no puede obtenerla, muestra un estado desconocido en vez de asumir
+modo demo.
 
 **Seguridad de las claves**: se cifran en reposo (Fernet, derivado de
 `SECRET_KEY`) antes de guardarse en la base de datos y **nunca** se devuelven
@@ -281,7 +285,8 @@ en `/docs`.
 | `GET`/`PUT`/`DELETE` | `/llm-settings/{provider}` | Lista / guarda-o-reemplaza (solo la clave) / elimina |
 | `PATCH` | `/llm-settings/{provider}/model` | Guarda un borrador de modelo/URL para una revisión |
 | `POST` | `/llm-settings/{provider}/activate` · `/test` | Activa una revisión verificada / prueba el borrador guardado |
-| `POST` | `/llm-settings/deactivate-all` | Vuelve a modo demo |
+| `GET` | `/llm-settings/runtime` | Fuente LLM efectiva (`USER`, `ENV` o `MOCK`), sin claves ni prueba de red |
+| `POST` | `/llm-settings/deactivate-all` | Usa la configuración del servidor o mock, según disponibilidad |
 
 ---
 

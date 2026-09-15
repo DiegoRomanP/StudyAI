@@ -161,6 +161,14 @@ order — check this chain before assuming which LLM is actually being called:
    deployments).
 3. `MockLLMProvider`.
 
+`resolve_llm_provider()` es la única resolución compartida por la generación y
+`GET /llm-settings/runtime`. El endpoint devuelve solo `source` (`USER`, `ENV`
+o `MOCK`), proveedor, modelos por tipo de llamada y un motivo de fallback
+saneado; no prueba conectividad ni expone/descifra claves hacia el navegador.
+La UI debe mostrar modo demo únicamente cuando `source` sea `MOCK` y debe
+invalidar ese estado tras guardar, probar, activar, desactivar o eliminar una
+credencial.
+
 Provider construction is cheap (an SDK/httpx client, no network I/O), so — unlike the old
 `lru_cache`d singleton — it's rebuilt on every call; that's required now that credentials can
 change at runtime. `PlanService._Generator` builds it in `run()` (after loading the `Plan`, so
