@@ -11,6 +11,7 @@ import type {
   LLMConnectionTest,
   LLMConnectionTestResponse,
   LLMProviderKey,
+  LLMRuntimeDTO,
   OllamaModel,
   PlanDTO,
   PlanStatusDTO,
@@ -83,6 +84,8 @@ export const api = {
     apiClient.get<ProviderCatalogEntry[]>("/llm-settings/catalog").then((r) => r.data),
   listLlmCredentials: () =>
     apiClient.get<LLMCredentialDTO[]>("/llm-settings").then((r) => r.data),
+  getLlmRuntime: () =>
+    apiClient.get<LLMRuntimeDTO>("/llm-settings/runtime").then((r) => r.data),
   saveLlmCredential: (provider: LLMProviderKey, payload: LLMCredentialUpsert) =>
     apiClient
       .put<LLMCredentialDTO>(`/llm-settings/${provider}`, payload)

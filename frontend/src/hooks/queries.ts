@@ -30,6 +30,10 @@ function replaceCachedLlmCredential(
   });
 }
 
+function invalidateLlmRuntime(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["llm-runtime"] });
+}
+
 function invalidateLlmCredentialsOnConflict(
   qc: ReturnType<typeof useQueryClient>,
   error: unknown,
@@ -37,6 +41,7 @@ function invalidateLlmCredentialsOnConflict(
   const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
   if (response?.status === 409 || response?.data?.code === "LLM_AUTHENTICATION_FAILED") {
     qc.invalidateQueries({ queryKey: ["llm-credentials"] });
+    invalidateLlmRuntime(qc);
   }
 }
 
@@ -177,12 +182,19 @@ export function useLlmCredentials() {
   return useQuery({ queryKey: ["llm-credentials"], queryFn: api.listLlmCredentials });
 }
 
+export function useLlmRuntime() {
+  return useQuery({ queryKey: ["llm-runtime"], queryFn: api.getLlmRuntime });
+}
+
 export function useSaveLlmCredential() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMCredentialUpsert }) =>
       api.saveLlmCredential(provider, payload),
-    onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+    onSuccess: (credential) => {
+      replaceCachedLlmCredential(qc, credential);
+      invalidateLlmRuntime(qc);
+    },
     onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
@@ -197,7 +209,10 @@ export function useUpdateLlmCredentialModel() {
       provider: LLMProviderKey;
       payload: LLMCredentialModelUpdate;
     }) => api.updateLlmCredentialModel(provider, payload),
-    onSuccess: (credential) => replaceCachedLlmCredential(qc, credential),
+    onSuccess: (credential) => {
+      replaceCachedLlmCredential(qc, credential);
+      invalidateLlmRuntime(qc);
+    },
     onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
@@ -207,7 +222,10 @@ export function useActivateLlmCredential() {
   return useMutation({
     mutationFn: ({ provider, expectedRevision }: { provider: LLMProviderKey; expectedRevision: number }) =>
       api.activateLlmCredential(provider, expectedRevision),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["llm-credentials"] });
+      invalidateLlmRuntime(qc);
+    },
     onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
@@ -216,7 +234,10 @@ export function useDeactivateAllLlmCredentials() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.deactivateAllLlmCredentials(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["llm-credentials"] });
+      invalidateLlmRuntime(qc);
+    },
   });
 }
 
@@ -224,7 +245,10 @@ export function useDeleteLlmCredential() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (provider: LLMProviderKey) => api.deleteLlmCredential(provider),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["llm-credentials"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["llm-credentials"] });
+      invalidateLlmRuntime(qc);
+    },
   });
 }
 
@@ -233,7 +257,10 @@ export function useTestLlmCredential() {
   return useMutation({
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMConnectionTest }) =>
       api.testLlmCredential(provider, payload),
-    onSuccess: ({ credential }) => replaceCachedLlmCredential(qc, credential),
+    onSuccess: ({ credential }) => {
+      replaceCachedLlmCredential(qc, credential);
+      invalidateLlmRuntime(qc);
+    },
     onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }

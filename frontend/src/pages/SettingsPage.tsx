@@ -8,6 +8,7 @@ import {
   useDeactivateAllLlmCredentials,
   useDeleteLlmCredential,
   useLlmCredentials,
+  useLlmRuntime,
   useProviderCatalog,
   useSaveLlmCredential,
   useTestLlmCredential,
@@ -30,16 +31,40 @@ export function SettingsPage() {
     error: credentialsError,
     refetch: refreshCredentials,
   } = useLlmCredentials();
+  const {
+    data: runtime,
+    isLoading: runtimeLoading,
+    error: runtimeError,
+    refetch: refreshRuntime,
+  } = useLlmRuntime();
   const deactivateAll = useDeactivateAllLlmCredentials();
   const [deactivationError, setDeactivationError] = useState<string | null>(null);
 
-  const activeCredential = credentials?.find((c) => c.is_active);
-  const isLoading = catalogLoading || credentialsLoading;
+  const isLoading = catalogLoading || credentialsLoading || runtimeLoading;
   const loadingError = catalogError
     ? getApiErrorMessage(catalogError, "No se pudo cargar el catálogo de proveedores.")
     : credentialsError
       ? getApiErrorMessage(credentialsError, "No se pudieron cargar las configuraciones guardadas.")
-      : null;
+      : runtimeError
+        ? getApiErrorMessage(runtimeError, "No se pudo consultar el proveedor efectivo.")
+        : null;
+  const runtimeProviderLabel = runtime?.provider
+    ? catalog?.find((entry) => entry.provider === runtime.provider)?.label ?? runtime.provider
+    : null;
+  const hasRuntimeModels = Boolean(
+    runtime?.models?.topic_analysis?.trim() &&
+      runtime?.models?.session_plan?.trim() &&
+      runtime?.models?.session_content?.trim(),
+  );
+  const isValidMockRuntime =
+    runtime?.source === "MOCK" &&
+    runtime.provider === null &&
+    runtime.models.topic_analysis === "simulado" &&
+    runtime.models.session_plan === "simulado" &&
+    runtime.models.session_content === "simulado";
+  const isValidEnvRuntime = runtime?.source === "ENV" && runtime.provider === "ANTHROPIC";
+  const isValidUserRuntime = runtime?.source === "USER" && Boolean(runtime.provider);
+  const hasValidRuntime = hasRuntimeModels && (isValidMockRuntime || isValidEnvRuntime || isValidUserRuntime);
 
   async function handleDeactivateAll() {
     setDeactivationError(null);
@@ -52,8 +77,12 @@ export function SettingsPage() {
 
   async function handleRefreshSettings() {
     setDeactivationError(null);
-    const [catalogResult, credentialsResult] = await Promise.all([refreshCatalog(), refreshCredentials()]);
-    const refreshError = catalogResult.error ?? credentialsResult.error;
+    const [catalogResult, credentialsResult, runtimeResult] = await Promise.all([
+      refreshCatalog(),
+      refreshCredentials(),
+      refreshRuntime(),
+    ]);
+    const refreshError = catalogResult.error ?? credentialsResult.error ?? runtimeResult.error;
     if (refreshError) {
       setDeactivationError(getApiErrorMessage(refreshError, "No se pudo actualizar la configuración."));
     }
@@ -64,35 +93,62 @@ export function SettingsPage() {
       <header>
         <h1 className="text-2xl font-bold">Configuración</h1>
         <p className="text-slate-500">
-          Conecta una clave de API o un modelo local para usar un modelo real en vez del modo demo.
+          Administra tus proveedores y consulta qué configuración usará el servidor.
         </p>
       </header>
 
       <Card className="flex items-center justify-between">
-        {activeCredential ? (
+        {runtimeError || (runtime && !hasValidRuntime) ? (
           <div>
-            <p className="text-sm text-slate-500">Proveedor activo</p>
+            <p className="text-sm text-slate-500">Proveedor efectivo desconocido</p>
+            <p className="font-medium text-slate-800">No se pudo consultar la configuración del servidor.</p>
+          </div>
+        ) : runtimeLoading || !runtime ? (
+          <div>
+            <p className="text-sm text-slate-500">Proveedor efectivo</p>
+            <p className="font-medium text-slate-800">Consultando la configuración del servidor...</p>
+          </div>
+        ) : runtime.source === "USER" ? (
+          <div>
+            <p className="text-sm text-slate-500">Configuración de usuario activa</p>
             <p className="font-medium text-slate-800">
-              {activeCredential.label} ·{" "}
-              <span className="font-mono text-sm">{activeCredential.model}</span>
+              {runtimeProviderLabel} ·{" "}
+              <span className="font-mono text-sm">{runtime.models.session_content}</span>
             </p>
+          </div>
+        ) : runtime.source === "ENV" ? (
+          <div>
+            <p className="text-sm text-slate-500">Configuración del servidor</p>
+            <p className="font-medium text-slate-800">
+              {runtimeProviderLabel} ·{" "}
+              <span className="font-mono text-sm">{runtime.models.session_content}</span>
+            </p>
+          </div>
+        ) : runtime.source === "MOCK" ? (
+          <div>
+            <p className="text-sm text-slate-500">Proveedor efectivo</p>
+            <p className="font-medium text-slate-800">Modo demo (LLM simulado, sin costo)</p>
           </div>
         ) : (
           <div>
-            <p className="text-sm text-slate-500">Sin proveedor activo</p>
-            <p className="font-medium text-slate-800">Modo demo (LLM simulado, sin costo)</p>
+            <p className="text-sm text-slate-500">Proveedor efectivo desconocido</p>
+            <p className="font-medium text-slate-800">La respuesta del servidor no es compatible.</p>
           </div>
         )}
-        {activeCredential && (
+        {isValidUserRuntime && (
           <Button
             variant="secondary"
             onClick={handleDeactivateAll}
             disabled={deactivateAll.isPending}
           >
-            {deactivateAll.isPending ? "..." : "Volver a modo demo"}
+            {deactivateAll.isPending ? "..." : "Usar configuración del servidor"}
           </Button>
         )}
       </Card>
+
+      {!runtimeError && hasValidRuntime && runtime?.fallback_reason && (
+        <p className="text-xs text-amber-700">{runtime.fallback_reason}</p>
+      )}
 
       {(loadingError || deactivationError) && (
         <Card className="flex items-center justify-between gap-3 border border-red-200 text-sm text-red-700">

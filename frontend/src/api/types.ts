@@ -189,6 +189,21 @@ export interface LLMConnectionTestResponse {
   credential: LLMCredentialDTO;
 }
 
+export type LLMRuntimeSource = "USER" | "ENV" | "MOCK";
+
+export interface LLMRuntimeModels {
+  topic_analysis: string;
+  session_plan: string;
+  session_content: string;
+}
+
+export interface LLMRuntimeDTO {
+  source: LLMRuntimeSource;
+  provider: LLMProviderKey | null;
+  models: LLMRuntimeModels;
+  fallback_reason: string | null;
+}
+
 export type LLMProviderErrorCode =
   | "LLM_ACCESS_DENIED"
   | "LLM_AUTHENTICATION_FAILED"

@@ -7,10 +7,14 @@ import type { LLMCredentialDTO, ProviderCatalogEntry } from "../api/types";
 const api = vi.hoisted(() => ({
   listProviderCatalog: vi.fn(),
   listLlmCredentials: vi.fn(),
+  getLlmRuntime: vi.fn(),
+  saveLlmCredential: vi.fn(),
   listOllamaModels: vi.fn(),
   updateLlmCredentialModel: vi.fn(),
   testLlmCredential: vi.fn(),
+  activateLlmCredential: vi.fn(),
   deactivateAllLlmCredentials: vi.fn(),
+  deleteLlmCredential: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
@@ -59,6 +63,20 @@ describe("SettingsPage", () => {
     vi.clearAllMocks();
     api.listProviderCatalog.mockResolvedValue([catalog]);
     api.listLlmCredentials.mockResolvedValue([credential]);
+    api.deactivateAllLlmCredentials.mockResolvedValue(undefined);
+    api.saveLlmCredential.mockResolvedValue(credential);
+    api.activateLlmCredential.mockResolvedValue(credential);
+    api.deleteLlmCredential.mockResolvedValue(undefined);
+    api.getLlmRuntime.mockResolvedValue({
+      source: "MOCK",
+      provider: null,
+      models: {
+        topic_analysis: "simulado",
+        session_plan: "simulado",
+        session_content: "simulado",
+      },
+      fallback_reason: null,
+    });
     api.updateLlmCredentialModel.mockResolvedValue({
       ...credential,
       base_url: "https://proxy-b.example/v1",
@@ -93,7 +111,79 @@ describe("SettingsPage", () => {
       expect(api.testLlmCredential).toHaveBeenCalledWith("OPENAI", {
         expected_revision: 8,
       });
+      expect(api.getLlmRuntime.mock.calls.length).toBeGreaterThan(1);
     });
+  });
+
+  it("invalidates runtime after saving a model draft before its test completes", async () => {
+    api.testLlmCredential.mockRejectedValue({
+      isAxiosError: true,
+      response: { data: { detail: "No se pudo verificar el borrador." } },
+    });
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
+
+    await waitFor(() => {
+      expect(api.updateLlmCredentialModel).toHaveBeenCalledTimes(1);
+      expect(api.testLlmCredential).toHaveBeenCalledTimes(1);
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("invalidates runtime after saving a credential", async () => {
+    api.listLlmCredentials.mockResolvedValue([]);
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByPlaceholderText("sk-..."), { target: { value: "sk-test-1234567890" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar clave" }));
+
+    await waitFor(() => {
+      expect(api.saveLlmCredential).toHaveBeenCalledWith("OPENAI", {
+        api_key: "sk-test-1234567890",
+      });
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("invalidates runtime after verifying the saved configuration", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Probar configuración guardada" }));
+
+    await waitFor(() => {
+      expect(api.testLlmCredential).toHaveBeenCalledWith("OPENAI", { expected_revision: 7 });
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("invalidates runtime after activating a credential", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Activar" }));
+
+    await waitFor(() => {
+      expect(api.activateLlmCredential).toHaveBeenCalledWith("OPENAI", 7);
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("invalidates runtime after deleting a credential", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => {
+      expect(api.deleteLlmCredential).toHaveBeenCalledWith("OPENAI");
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+    });
+    confirmation.mockRestore();
   });
 
   it("refreshes credentials after authentication failure revokes the saved configuration", async () => {
@@ -117,7 +207,8 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(api.listLlmCredentials).toHaveBeenCalledTimes(2);
-      expect(screen.getByText("Sin proveedor activo")).toBeInTheDocument();
+      expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+      expect(screen.getByText("Modo demo (LLM simulado, sin costo)")).toBeInTheDocument();
     });
   });
 
@@ -160,6 +251,16 @@ describe("SettingsPage", () => {
 
   it("shows an error when deactivating the active credential fails", async () => {
     api.listLlmCredentials.mockResolvedValue([{ ...credential, is_active: true }]);
+    api.getLlmRuntime.mockResolvedValue({
+      source: "USER",
+      provider: "OPENAI",
+      models: {
+        topic_analysis: "gpt-4o-mini",
+        session_plan: "gpt-4o-mini",
+        session_content: "gpt-4o-mini",
+      },
+      fallback_reason: null,
+    });
     api.deactivateAllLlmCredentials.mockRejectedValue({
       isAxiosError: true,
       response: { data: { detail: "No se pudo desactivar el proveedor." } },
@@ -167,8 +268,196 @@ describe("SettingsPage", () => {
     renderSettings();
 
     await screen.findByText("OpenAI");
-    fireEvent.click(screen.getByRole("button", { name: "Volver a modo demo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
 
     expect(await screen.findByText("No se pudo desactivar el proveedor.")).toBeInTheDocument();
+  });
+
+  it("refreshes the runtime source after deactivating a user credential", async () => {
+    api.getLlmRuntime
+      .mockResolvedValueOnce({
+        source: "USER",
+        provider: "OPENAI",
+        models: {
+          topic_analysis: "gpt-4o-mini",
+          session_plan: "gpt-4o-mini",
+          session_content: "gpt-4o-mini",
+        },
+        fallback_reason: null,
+      })
+      .mockResolvedValueOnce({
+        source: "ENV",
+        provider: "ANTHROPIC",
+        models: {
+          topic_analysis: "claude-plan",
+          session_plan: "claude-plan",
+          session_content: "claude-plan",
+        },
+        fallback_reason: null,
+      });
+    renderSettings();
+
+    await screen.findByRole("button", { name: "Usar configuración del servidor" });
+    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+
+    expect(await screen.findByText("Configuración del servidor")).toBeInTheDocument();
+    expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows demo mode after deactivation when no server provider is available", async () => {
+    api.getLlmRuntime
+      .mockResolvedValueOnce({
+        source: "USER",
+        provider: "OPENAI",
+        models: {
+          topic_analysis: "gpt-4o-mini",
+          session_plan: "gpt-4o-mini",
+          session_content: "gpt-4o-mini",
+        },
+        fallback_reason: null,
+      })
+      .mockResolvedValueOnce({
+        source: "MOCK",
+        provider: null,
+        models: {
+          topic_analysis: "simulado",
+          session_plan: "simulado",
+          session_content: "simulado",
+        },
+        fallback_reason: null,
+      });
+    renderSettings();
+
+    await screen.findByRole("button", { name: "Usar configuración del servidor" });
+    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+
+    expect(await screen.findByText("Modo demo (LLM simulado, sin costo)")).toBeInTheDocument();
+    expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows the Anthropic server configuration instead of demo mode", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "ENV",
+      provider: "ANTHROPIC",
+      models: {
+        topic_analysis: "claude-plan",
+        session_plan: "claude-plan",
+        session_content: "claude-plan",
+      },
+      fallback_reason: null,
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Configuración del servidor")).toBeInTheDocument();
+    expect(screen.getByText(/ANTHROPIC/)).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("renders the safe runtime fallback reason", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "ENV",
+      provider: "ANTHROPIC",
+      models: {
+        topic_analysis: "claude-plan",
+        session_plan: "claude-plan",
+        session_content: "claude-plan",
+      },
+      fallback_reason: "La configuración activa no está disponible; se aplicó la configuración del servidor.",
+    });
+    renderSettings();
+
+    expect(
+      await screen.findByText(
+        "La configuración activa no está disponible; se aplicó la configuración del servidor.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render demo mode for an incompatible runtime source", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "FUTURE_PROVIDER",
+      provider: null,
+      models: {
+        topic_analysis: "unknown",
+        session_plan: "unknown",
+        session_content: "unknown",
+      },
+      fallback_reason: null,
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("shows an unknown state for incomplete runtime models", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "MOCK",
+      provider: null,
+      models: {
+        topic_analysis: "simulado",
+        session_plan: "simulado",
+        session_content: "",
+      },
+      fallback_reason: null,
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("shows an unknown state for a mock source with inconsistent provider metadata", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "MOCK",
+      provider: "OPENAI",
+      models: {
+        topic_analysis: "simulado",
+        session_plan: "simulado",
+        session_content: "simulado",
+      },
+      fallback_reason: null,
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("hides cached fallback information after a runtime refetch fails", async () => {
+    api.getLlmRuntime.mockReset();
+    api.getLlmRuntime
+      .mockResolvedValueOnce({
+        source: "USER",
+        provider: "OPENAI",
+        models: {
+          topic_analysis: "gpt-4o-mini",
+          session_plan: "gpt-4o-mini",
+          session_content: "gpt-4o-mini",
+        },
+        fallback_reason: "Información de fallback anterior.",
+      })
+      .mockRejectedValueOnce({
+        isAxiosError: true,
+        response: { data: { detail: "No se pudo consultar el proveedor efectivo." } },
+      });
+    renderSettings();
+
+    await screen.findByRole("button", { name: "Usar configuración del servidor" });
+    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Información de fallback anterior.")).not.toBeInTheDocument();
+  });
+
+  it("marks the effective provider as unknown when the runtime query fails", async () => {
+    api.getLlmRuntime.mockRejectedValue({
+      isAxiosError: true,
+      response: { data: { detail: "No se pudo consultar el proveedor efectivo." } },
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
   });
 });
