@@ -58,8 +58,8 @@ class Settings(BaseSettings):
     )
 
     # --- LLM -----------------------------------------------------------------
-    # When empty, the app falls back to the deterministic MockLLMProvider so the
-    # MVP is fully runnable without spending tokens or holding a key.
+    # When empty, and no verified user credential is active, the app falls back
+    # to the deterministic MockLLMProvider so the MVP remains runnable offline.
     ANTHROPIC_API_KEY: str = ""
     # Defaults follow Anthropic's guidance (Opus 4.8 is the current flagship).
     # Cheaper alternatives you may set here: claude-sonnet-5, claude-haiku-4-5.
@@ -132,6 +132,14 @@ class Settings(BaseSettings):
             items = [item.strip() for item in value.split(",") if item.strip()]
             return items
         return value
+
+    @field_validator("LLM_MODEL_PLAN", "LLM_MODEL_QUIZ")
+    @classmethod
+    def _require_nonempty_llm_model(cls, value: str) -> str:
+        model = value.strip()
+        if not model:
+            raise ValueError("Los modelos de Anthropic no pueden estar vacíos.")
+        return model
 
     @property
     def has_llm_key(self) -> bool:

@@ -17,6 +17,7 @@ from app.schemas.llm_settings import (
     LLMActivationRequest,
     LLMConnectionTest,
     LLMConnectionTestResponse,
+    LLMRuntimeResponse,
     LLMProviderErrorResponse,
     ModelOptionResponse,
     OllamaModelResponse,
@@ -47,6 +48,15 @@ def get_provider_catalog() -> list[ProviderCatalogEntry]:
         )
         for meta in PROVIDER_CATALOG.values()
     ]
+
+
+@router.get("/runtime", response_model=LLMRuntimeResponse)
+def get_llm_runtime(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> LLMRuntimeResponse:
+    runtime = LLMSettingsService(db).get_runtime(user.id)
+    return LLMRuntimeResponse(**runtime.__dict__)
 
 
 @router.get("", response_model=list[LLMCredentialResponse])

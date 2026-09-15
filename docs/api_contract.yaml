@@ -252,6 +252,16 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ProviderCatalogEntry" }
 
+  /llm-settings/runtime:
+    get:
+      summary: Describe la fuente LLM efectiva sin probar conectividad ni exponer secretos
+      responses:
+        "200":
+          description: Fuente seleccionada por la misma precedencia que usa la generación
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LLMRuntime" }
+
   /llm-settings:
     get:
       summary: Lista las claves configuradas por el usuario (clave siempre enmascarada)
@@ -390,7 +400,7 @@ paths:
 
   /llm-settings/deactivate-all:
     post:
-      summary: Desactiva cualquier clave activa (vuelve a modo demo / .env)
+      summary: Desactiva cualquier clave activa (usa la configuración del servidor o mock)
       responses:
         "204": { description: OK }
 
@@ -503,6 +513,30 @@ components:
         requires_api_key: { type: boolean }
         supports_model_discovery: { type: boolean }
         created_at: { type: string, format: date-time }
+    LLMRuntime:
+      type: object
+      required: [source, provider, models, fallback_reason]
+      description: Estado de selección; no garantiza conectividad futura ni contiene claves.
+      properties:
+        source: { type: string, enum: [USER, ENV, MOCK] }
+        provider:
+          type: string
+          enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA]
+          nullable: true
+          description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC.
+        models:
+          type: object
+          required: [topic_analysis, session_plan, session_content]
+          additionalProperties: false
+          properties:
+            topic_analysis: { type: string, minLength: 1 }
+            session_plan: { type: string, minLength: 1 }
+            session_content: { type: string, minLength: 1 }
+          description: Modelo efectivo por tipo de llamada de generación; MOCK usa "simulado" para las tres claves.
+        fallback_reason:
+          type: string
+          nullable: true
+          description: Motivo público saneado cuando se degradó desde una fuente de mayor prioridad.
     LLMProviderError:
       type: object
       required: [detail, code, retryable]

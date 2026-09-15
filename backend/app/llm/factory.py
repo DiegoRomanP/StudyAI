@@ -16,6 +16,9 @@ settings UI instead of only at process boot via ``.env``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Literal
+
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -32,6 +35,27 @@ from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
 
 logger = get_logger(__name__)
+
+RuntimeSource = Literal["USER", "ENV", "MOCK"]
+_RUNTIME_KINDS = ("topic_analysis", "session_plan", "session_content")
+
+
+@dataclass(frozen=True)
+class LLMRuntimeState:
+    """Safe description of the provider selected for the next generation."""
+
+    source: RuntimeSource
+    provider: LLMProviderName | None
+    models: dict[str, str]
+    fallback_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderResolution:
+    """The selected provider and the UI-safe state produced by the same decision."""
+
+    provider: LLMProvider
+    runtime: LLMRuntimeState
 
 
 def build_provider_from_credential(
@@ -90,24 +114,36 @@ def build_provider_from_credential(
     )
 
 
-def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
+def resolve_llm_provider(db: Session, user_id: int) -> ProviderResolution:
+    """Resolve and construct the effective provider without performing network I/O."""
     credential = LLMCredentialRepository(db).find_active_for_user(user_id)
+    user_fallback = False
     if credential is not None and is_verified(credential):
         try:
             logger.info("Using user-configured %s provider (model: %s)",
-                        credential.provider.value, safe_model_identifier(credential.model) if credential.model else "<default>")
-            return build_provider_from_credential(credential)
+                         credential.provider.value, safe_model_identifier(credential.model) if credential.model else "<default>")
+            return ProviderResolution(
+                provider=build_provider_from_credential(credential),
+                runtime=LLMRuntimeState(
+                    source="USER",
+                    provider=credential.provider,
+                    models={kind: credential.model for kind in _RUNTIME_KINDS},
+                ),
+            )
         except SecretDecryptionError:
             logger.warning(
                 "Active credential for %s could not be decrypted (SECRET_KEY changed?); "
                 "falling back.", credential.provider.value,
             )
+            user_fallback = True
         except Exception:  # noqa: BLE001 - never let a bad stored credential crash boot
             logger.warning(
                 "Could not build provider for stored credential %s; falling back.", credential.provider.value
             )
+            user_fallback = True
     elif credential is not None:
         logger.warning("Ignoring active but unverified %s credential.", credential.provider.value)
+        user_fallback = True
 
     settings = get_settings()
     if settings.has_llm_key:
@@ -115,10 +151,51 @@ def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
             from app.llm.anthropic_provider import AnthropicProvider
 
             logger.info("Using .env Anthropic provider (models: %s / %s)",
-                        safe_model_identifier(settings.LLM_MODEL_PLAN), safe_model_identifier(settings.LLM_MODEL_QUIZ))
-            return AnthropicProvider()
+                         safe_model_identifier(settings.LLM_MODEL_PLAN), safe_model_identifier(settings.LLM_MODEL_QUIZ))
+            return ProviderResolution(
+                provider=AnthropicProvider(),
+                runtime=LLMRuntimeState(
+                    source="ENV",
+                    provider=LLMProviderName.ANTHROPIC,
+                    models={
+                        "topic_analysis": settings.LLM_MODEL_PLAN,
+                        "session_plan": settings.LLM_MODEL_PLAN,
+                        "session_content": settings.LLM_MODEL_PLAN,
+                    },
+                    fallback_reason=(
+                        "La configuración activa no está disponible; "
+                        "se aplicó la configuración del servidor."
+                        if user_fallback
+                        else None
+                    ),
+                ),
+            )
         except Exception:  # noqa: BLE001 - never let a bad key crash boot
             logger.warning("Could not initialise Anthropic provider; falling back to mock.")
+            fallback_reason = (
+                "La configuración activa y la del servidor no están disponibles; "
+                "se aplicó el modo demo."
+                if user_fallback
+                else "La configuración del servidor no está disponible; se usará el modo demo."
+            )
     else:
         logger.info("No LLM credential configured — using deterministic mock LLM provider.")
-    return MockLLMProvider()
+        fallback_reason = (
+            "La configuración activa no está disponible; se aplicó el modo demo."
+            if user_fallback
+            else None
+        )
+    return ProviderResolution(
+        provider=MockLLMProvider(),
+        runtime=LLMRuntimeState(
+            source="MOCK",
+            provider=None,
+            models={kind: "simulado" for kind in _RUNTIME_KINDS},
+            fallback_reason=fallback_reason,
+        ),
+    )
+
+
+def get_llm_provider(db: Session, user_id: int) -> LLMProvider:
+    """Build the provider selected by ``resolve_llm_provider``."""
+    return resolve_llm_provider(db, user_id).provider

@@ -17,6 +17,7 @@ from app.core.security import SecretDecryptionError, encrypt_secret, mask_secret
 from app.core.config import get_settings
 from app.core.url_safety import assert_safe_outbound_url
 from app.llm.credential_state import is_verified, verification_fingerprint
+from app.llm.factory import LLMRuntimeState, resolve_llm_provider
 from app.llm.ollama_client import OllamaClient, OllamaModel
 from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
@@ -29,6 +30,14 @@ class LLMSettingsService:
 
     def list_credentials(self, user_id: int) -> list[LLMCredential]:
         return self.repo.list_for_user(user_id)
+
+    def get_runtime(self, user_id: int) -> LLMRuntimeState:
+        """Report the effective provider selection without sending an LLM request."""
+        resolution = resolve_llm_provider(self.db, user_id)
+        try:
+            return resolution.runtime
+        finally:
+            resolution.provider.close()
 
     def upsert_credential(
         self,

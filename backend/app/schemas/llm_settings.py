@@ -9,8 +9,9 @@ ever leaves the server.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.llm.credential_state import is_verified
 from app.llm.providers_catalog import PROVIDER_CATALOG
@@ -106,6 +107,46 @@ class OllamaModelResponse(BaseModel):
 class LLMConnectionTestResponse(BaseModel):
     ok: bool
     credential: LLMCredentialResponse
+
+
+class LLMRuntimeModels(BaseModel):
+    """Models required by every runtime source for plan generation."""
+
+    topic_analysis: str = Field(min_length=1)
+    session_plan: str = Field(min_length=1)
+    session_content: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("topic_analysis", "session_plan", "session_content")
+    @classmethod
+    def _require_nonempty_model(cls, value: str) -> str:
+        model = value.strip()
+        if not model:
+            raise ValueError("Los modelos runtime no pueden estar vacíos.")
+        return model
+
+
+class LLMRuntimeResponse(BaseModel):
+    """Effective LLM source, without credentials or a connectivity guarantee."""
+
+    source: Literal["USER", "ENV", "MOCK"]
+    provider: LLMProviderName | None
+    models: LLMRuntimeModels
+    fallback_reason: str | None
+
+    @model_validator(mode="after")
+    def _validate_provider_for_source(self) -> "LLMRuntimeResponse":
+        if self.source == "MOCK" and self.provider is not None:
+            raise ValueError("MOCK no admite un proveedor real.")
+        if self.source == "MOCK" and any(
+            model != "simulado" for model in self.models.model_dump().values()
+        ):
+            raise ValueError("MOCK requiere modelos simulados.")
+        if self.source == "ENV" and self.provider != LLMProviderName.ANTHROPIC:
+            raise ValueError("ENV requiere Anthropic.")
+        if self.source == "USER" and self.provider is None:
+            raise ValueError("USER requiere un proveedor real.")
+        return self
 
 
 class LLMProviderErrorResponse(BaseModel):
