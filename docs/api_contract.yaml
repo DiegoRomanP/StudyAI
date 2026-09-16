@@ -532,7 +532,7 @@ components:
             topic_analysis: { type: string, minLength: 1 }
             session_plan: { type: string, minLength: 1 }
             session_content: { type: string, minLength: 1 }
-          description: Modelo efectivo por tipo de llamada de generación; MOCK usa "simulado" para las tres claves.
+          description: Modelo efectivo por tipo de llamada de generación; para Anthropic de .env, topic_analysis y session_plan usan LLM_MODEL_PLAN y session_content usa LLM_MODEL_QUIZ. MOCK usa "simulado" para las tres claves.
         fallback_reason:
           type: string
           nullable: true

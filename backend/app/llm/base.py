@@ -5,8 +5,9 @@ The rest of the app depends only on this interface, so the concrete backend
 swapped without touching call sites (Dependency Inversion / Strategy).
 
 The ``kind`` argument identifies the logical task (topic_analysis, session_plan,
-content, quiz). The real provider uses it only to pick a model; the mock uses it
-— together with ``context`` — to synthesise schema-valid output offline.
+session_content; legacy content and quiz are also supported). The real provider
+uses it only to pick a model; the mock uses it — together with ``context`` — to
+synthesise schema-valid output offline.
 """
 
 from __future__ import annotations

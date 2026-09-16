@@ -26,16 +26,60 @@ def _usage() -> SimpleNamespace:
     return SimpleNamespace(input_tokens=3, output_tokens=1)
 
 
-def test_default_construction_keeps_legacy_plan_quiz_split():
+def test_server_anthropic_uses_quiz_model_for_merged_session_content(monkeypatch):
+    from app.core.config import Settings
+
+    settings = Settings(
+        ANTHROPIC_API_KEY="server-key",
+        LLM_MODEL_PLAN="plan-model",
+        LLM_MODEL_QUIZ="quiz-model",
+    )
+    monkeypatch.setattr("app.llm.anthropic_provider.get_settings", lambda: settings)
     provider = AnthropicProvider()
-    assert provider._model_for("topic_analysis") != provider._model_for("quiz")
-    assert provider._model_for("content") == provider._model_for("quiz")
+    assert provider._model_for("topic_analysis") == "plan-model"
+    assert provider._model_for("session_plan") == "plan-model"
+    assert provider._model_for("session_content") == "quiz-model"
+    assert provider._model_for("content") == "quiz-model"
+    assert provider._model_for("quiz") == "quiz-model"
+
+
+def test_server_anthropic_sends_each_generation_kind_to_its_configured_model(monkeypatch):
+    from app.core.config import Settings
+
+    settings = Settings(
+        ANTHROPIC_API_KEY="server-key",
+        LLM_MODEL_PLAN="plan-model",
+        LLM_MODEL_QUIZ="quiz-model",
+    )
+    monkeypatch.setattr("app.llm.anthropic_provider.get_settings", lambda: settings)
+
+    class Messages:
+        def __init__(self) -> None:
+            self.models: list[str] = []
+
+        async def create(self, **kwargs):
+            self.models.append(kwargs["model"])
+            return SimpleNamespace(
+                stop_reason="end_turn",
+                usage=_usage(),
+                content=[SimpleNamespace(type="text", text="ok")],
+            )
+
+    provider = AnthropicProvider()
+    messages = Messages()
+    provider._client = SimpleNamespace(messages=messages)
+
+    for kind in ("topic_analysis", "session_plan", "session_content"):
+        assert provider.complete(kind=kind, system="sys", prompt="prompt") == "ok"
+
+    assert messages.models == ["plan-model", "plan-model", "quiz-model"]
 
 
 def test_explicit_model_override_is_used_for_every_kind():
     provider = AnthropicProvider(api_key="fake-key", model="claude-haiku-4-5")
     assert provider._model_for("topic_analysis") == "claude-haiku-4-5"
     assert provider._model_for("session_plan") == "claude-haiku-4-5"
+    assert provider._model_for("session_content") == "claude-haiku-4-5"
     assert provider._model_for("quiz") == "claude-haiku-4-5"
 
 

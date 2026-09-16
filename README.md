@@ -103,8 +103,8 @@ npm run dev                            # http://localhost:5173
 | Variable | Por defecto | Descripción |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | *(vacío)* | Alternativa del servidor: con clave usa Claude cuando no hay una credencial de usuario activa; sin clave, la alternativa es el LLM mock. |
-| `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para generar el plan de estudio. |
-| `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para generar quizzes. |
+| `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para análisis de temas y distribución de sesiones. |
+| `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para el contenido y cuestionario fusionados de cada sesión. |
 | `LLM_MAX_RETRIES` | `3` | Intentos máximos de generación para errores transitorios (5xx/timeout). |
 | `LLM_MAX_RATE_LIMIT_RETRIES` | `6` | Reintentos máximos de un 429 temporal durante una generación; no aplica a cuota/saldo agotado. |
 | `LLM_TIMEOUT_SECONDS` | `180` | Timeout de conexión, lectura, escritura y pool de cada intento de generación. |
@@ -211,6 +211,10 @@ para mostrar la fuente que se resolvería en ese momento: configuración de usua
 Anthropic del servidor o modo demo. Es información de selección, no una prueba de
 conectividad; si no puede obtenerla, muestra un estado desconocido en vez de asumir
 modo demo.
+
+Cuando se usa Anthropic desde `.env`, `LLM_MODEL_PLAN` atiende `topic_analysis`
+y `session_plan`; `LLM_MODEL_QUIZ` atiende la llamada fusionada `session_content`
+de material y cuestionario. La generación conserva sus `2 + N` llamadas.
 
 **Seguridad de las claves**: se cifran en reposo (Fernet, derivado de
 `SECRET_KEY`) antes de guardarse en la base de datos y **nunca** se devuelven

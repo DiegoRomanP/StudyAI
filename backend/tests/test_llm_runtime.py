@@ -130,7 +130,7 @@ def test_runtime_reports_env_anthropic_after_user_credentials_are_deactivated(mo
         "models": {
             "topic_analysis": "server-plan-model",
             "session_plan": "server-plan-model",
-            "session_content": "server-plan-model",
+            "session_content": "server-quiz-model",
         },
         "fallback_reason": None,
     }

@@ -160,7 +160,7 @@ def resolve_llm_provider(db: Session, user_id: int) -> ProviderResolution:
                     models={
                         "topic_analysis": settings.LLM_MODEL_PLAN,
                         "session_plan": settings.LLM_MODEL_PLAN,
-                        "session_content": settings.LLM_MODEL_PLAN,
+                        "session_content": settings.LLM_MODEL_QUIZ,
                     },
                     fallback_reason=(
                         "La configuración activa no está disponible; "
