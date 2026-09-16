@@ -35,6 +35,7 @@ class ProviderMeta:
     common_models: tuple[ModelOption, ...] = field(default_factory=tuple)
     requires_api_key: bool = True
     supports_model_discovery: bool = False
+    supports_custom_base_url: bool = False
     # UI hint only — each provider's keys have a distinctive prefix.
     key_placeholder: str = "sk-..."
 
@@ -52,6 +53,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("claude-sonnet-5"),
             ModelOption("claude-opus-4-8"),
         ),
+        supports_custom_base_url=False,
     ),
     LLMProviderName.OPENAI: ProviderMeta(
         provider=LLMProviderName.OPENAI,
@@ -67,6 +69,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("gpt-4.1"),
             ModelOption("gpt-4o"),
         ),
+        supports_custom_base_url=True,
     ),
     LLMProviderName.GLM: ProviderMeta(
         provider=LLMProviderName.GLM,
@@ -81,6 +84,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("glm-4-plus"),
             ModelOption("glm-4.5"),
         ),
+        supports_custom_base_url=True,
     ),
     LLMProviderName.OPENROUTER: ProviderMeta(
         provider=LLMProviderName.OPENROUTER,
@@ -96,6 +100,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("openai/gpt-4o-mini"),
             ModelOption("anthropic/claude-sonnet-4"),
         ),
+        supports_custom_base_url=True,
     ),
     LLMProviderName.NVIDIA: ProviderMeta(
         provider=LLMProviderName.NVIDIA,
@@ -111,6 +116,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("nvidia/llama-3.1-nemotron-70b-instruct"),
         ),
         key_placeholder="nvapi-...",
+        supports_custom_base_url=True,
     ),
     LLMProviderName.HUGGINGFACE: ProviderMeta(
         provider=LLMProviderName.HUGGINGFACE,
@@ -131,6 +137,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
             ModelOption("Qwen/Qwen3-235B-A22B-Instruct-2507"),
         ),
         key_placeholder="hf_...",
+        supports_custom_base_url=True,
     ),
     LLMProviderName.OLLAMA: ProviderMeta(
         provider=LLMProviderName.OLLAMA,
@@ -141,6 +148,7 @@ PROVIDER_CATALOG: dict[LLMProviderName, ProviderMeta] = {
         default_model="",
         requires_api_key=False,
         supports_model_discovery=True,
+        supports_custom_base_url=False,
         key_placeholder="No requiere clave",
     ),
 }

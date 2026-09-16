@@ -19,6 +19,7 @@ const LLM_ERROR_CODES = new Set<LLMProviderErrorCode>([
   "LLM_RATE_LIMITED",
   "LLM_REFUSED",
   "LLM_TIMEOUT",
+  "LLM_UNSUPPORTED_CONFIGURATION",
   "LLM_UNSUPPORTED_REQUEST",
 ]);
 const LLM_PROVIDERS = new Set<LLMProviderKey>([

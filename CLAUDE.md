@@ -211,7 +211,10 @@ if you add or reorder entries. `ProviderMeta.key_placeholder` (default `"sk-..."
 provider e.g. `"nvapi-..."` for NVIDIA, `"hf_..."` for Hugging Face) is UI-only — it's the input's
 placeholder text in `SettingsPage.tsx`, not validated against.
 
-**`base_url` is an SSRF surface**: it's a free-text override a user can set, and it ends up as the
+**`base_url` is an SSRF surface**: `ProviderMeta.supports_custom_base_url` is false for Anthropic
+and Ollama; never accept an override for them. Anthropic historical overrides must fail with
+`LLM_UNSUPPORTED_CONFIGURATION` before the SDK is constructed, so the user can explicitly clear
+the stored value. For supported OpenAI-compatible providers, it is a free-text override that ends up as the
 `base_url` of a real outbound `httpx.Client`. `app/core/url_safety.py::assert_safe_outbound_url`
 resolves the hostname and rejects private/loopback/link-local/reserved ranges (this covers the
 cloud-metadata IP `169.254.169.254` too) — called both at save time

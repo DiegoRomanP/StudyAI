@@ -25,7 +25,7 @@ describe("getApiErrorMessage", () => {
     ).toBe("El proveedor rechazó el acceso.");
   });
 
-  it.each(["LLM_OUTPUT_LIMIT", "LLM_REFUSED"])("renders the safe %s detail", (code) => {
+  it.each(["LLM_OUTPUT_LIMIT", "LLM_REFUSED", "LLM_UNSUPPORTED_CONFIGURATION"])("renders the safe %s detail", (code) => {
     expect(
       getApiErrorMessage(
         {

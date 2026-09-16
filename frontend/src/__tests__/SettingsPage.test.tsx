@@ -31,6 +31,7 @@ const catalog: ProviderCatalogEntry = {
   key_placeholder: "sk-...",
   requires_api_key: true,
   supports_model_discovery: false,
+  supports_custom_base_url: true,
 };
 
 const credential: LLMCredentialDTO = {
@@ -46,6 +47,7 @@ const credential: LLMCredentialDTO = {
   requires_model_selection: true,
   requires_api_key: true,
   supports_model_discovery: false,
+  supports_custom_base_url: true,
   created_at: "2026-09-13T00:00:00Z",
 };
 
@@ -112,6 +114,46 @@ describe("SettingsPage", () => {
         expected_revision: 8,
       });
       expect(api.getLlmRuntime.mock.calls.length).toBeGreaterThan(1);
+    });
+  });
+
+  it("hides unsupported URL configuration and lets a historical Anthropic override be cleared", async () => {
+    const anthropicCatalog: ProviderCatalogEntry = {
+      ...catalog,
+      provider: "ANTHROPIC",
+      label: "Anthropic (Claude)",
+      default_model: "claude-haiku-4-5",
+      default_base_url: null,
+      supports_custom_base_url: false,
+    };
+    const historicalCredential: LLMCredentialDTO = {
+      ...credential,
+      provider: "ANTHROPIC",
+      label: "Anthropic (Claude)",
+      model: "claude-haiku-4-5",
+      base_url: "https://legacy-proxy.example/v1",
+      supports_custom_base_url: false,
+    };
+    api.listProviderCatalog.mockResolvedValue([anthropicCatalog]);
+    api.listLlmCredentials.mockResolvedValue([historicalCredential]);
+    api.updateLlmCredentialModel.mockResolvedValue({
+      ...historicalCredential,
+      base_url: "",
+      config_revision: 8,
+    });
+    renderSettings();
+
+    await screen.findByText("Anthropic (Claude)");
+    expect(screen.queryByText("Configuración avanzada")).not.toBeInTheDocument();
+    expect(screen.getByText("https://legacy-proxy.example/v1")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar URL personalizada" }));
+
+    await waitFor(() => {
+      expect(api.updateLlmCredentialModel).toHaveBeenCalledWith("ANTHROPIC", {
+        model: "claude-haiku-4-5",
+        base_url: "",
+        expected_revision: 7,
+      });
     });
   });
 

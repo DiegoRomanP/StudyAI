@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 import main
 from app.core.exceptions import LLMError
 from app.db.session import SessionLocal
-from app.models.llm_credential import LLMProviderName
+from app.llm.factory import build_provider_from_credential as real_build_provider_from_credential
+from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.services.llm_settings_service import LLMSettingsService
 
 
@@ -91,6 +92,16 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "NVIDIA",
         "HUGGINGFACE",
         "OLLAMA",
+    }
+    capabilities = {entry["provider"]: entry["supports_custom_base_url"] for entry in response.json()}
+    assert capabilities == {
+        "ANTHROPIC": False,
+        "OPENAI": True,
+        "GLM": True,
+        "OPENROUTER": True,
+        "NVIDIA": True,
+        "HUGGINGFACE": True,
+        "OLLAMA": False,
     }
 
 
@@ -390,6 +401,70 @@ def test_omitting_base_url_preserves_it_and_empty_string_restores_default(client
     )
     assert reset.status_code == 200
     assert reset.json()["base_url"] == ""
+
+
+def test_anthropic_rejects_custom_base_urls_when_saving_or_updating(client: TestClient):
+    saved = client.put(
+        "/llm-settings/ANTHROPIC",
+        json={"api_key": "sk-test-1234567890abcdef", "base_url": "https://proxy.example/v1"},
+    )
+    assert saved.status_code == 400
+    assert saved.json()["detail"] == "Anthropic no admite una URL base personalizada."
+
+    credential = _save_key(client, "ANTHROPIC")
+    updated = client.patch(
+        "/llm-settings/ANTHROPIC/model",
+        json={
+            "model": "claude-haiku-4-5",
+            "base_url": "https://proxy.example/v1",
+            "expected_revision": credential["config_revision"],
+        },
+    )
+    assert updated.status_code == 400
+    assert updated.json()["detail"] == "Anthropic no admite una URL base personalizada."
+
+
+def test_historical_anthropic_override_must_be_cleared_before_testing(client: TestClient, monkeypatch):
+    from app.llm import factory
+
+    credential = _save_key(client, "ANTHROPIC")
+    draft = _save_draft(client, "ANTHROPIC", credential["config_revision"], "claude-haiku-4-5")
+    db = SessionLocal()
+    try:
+        stored = db.query(LLMCredential).filter(LLMCredential.provider == LLMProviderName.ANTHROPIC).one()
+        stored.base_url = "https://legacy-proxy.example/v1"
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setattr(factory, "build_provider_from_credential", real_build_provider_from_credential)
+    rejected = client.post(
+        "/llm-settings/ANTHROPIC/test", json={"expected_revision": draft["config_revision"]}
+    )
+    assert rejected.status_code == 502
+    assert rejected.json()["code"] == "LLM_UNSUPPORTED_CONFIGURATION"
+
+    cleared = client.patch(
+        "/llm-settings/ANTHROPIC/model",
+        json={
+            "model": "claude-haiku-4-5",
+            "base_url": "",
+            "expected_revision": draft["config_revision"],
+        },
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["base_url"] == ""
+
+    monkeypatch.setattr(
+        factory,
+        "build_provider_from_credential",
+        lambda saved_credential: _TestProvider(saved_credential.model, saved_credential.base_url),
+    )
+    verified = client.post(
+        "/llm-settings/ANTHROPIC/test",
+        json={"expected_revision": cleared.json()["config_revision"]},
+    )
+    assert verified.status_code == 200
 
 
 def test_a_failed_new_url_is_tested_as_the_saved_draft_and_stays_inactive(

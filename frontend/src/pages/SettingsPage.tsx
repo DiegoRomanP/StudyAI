@@ -198,6 +198,7 @@ function ProviderCard({
   const deleteCredential = useDeleteLlmCredential();
   const test = useTestLlmCredential();
   const isOllama = catalogEntry.provider === "OLLAMA";
+  const supportsCustomBaseUrl = catalogEntry.supports_custom_base_url;
   const ollamaModels = useOllamaModels(isOllama);
 
   const isVerified = credential?.is_verified ?? false;
@@ -344,6 +345,29 @@ function ProviderCard({
     }
   }
 
+  async function handleClearUnsupportedBaseUrl() {
+    setError(null);
+    setTestMessage(null);
+    if (!credential) return;
+    try {
+      const draft = await updateModel.mutateAsync({
+        provider: catalogEntry.provider,
+        payload: {
+          model: resolvedModel,
+          base_url: "",
+          expected_revision: credential.config_revision,
+        },
+      });
+      setSyncedRevision(draft.config_revision);
+      setBaseUrl("");
+      setIsDraftDirty(false);
+      setHasRemoteConflict(false);
+      setTestMessage("URL base personalizada eliminada. Guarda y verifica el modelo para continuar.");
+    } catch (e: unknown) {
+      handleMutationError(e, "No se pudo eliminar la URL base personalizada.");
+    }
+  }
+
   async function handleActivate() {
     setError(null);
     try {
@@ -486,7 +510,7 @@ function ProviderCard({
         </div>
       )}
 
-      {!isOllama && (
+      {!isOllama && supportsCustomBaseUrl && (
         <div>
           <button
             type="button"
@@ -506,6 +530,18 @@ function ProviderCard({
               className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
           )}
+        </div>
+      )}
+
+      {credential?.base_url && !supportsCustomBaseUrl && (
+        <div className="space-y-2 text-sm text-amber-700">
+          <p>
+            Esta configuración conserva una URL base personalizada no compatible: {" "}
+            <span className="font-mono text-xs">{credential.base_url}</span>
+          </p>
+          <Button variant="secondary" onClick={handleClearUnsupportedBaseUrl} disabled={operationPending}>
+            Eliminar URL personalizada
+          </Button>
         </div>
       )}
 

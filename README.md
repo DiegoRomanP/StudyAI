@@ -177,8 +177,10 @@ El flujo de configuración se realiza en cuatro pasos:
 
 Los modelos sugeridos se ordenan con los **gratuitos primero** (marcados
 "— gratis") y los de pago después; "Personalizado…" acepta cualquier ID. En
-"Configuración avanzada" hay un override opcional de URL base (útil, por
-ejemplo, para un endpoint regional de GLM).
+"Configuración avanzada", los proveedores OpenAI-compatible permiten un
+override opcional de URL base (útil, por ejemplo, para un endpoint regional de
+GLM). Anthropic y Ollama no lo admiten: Anthropic usa solo su API nativa y
+Ollama se configura mediante `OLLAMA_BASE_URL` en el servidor.
 
 Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido
 `o4-mini`) reciben `max_completion_tokens`, que abarca razonamiento y salida
@@ -334,7 +336,7 @@ npm run build
 - Las claves que el usuario guarda desde **Configuración** se cifran en
   reposo (Fernet) y nunca se devuelven completas por la API — ver sección
   "Configurar tu propia clave de API" más arriba.
-- El override de `base_url` (URL base personalizada) se valida para evitar
+- Los overrides compatibles de `base_url` (URL base personalizada) se validan para evitar
   SSRF: se resuelve el host y se rechazan direcciones privadas, loopback o de
   enlace local (incluida la IP de metadatos de nube `169.254.169.254`).
 - Los enlaces de YouTube se construyen como **búsqueda** desde palabras clave;

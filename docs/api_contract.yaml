@@ -290,7 +290,7 @@ paths:
               type: object
               properties:
                 api_key: { type: string, nullable: true, description: "Obligatoria salvo para OLLAMA" }
-                base_url: { type: string, description: "Override opcional, p. ej. para un endpoint regional de GLM" }
+                base_url: { type: string, description: "Override opcional para proveedores compatibles; Anthropic y Ollama no lo admiten" }
       responses:
         "200":
           description: OK
@@ -325,7 +325,7 @@ paths:
               required: [model, expected_revision]
               properties:
                 model: { type: string }
-                base_url: { type: string, nullable: true, description: "Omitida o null conserva la URL anterior; cadena vacía restaura la predeterminada" }
+                base_url: { type: string, nullable: true, description: "Omitida o null conserva la URL anterior; cadena vacía restaura la predeterminada; Anthropic y Ollama no admiten overrides" }
                 expected_revision: { type: integer, minimum: 1 }
       responses:
         "200":
@@ -492,6 +492,9 @@ components:
           description: Sugerencia visual del formato de clave de este proveedor (p. ej. "hf_...").
         requires_api_key: { type: boolean }
         supports_model_discovery: { type: boolean }
+        supports_custom_base_url:
+          type: boolean
+          description: Si admite un override de URL base; Anthropic y Ollama no lo admiten.
     LLMCredential:
       type: object
       description: La clave real nunca se expone; solo un fragmento enmascarado.
@@ -512,6 +515,7 @@ components:
         requires_model_selection: { type: boolean }
         requires_api_key: { type: boolean }
         supports_model_discovery: { type: boolean }
+        supports_custom_base_url: { type: boolean }
         created_at: { type: string, format: date-time }
     LLMRuntime:
       type: object
@@ -546,7 +550,7 @@ components:
           description: Mensaje público saneado; no contiene cuerpos upstream ni secretos.
         code:
           type: string
-          enum: [LLM_AUTHENTICATION_FAILED, LLM_ACCESS_DENIED, LLM_QUOTA_EXHAUSTED, LLM_MODEL_UNAVAILABLE, LLM_ENDPOINT_OR_MODEL_UNAVAILABLE, LLM_UNSUPPORTED_REQUEST, LLM_RATE_LIMITED, LLM_TIMEOUT, LLM_CONNECTION_FAILED, LLM_PROVIDER_UNAVAILABLE, LLM_OUTPUT_LIMIT, LLM_REFUSED, LLM_INVALID_RESPONSE, LLM_PROVIDER_ERROR]
+          enum: [LLM_AUTHENTICATION_FAILED, LLM_ACCESS_DENIED, LLM_QUOTA_EXHAUSTED, LLM_MODEL_UNAVAILABLE, LLM_ENDPOINT_OR_MODEL_UNAVAILABLE, LLM_UNSUPPORTED_REQUEST, LLM_UNSUPPORTED_CONFIGURATION, LLM_RATE_LIMITED, LLM_TIMEOUT, LLM_CONNECTION_FAILED, LLM_PROVIDER_UNAVAILABLE, LLM_OUTPUT_LIMIT, LLM_REFUSED, LLM_INVALID_RESPONSE, LLM_PROVIDER_ERROR]
         provider: { type: string, nullable: true }
         upstream_status: { type: integer, nullable: true }
         retryable: { type: boolean }

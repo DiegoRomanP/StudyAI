@@ -151,6 +151,7 @@ export interface ProviderCatalogEntry {
   key_placeholder: string;
   requires_api_key: boolean;
   supports_model_discovery: boolean;
+  supports_custom_base_url: boolean;
 }
 
 export interface LLMCredentialDTO {
@@ -166,6 +167,7 @@ export interface LLMCredentialDTO {
   requires_model_selection: boolean;
   requires_api_key: boolean;
   supports_model_discovery: boolean;
+  supports_custom_base_url: boolean;
   created_at: string;
 }
 
@@ -218,6 +220,7 @@ export type LLMProviderErrorCode =
   | "LLM_RATE_LIMITED"
   | "LLM_REFUSED"
   | "LLM_TIMEOUT"
+  | "LLM_UNSUPPORTED_CONFIGURATION"
   | "LLM_UNSUPPORTED_REQUEST";
 
 export interface LLMProviderErrorDTO {

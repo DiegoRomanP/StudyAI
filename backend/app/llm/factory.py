@@ -22,6 +22,7 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.exceptions import LLMError
 from app.core.logging import get_logger, safe_model_identifier
 from app.core.security import SecretDecryptionError, decrypt_secret
 from app.core.url_safety import assert_safe_outbound_url
@@ -66,6 +67,13 @@ def build_provider_from_credential(
     Raises ``SecretDecryptionError`` if the ciphertext can't be decrypted
     (e.g. ``SECRET_KEY`` was rotated) — callers decide how to degrade.
     """
+    if credential.provider == LLMProviderName.ANTHROPIC and credential.base_url:
+        raise LLMError(
+            "Anthropic no admite una URL base personalizada. Elimínala para usar la API nativa.",
+            code="LLM_UNSUPPORTED_CONFIGURATION",
+            provider=credential.provider.value,
+        )
+
     api_key = decrypt_secret(credential.encrypted_api_key)
     meta = PROVIDER_CATALOG[credential.provider]
 
