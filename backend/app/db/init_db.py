@@ -99,7 +99,11 @@ def _ensure_llm_verification_columns() -> None:
         if invalid_ids:
             for credential_id in invalid_ids:
                 conn.execute(
-                    text("UPDATE llm_credentials SET is_active = 0 WHERE id = :credential_id"),
+                    text(
+                        "UPDATE llm_credentials "
+                        "SET is_active = 0, verified_revision = NULL, verified_at = NULL, "
+                        "verified_fingerprint = NULL WHERE id = :credential_id"
+                    ),
                     {"credential_id": credential_id},
                 )
         conn.execute(

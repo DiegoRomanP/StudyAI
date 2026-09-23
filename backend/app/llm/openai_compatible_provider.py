@@ -13,7 +13,7 @@ request payload (which includes document content), or Authorization headers.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 
 import httpx
 
@@ -55,6 +55,13 @@ class OpenAICompatibleProvider(LLMProvider):
         test_policy: LLMCallPolicy | None = None,
         requires_request_pacing: bool = True,
         provider: str = "OPENAI",
+        payload_builder: Callable[[str, str, str, int], dict] | None = None,
+        response_parser: Callable[[object], str] | None = None,
+        accepted_response_handler: Callable[
+            [httpx.Response, str, LLMCallPolicy, float], Awaitable[str]
+        ]
+        | None = None,
+        retries_post_transient_errors: bool = True,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -69,6 +76,10 @@ class OpenAICompatibleProvider(LLMProvider):
         self._test_policy = test_policy or default_policy
         self.requires_request_pacing = requires_request_pacing
         self._request_profile = request_profile
+        self._payload_builder = payload_builder
+        self._response_parser = response_parser
+        self._accepted_response_handler = accepted_response_handler
+        self._retries_post_transient_errors_value = retries_post_transient_errors
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
@@ -91,7 +102,16 @@ class OpenAICompatibleProvider(LLMProvider):
         context: dict | None = None,
         max_tokens: int = 4096,  # esto se se debe ajustar cuando sea un proveedor externo
     ) -> str:
-        payload = {
+        payload = (
+            self._payload_builder(kind, system, prompt, max_tokens)
+            if self._payload_builder is not None
+            else self._build_payload(kind, system, prompt, max_tokens)
+        )
+        return self._runner.run(self._complete_async(kind, payload))
+
+    def _build_payload(self, kind: str, system: str, prompt: str, max_tokens: int) -> dict:
+        """Build the default OpenAI-compatible payload for generic providers."""
+        return {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": system},
@@ -99,7 +119,6 @@ class OpenAICompatibleProvider(LLMProvider):
             ],
             **self._request_profile.payload_parameters(kind, max_tokens),
         }
-        return self._runner.run(self._complete_async(kind, payload))
 
     async def _complete_async(self, kind: str, payload: dict) -> str:
         policy = self._test_policy if kind == "test" else self._generation_policy
@@ -123,9 +142,17 @@ class OpenAICompatibleProvider(LLMProvider):
                         )
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider)
+                        if response.status_code == httpx.codes.ACCEPTED:
+                            accepted_handler = (
+                                self._accepted_response_handler or self._handle_accepted_response
+                            )
+                            return await accepted_handler(
+                                response, kind, policy, deadline
+                            )
                         response.raise_for_status()
                         data = await asyncio.to_thread(response.json)
-                        text = await asyncio.to_thread(self._extract_text, data)
+                        response_parser = self._response_parser or self._extract_text
+                        text = await asyncio.to_thread(response_parser, data)
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider)
                         return text
@@ -151,7 +178,8 @@ class OpenAICompatibleProvider(LLMProvider):
                                 await asyncio.sleep(wait)
                                 continue
                         if (
-                            mapped_error.retryable
+                            self._retries_post_transient_errors
+                            and mapped_error.retryable
                             and status_code in _RETRYABLE_STATUS_CODES
                             and attempt < policy.max_attempts - 1
                             and (not is_connection_test or transient_retry_attempt < policy.max_attempts - 1)
@@ -169,7 +197,8 @@ class OpenAICompatibleProvider(LLMProvider):
                             raise timeout_error(self._provider)
                         mapped_error = map_transport_error(self._provider, exc)
                         if (
-                            mapped_error.retryable
+                            self._retries_post_transient_errors
+                            and mapped_error.retryable
                             and attempt < policy.max_attempts - 1
                             and (not is_connection_test or transient_retry_attempt < policy.max_attempts - 1)
                         ):
@@ -181,9 +210,34 @@ class OpenAICompatibleProvider(LLMProvider):
                                 await asyncio.sleep(backoff)
                                 continue
                         terminal_error = mapped_error
-                    except LLMError:
+                    except LLMError as exc:
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider) from None
+                        if (
+                            exc.code == "LLM_RATE_LIMITED"
+                            and rate_limit_attempt < policy.max_rate_limit_retries
+                            and (not is_connection_test or transient_retry_attempt < policy.max_attempts - 1)
+                        ):
+                            wait = self._rate_limit_wait_seconds(exc.retry_after_seconds, rate_limit_attempt + 1)
+                            if wait < self._remaining_seconds(deadline):
+                                rate_limit_attempt += 1
+                                transient_retry_attempt += 1
+                                logger.warning("LLM call provider=%s model=%s operation=%s code=%s attempt=%d/%d; retrying in %.1fs", self._provider, safe_model_identifier(self._model), kind, exc.code, rate_limit_attempt, policy.max_rate_limit_retries, wait)
+                                await asyncio.sleep(wait)
+                                continue
+                        if (
+                            exc.retryable
+                            and exc.code != "LLM_RATE_LIMITED"
+                            and attempt < policy.max_attempts - 1
+                            and (not is_connection_test or transient_retry_attempt < policy.max_attempts - 1)
+                        ):
+                            backoff = 2 ** (attempt + 1)
+                            if backoff < self._remaining_seconds(deadline):
+                                attempt += 1
+                                transient_retry_attempt += 1
+                                logger.warning("LLM call provider=%s model=%s operation=%s code=%s attempt=%d/%d; retrying in %ss", self._provider, safe_model_identifier(self._model), kind, exc.code, attempt + 1, policy.max_attempts, backoff)
+                                await asyncio.sleep(backoff)
+                                continue
                         raise
                     except ValueError:
                         if self._remaining_seconds(deadline) <= 0:
@@ -216,6 +270,21 @@ class OpenAICompatibleProvider(LLMProvider):
             min(policy.read_timeout_seconds, remaining),
             connect=min(policy.connect_timeout_seconds, remaining),
         )
+
+    @property
+    def _retries_post_transient_errors(self) -> bool:
+        """Whether retrying an uncertain POST cannot duplicate provider work."""
+        return self._retries_post_transient_errors_value
+
+    async def _handle_accepted_response(
+        self,
+        response: httpx.Response,
+        kind: str,
+        policy: LLMCallPolicy,
+        deadline: float,
+    ) -> str:
+        """Handle HTTP 202 for providers that document an async result protocol."""
+        raise invalid_response_error(self._provider)
 
     def test_connection(self) -> None:
         """Raise ``LLMError`` if the key/model/base_url don't actually work.

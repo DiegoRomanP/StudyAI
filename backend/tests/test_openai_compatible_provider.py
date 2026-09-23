@@ -1,6 +1,7 @@
-"""Tests for OpenAICompatibleProvider — the shared adapter behind OpenAI, GLM,
-OpenRouter and NVIDIA NIM. The outbound HTTP call is mocked with respx: no
-real network access, no API cost, fully deterministic.
+"""Tests for the generic OpenAI-compatible adapter.
+
+The outbound HTTP call is mocked with respx: no real network access, no API
+cost, fully deterministic.
 """
 
 import httpx
@@ -14,12 +15,10 @@ import traceback
 from app.core.exceptions import LLMError
 from app.core.config import LLMCallPolicy
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
-from app.llm.request_profiles import (
-    OLLAMA_CHAT_PROFILE,
-    STANDARD_CHAT_PROFILE,
-    resolve_request_profile,
-)
-from app.models.llm_credential import LLMProviderName
+from app.llm.providers.ollama import OLLAMA_CHAT_PROFILE
+from app.llm.providers.openai import definition as openai_definition
+from app.llm.providers.huggingface import definition as huggingface_definition
+from app.llm.request_profiles import STANDARD_CHAT_PROFILE
 
 BASE_URL = "https://api.example.com/v1"
 ORIGINAL_ASYNCIO_SLEEP = asyncio.sleep
@@ -90,7 +89,7 @@ def test_openai_o_series_uses_max_completion_tokens_only():
         base_url=BASE_URL,
         api_key="test-key",
         model="o4-mini",
-        request_profile=resolve_request_profile(LLMProviderName.OPENAI, "o4-mini"),
+        request_profile=openai_definition.request_profile("o4-mini"),
     )
 
     provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
@@ -105,18 +104,16 @@ def test_openai_o_series_uses_max_completion_tokens_only():
 
 
 @respx.mock
-def test_nvidia_uses_the_standard_max_tokens_profile():
+def test_hugging_face_uses_the_standard_max_tokens_profile():
     route = respx.post(f"{BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(200, json=_successful_response("ok"))
     )
     provider = OpenAICompatibleProvider(
         base_url=BASE_URL,
         api_key="test-key",
-        model="meta/llama-3.1-70b-instruct",
-        provider="NVIDIA",
-        request_profile=resolve_request_profile(
-            LLMProviderName.NVIDIA, "meta/llama-3.1-70b-instruct"
-        ),
+        model="zai-org/GLM-5.2",
+        provider="HUGGINGFACE",
+        request_profile=huggingface_definition.request_profile("zai-org/GLM-5.2"),
     )
 
     provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
@@ -132,7 +129,7 @@ def test_nvidia_uses_the_standard_max_tokens_profile():
 
 @pytest.mark.parametrize("model", ["my-gateway-model", "o4-custom-deployment"])
 def test_unknown_openai_model_uses_the_conservative_standard_profile(model):
-    profile = resolve_request_profile(LLMProviderName.OPENAI, model)
+    profile = openai_definition.request_profile(model)
 
     assert profile.token_limit_parameter == "max_tokens"
 
@@ -327,6 +324,8 @@ def test_connection_test_shares_one_retry_budget_across_429_and_5xx():
 
 def test_response_parsing_cannot_exceed_the_total_budget(monkeypatch):
     class Response:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 

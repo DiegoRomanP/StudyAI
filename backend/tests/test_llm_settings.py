@@ -99,10 +99,12 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "OPENAI": True,
         "GLM": True,
         "OPENROUTER": True,
-        "NVIDIA": True,
+        "NVIDIA": False,
         "HUGGINGFACE": True,
         "OLLAMA": False,
     }
+    custom_models = {entry["provider"]: entry["allows_custom_model"] for entry in response.json()}
+    assert custom_models["NVIDIA"] is False
 
 
 def test_saving_a_key_keeps_the_model_selector_available(client: TestClient):
@@ -114,20 +116,19 @@ def test_saving_a_key_keeps_the_model_selector_available(client: TestClient):
     assert credential["is_active"] is False
 
 
-def test_failing_catalog_model_does_not_block_another_model_with_same_key(client: TestClient):
+def test_nvidia_rejects_an_unsupported_model_without_replacing_the_key(client: TestClient):
     credential = _save_key(client, "NVIDIA")
-    failed_draft = _save_draft(client, "NVIDIA", credential["config_revision"], "unavailable-model")
-
-    failed_test = client.post(
-        "/llm-settings/NVIDIA/test",
-        json={"expected_revision": failed_draft["config_revision"]},
+    rejected = client.patch(
+        "/llm-settings/NVIDIA/model",
+        json={"model": "nvidia/gliner-pii", "expected_revision": credential["config_revision"]},
     )
-    assert failed_test.status_code == 502
+    assert rejected.status_code == 400
+    assert "no es compatible" in rejected.json()["detail"]
 
     persisted = next(
         item for item in client.get("/llm-settings").json() if item["provider"] == "NVIDIA"
     )
-    assert persisted["model"] == "unavailable-model"
+    assert persisted["model"] == ""
     assert persisted["is_verified"] is False
 
     working_draft = _save_draft(
@@ -137,6 +138,19 @@ def test_failing_catalog_model_does_not_block_another_model_with_same_key(client
 
     assert verified["model"] == "meta/llama-3.1-70b-instruct"
     assert verified["is_verified"] is True
+
+
+def test_nvidia_rejects_a_custom_base_url(client: TestClient):
+    response = client.put(
+        "/llm-settings/NVIDIA",
+        json={
+            "api_key": "nvapi-1234567890abcdef",
+            "base_url": "https://integrate.api.nvidia.com/v1",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "no admite una URL base personalizada" in response.json()["detail"]
 
 
 def test_authentication_failure_revokes_only_the_tested_credential(client: TestClient):
@@ -194,7 +208,8 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
 )
 def test_non_authentication_failures_do_not_revoke_verification(client: TestClient, provider: str, code: str):
     credential = _save_key(client, provider)
-    draft = _save_draft(client, provider, credential["config_revision"], "test-model")
+    model = "meta/llama-3.3-70b-instruct" if provider == "NVIDIA" else "test-model"
+    draft = _save_draft(client, provider, credential["config_revision"], model)
     verified = _verify(client, provider, draft["config_revision"])
     assert client.post(
         f"/llm-settings/{provider}/activate", json={"expected_revision": verified["config_revision"]}

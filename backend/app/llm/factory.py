@@ -1,8 +1,7 @@
 """Selects the LLM provider for a given user.
 
 Priority order:
-    1. The user's active ``LLMCredential`` (configured via the settings UI) —
-       any of the 5 supported providers.
+    1. The user's active ``LLMCredential`` configured through the settings UI.
     2. The operator-level ``ANTHROPIC_API_KEY`` from ``.env`` (legacy path,
        unchanged, keeps existing deployments working with zero migration).
     3. ``MockLLMProvider`` — the deterministic offline fallback that makes the
@@ -25,13 +24,10 @@ from app.core.config import get_settings
 from app.core.exceptions import LLMError
 from app.core.logging import get_logger, safe_model_identifier
 from app.core.security import SecretDecryptionError, decrypt_secret
-from app.core.url_safety import assert_safe_outbound_url
 from app.llm.base import LLMProvider
 from app.llm.credential_state import is_verified
 from app.llm.mock_provider import MockLLMProvider
-from app.llm.openai_compatible_provider import OpenAICompatibleProvider
-from app.llm.providers_catalog import PROVIDER_CATALOG
-from app.llm.request_profiles import resolve_request_profile
+from app.llm.provider_registry import get_provider_definition
 from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
 
@@ -67,59 +63,23 @@ def build_provider_from_credential(
     Raises ``SecretDecryptionError`` if the ciphertext can't be decrypted
     (e.g. ``SECRET_KEY`` was rotated) — callers decide how to degrade.
     """
-    if credential.provider == LLMProviderName.ANTHROPIC and credential.base_url:
+    api_key = decrypt_secret(credential.encrypted_api_key)
+    definition = get_provider_definition(credential.provider)
+    model = model_override or credential.model or definition.meta.default_model
+    try:
+        definition.validate_model(model)
+        # Re-check custom URLs immediately before runtime use to reduce the
+        # DNS-rebinding window after a draft was saved.
+        definition.validate_base_url(credential.base_url)
+        return definition.build_provider(credential, api_key=api_key, model=model)
+    except Exception as exc:
+        if isinstance(exc, LLMError):
+            raise
         raise LLMError(
-            "Anthropic no admite una URL base personalizada. Elimínala para usar la API nativa.",
+            "La configuracion guardada no es compatible con este proveedor.",
             code="LLM_UNSUPPORTED_CONFIGURATION",
             provider=credential.provider.value,
-        )
-
-    api_key = decrypt_secret(credential.encrypted_api_key)
-    meta = PROVIDER_CATALOG[credential.provider]
-
-    if credential.provider == LLMProviderName.ANTHROPIC:
-        from app.llm.anthropic_provider import AnthropicProvider
-
-        return AnthropicProvider(
-            api_key=api_key, model=model_override or credential.model or meta.default_model
-        )
-
-    model = model_override or credential.model or meta.default_model
-    request_profile = resolve_request_profile(credential.provider, model)
-    settings = get_settings()
-    if credential.provider == LLMProviderName.OLLAMA:
-        return OpenAICompatibleProvider(
-            base_url=f"{settings.OLLAMA_BASE_URL.rstrip('/')}/v1",
-            api_key=None,
-            model=model,
-            timeout=settings.OLLAMA_TIMEOUT_SECONDS,
-            max_retries=settings.OLLAMA_MAX_RETRIES,
-            max_rate_limit_retries=0,
-            generation_policy=settings.ollama_policy,
-            test_policy=settings.ollama_policy,
-            requires_request_pacing=False,
-            request_profile=request_profile,
-            provider=credential.provider.value,
-        )
-
-    if credential.base_url:
-        # Re-check right before use (not just at save time) to shrink the
-        # window for a DNS-rebinding SSRF attempt — the hostname could now
-        # resolve differently than when the user first saved it.
-        assert_safe_outbound_url(credential.base_url)
-    base_url = credential.base_url or meta.default_base_url
-    return OpenAICompatibleProvider(
-        base_url=base_url,
-        api_key=api_key,
-        model=model,
-        timeout=settings.LLM_TIMEOUT_SECONDS,
-        max_retries=settings.LLM_MAX_RETRIES,
-        max_rate_limit_retries=settings.LLM_MAX_RATE_LIMIT_RETRIES,
-        generation_policy=settings.external_generation_policy,
-        test_policy=settings.external_test_policy,
-        request_profile=request_profile,
-        provider=credential.provider.value,
-    )
+        ) from exc
 
 
 def resolve_llm_provider(db: Session, user_id: int) -> ProviderResolution:

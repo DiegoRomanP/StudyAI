@@ -59,6 +59,7 @@ class LLMCredentialResponse(BaseModel):
     requires_api_key: bool
     supports_model_discovery: bool
     supports_custom_base_url: bool
+    allows_custom_model: bool
     created_at: datetime
 
     @classmethod
@@ -78,6 +79,7 @@ class LLMCredentialResponse(BaseModel):
             requires_api_key=meta.requires_api_key,
             supports_model_discovery=meta.supports_model_discovery,
             supports_custom_base_url=meta.supports_custom_base_url,
+            allows_custom_model=meta.allows_custom_model,
             created_at=credential.created_at,
         )
 
@@ -98,6 +100,7 @@ class ProviderCatalogEntry(BaseModel):
     requires_api_key: bool
     supports_model_discovery: bool
     supports_custom_base_url: bool
+    allows_custom_model: bool
 
 
 class OllamaModelResponse(BaseModel):

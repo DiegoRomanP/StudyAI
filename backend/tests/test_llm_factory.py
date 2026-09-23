@@ -18,11 +18,11 @@ from app.llm.anthropic_provider import AnthropicProvider
 from app.llm.factory import build_provider_from_credential, get_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
-from app.llm.request_profiles import (
-    OLLAMA_CHAT_PROFILE,
-    OPENAI_O_SERIES_PROFILE,
-    STANDARD_CHAT_PROFILE,
-)
+from app.llm.nvidia_provider import NvidiaNimProvider
+from app.llm.openrouter_provider import OpenRouterProvider
+from app.llm.providers.ollama import OLLAMA_CHAT_PROFILE
+from app.llm.providers.openai import OPENAI_O_SERIES_PROFILE
+from app.llm.request_profiles import STANDARD_CHAT_PROFILE
 from app.models.llm_credential import LLMCredential, LLMProviderName
 
 DEMO_USER_ID = 1
@@ -37,6 +37,7 @@ def client():
 @pytest.fixture(autouse=True)
 def successful_connection_test(monkeypatch):
     monkeypatch.setattr(OpenAICompatibleProvider, "test_connection", lambda self: None)
+    monkeypatch.setattr(NvidiaNimProvider, "test_connection", lambda self: None)
     monkeypatch.setattr(AnthropicProvider, "test_connection", lambda self: None)
 
 
@@ -104,7 +105,6 @@ def test_active_openai_o_series_credential_uses_its_request_profile(client: Test
     ("provider_name", "model", "url", "token_limit_parameter"),
     [
         ("OPENAI", "o4-mini", "https://api.openai.com/v1/chat/completions", "max_completion_tokens"),
-        ("NVIDIA", "meta/llama-3.1-70b-instruct", "https://integrate.api.nvidia.com/v1/chat/completions", "max_tokens"),
         ("OLLAMA", "qwen3.5:9b", "http://127.0.0.1:11434/v1/chat/completions", "max_tokens"),
     ],
 )
@@ -138,6 +138,18 @@ def test_factory_profile_controls_the_final_transport_payload(
     assert other_token_limit not in payload
     assert "reasoning_effort" not in payload
     assert set(payload) == {"model", "messages", token_limit_parameter}
+
+
+def test_active_nvidia_credential_builds_the_dedicated_provider(client: TestClient):
+    _configure_and_activate(client, "NVIDIA", "meta/llama-3.3-70b-instruct")
+
+    provider = _provider_for_demo_user()
+    try:
+        assert isinstance(provider, NvidiaNimProvider)
+        assert provider._model == "meta/llama-3.3-70b-instruct"
+        assert str(provider._client.base_url).rstrip("/") == "https://integrate.api.nvidia.com/v1"
+    finally:
+        provider.close()
 
 
 def test_custom_openai_deployment_uses_standard_profile(client: TestClient, monkeypatch):
@@ -205,7 +217,7 @@ def test_active_openrouter_credential_uses_custom_base_url_override(client: Test
     )
 
     provider = _provider_for_demo_user()
-    assert isinstance(provider, OpenAICompatibleProvider)
+    assert isinstance(provider, OpenRouterProvider)
     assert str(provider._client.base_url).rstrip("/") == "https://my-openrouter-proxy.example.com/v1"
 
 

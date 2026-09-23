@@ -39,6 +39,43 @@ def test_legacy_active_credentials_are_migrated_as_unverified_and_inactive(monke
     assert row == (1, None, 0)
 
 
+def test_outdated_nvidia_contract_evidence_is_cleared(monkeypatch, tmp_path):
+    from app.db import init_db
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'nvidia_contract.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE llm_credentials ("
+                "id INTEGER PRIMARY KEY, user_id INTEGER, provider VARCHAR(32), "
+                "encrypted_api_key TEXT, key_preview VARCHAR(32), model VARCHAR(128), "
+                "base_url VARCHAR(512), is_active BOOLEAN, config_revision INTEGER, "
+                "verified_revision INTEGER, verified_at DATETIME, verified_fingerprint VARCHAR(64))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO llm_credentials "
+                "(id, user_id, provider, encrypted_api_key, key_preview, model, base_url, is_active, "
+                "config_revision, verified_revision, verified_at, verified_fingerprint) "
+                "VALUES (1, 1, 'NVIDIA', 'ciphertext', 'nvapi-...test', "
+                "'meta/llama-3.3-70b-instruct', '', 1, 1, 1, CURRENT_TIMESTAMP, 'old-contract')"
+            )
+        )
+
+    monkeypatch.setattr(init_db, "engine", engine)
+    init_db._ensure_llm_verification_columns()
+
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT is_active, verified_revision, verified_at, verified_fingerprint "
+                "FROM llm_credentials WHERE id = 1"
+            )
+        ).one()
+    assert row == (0, None, None, None)
+
+
 def test_legacy_plans_get_the_error_message_column(monkeypatch, tmp_path):
     from app.db import init_db
 

@@ -8,30 +8,25 @@ from __future__ import annotations
 
 from hashlib import sha256
 
-from app.core.config import get_settings
-from app.llm.providers_catalog import PROVIDER_CATALOG
-from app.llm.request_profiles import resolve_request_profile
-from app.models.llm_credential import LLMCredential, LLMProviderName
+from app.llm.provider_registry import get_provider_definition
+from app.models.llm_credential import LLMCredential
 
 
 def effective_base_url(credential: LLMCredential) -> str:
     """Return the exact base URL used when building this credential's provider."""
-    if credential.provider == LLMProviderName.OLLAMA:
-        return f"{get_settings().OLLAMA_BASE_URL.rstrip('/')}/v1"
-    return credential.base_url or PROVIDER_CATALOG[credential.provider].default_base_url or ""
+    return get_provider_definition(credential.provider).effective_base_url(credential)
 
 
 def verification_fingerprint(credential: LLMCredential) -> str:
     """Hash the configuration that a successful connection test proves."""
-    request_profile = resolve_request_profile(credential.provider, credential.model)
+    definition = get_provider_definition(credential.provider)
     payload = "\x1f".join(
         (
             credential.provider.value,
             str(credential.config_revision),
             credential.model,
             effective_base_url(credential).rstrip("/"),
-            request_profile.identifier,
-            request_profile.version,
+            *definition.verification_contract(credential.model),
         )
     )
     return sha256(payload.encode("utf-8")).hexdigest()

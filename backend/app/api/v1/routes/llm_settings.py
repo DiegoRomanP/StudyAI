@@ -46,6 +46,7 @@ def get_provider_catalog() -> list[ProviderCatalogEntry]:
             requires_api_key=meta.requires_api_key,
             supports_model_discovery=meta.supports_model_discovery,
             supports_custom_base_url=meta.supports_custom_base_url,
+            allows_custom_model=meta.allows_custom_model,
         )
         for meta in PROVIDER_CATALOG.values()
     ]

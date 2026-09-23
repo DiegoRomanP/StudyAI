@@ -14,12 +14,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ConflictError, LLMError, NotFoundError, ValidationError
 from app.core.security import SecretDecryptionError, encrypt_secret, mask_secret
-from app.core.config import get_settings
-from app.core.url_safety import assert_safe_outbound_url
 from app.llm.credential_state import is_verified, verification_fingerprint
 from app.llm.factory import LLMRuntimeState, resolve_llm_provider
-from app.llm.ollama_client import OllamaClient, OllamaModel
-from app.llm.providers_catalog import PROVIDER_CATALOG
+from app.llm.ollama_client import OllamaModel
+from app.llm.provider_registry import get_provider_definition
 from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
 
@@ -49,8 +47,8 @@ class LLMSettingsService:
     ) -> LLMCredential:
         """Set or replace a provider API key without testing a guessed model."""
         api_key = (api_key or "").strip()
-        if provider != LLMProviderName.OLLAMA and len(api_key) < 8:
-            raise ValidationError("La clave de API no es válida (demasiado corta).")
+        definition = get_provider_definition(provider)
+        definition.validate_api_key(api_key)
 
         base_url = base_url.strip()
         self._validate_base_url(provider, base_url)
@@ -109,6 +107,7 @@ class LLMSettingsService:
         model = model.strip()
         if not model:
             raise ValidationError("Debes indicar un modelo.")
+        get_provider_definition(provider).validate_model(model)
 
         resolved_base_url = credential.base_url if base_url is None else base_url.strip()
         self._validate_base_url(provider, resolved_base_url)
@@ -215,16 +214,10 @@ class LLMSettingsService:
         return verified
 
     def list_ollama_models(self, provider: LLMProviderName) -> list[OllamaModel]:
-        if provider != LLMProviderName.OLLAMA:
+        list_models = getattr(get_provider_definition(provider), "list_models", None)
+        if not callable(list_models):
             raise ValidationError("Solo Ollama permite descubrir modelos instalados.")
-        settings = get_settings()
-        client = OllamaClient(
-            base_url=settings.OLLAMA_BASE_URL, timeout=settings.OLLAMA_TIMEOUT_SECONDS
-        )
-        try:
-            return client.list_local_models()
-        finally:
-            client.close()
+        return list_models()
 
     def _get_owned(self, user_id: int, provider: LLMProviderName) -> LLMCredential:
         credential = self.repo.find_for_user_and_provider(user_id, provider)
@@ -234,13 +227,7 @@ class LLMSettingsService:
 
     @staticmethod
     def _validate_base_url(provider: LLMProviderName, base_url: str) -> None:
-        if not base_url:
-            return
-        if provider == LLMProviderName.OLLAMA:
-            raise ValidationError("La URL de Ollama se configura en OLLAMA_BASE_URL del servidor.")
-        if not PROVIDER_CATALOG[provider].supports_custom_base_url:
-            raise ValidationError("Anthropic no admite una URL base personalizada.")
-        assert_safe_outbound_url(base_url)
+        get_provider_definition(provider).validate_base_url(base_url)
 
     @staticmethod
     def _invalidate_verification(credential: LLMCredential) -> None:
