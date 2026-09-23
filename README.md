@@ -161,6 +161,21 @@ Zai...). Modelos sugeridos por defecto: `zai-org/GLM-5.2`,
 cualquier proveedor, "Personalizado…" acepta cualquier otro ID de modelo del
 Hub que Inference Providers sirva.
 
+Para NVIDIA NIM, StudyAI usa siempre `https://integrate.api.nvidia.com/v1` y
+solo admite modelos generativos cuyo contrato está validado en el servidor:
+`meta/llama-3.3-70b-instruct`, `meta/llama-3.1-70b-instruct`,
+`deepseek-ai/deepseek-v4-flash` y `nvidia/nemotron-3-super-120b-a12b`. NVIDIA
+no ofrece campos de URL ni de modelo personalizado: su catálogo también
+incluye clasificadores, guardas y extractores que no sirven para generar planes.
+
+Internamente, cada proveedor posee su contrato en `backend/app/llm/providers/`:
+metadatos de la UI, validacion de clave/modelo/URL, perfil de solicitud,
+construccion del adaptador y version de verificacion. `provider_registry.py` los
+ensambla; el transporte HTTP, presupuestos y errores seguros se comparten para
+evitar duplicar logica de reintentos. Para incorporar un proveedor nuevo, agrega
+su definicion, registrala y cubrela con pruebas de contrato en lugar de anadir
+condicionales a la factoria o al servicio de configuracion.
+
 El flujo de configuración se realiza en cuatro pasos:
 
 1. **Guardar clave.** La API key se cifra y se guarda sin probar un modelo
@@ -176,17 +191,20 @@ El flujo de configuración se realiza en cuatro pasos:
    conflicto y no activa una configuración diferente de la probada.
 
 Los modelos sugeridos se ordenan con los **gratuitos primero** (marcados
-"— gratis") y los de pago después; "Personalizado…" acepta cualquier ID. En
-"Configuración avanzada", los proveedores OpenAI-compatible permiten un
-override opcional de URL base (útil, por ejemplo, para un endpoint regional de
-GLM). Anthropic y Ollama no lo admiten: Anthropic usa solo su API nativa y
-Ollama se configura mediante `OLLAMA_BASE_URL` en el servidor.
+"— gratis") y los de pago después. Los proveedores que lo permiten ofrecen
+"Personalizado…" para cualquier ID; NVIDIA queda limitado a su lista validada.
+En "Configuración avanzada", OpenAI, GLM, OpenRouter y Hugging Face permiten
+un override opcional de URL base (útil, por ejemplo, para un endpoint regional
+de GLM). Anthropic, NVIDIA y Ollama no lo admiten: Anthropic usa solo su API
+nativa, NVIDIA su endpoint hospedado oficial y Ollama se configura mediante
+`OLLAMA_BASE_URL` en el servidor.
 
 Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido
 `o4-mini`) reciben `max_completion_tokens`, que abarca razonamiento y salida
-visible. Los demás proveedores OpenAI-compatible, incluido NVIDIA y Ollama,
-mantienen `max_tokens`; un ID personalizado usa ese perfil conservador hasta
-que se confirme su contrato. El perfil también define las capacidades de
+visible. Los adaptadores de NVIDIA y Ollama mantienen `max_tokens`; NVIDIA
+además fija `stream: false`, limita cada modelo a su máximo validado y no repite
+un POST tras una respuesta `202`. Un ID personalizado usa el perfil conservador
+hasta que se confirme su contrato. El perfil también define las capacidades de
 formato de respuesta: Ollama usa JSON estructurado solo para las operaciones
 que lo requieren y no recibe `reasoning_effort` no confirmado.
 

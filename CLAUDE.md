@@ -174,19 +174,27 @@ Provider construction is cheap (an SDK/httpx client, no network I/O), so — unl
 change at runtime. `PlanService._Generator` builds it in `run()` (after loading the `Plan`, so
 `plan.user_id` is known), not in `__init__`.
 
-**One class serves 5 of the 6 providers**: OpenAI, GLM (Zhipu), OpenRouter, NVIDIA NIM and Hugging
-Face (Inference Providers' router, `https://router.huggingface.co/v1`) all speak the same
-OpenAI-compatible `/chat/completions` shape, so `OpenAICompatibleProvider`
-(`app/llm/openai_compatible_provider.py`, built on raw `httpx`, no `openai` SDK dependency) handles
-all five — only `base_url`/`model`/key differ, sourced from `PROVIDER_CATALOG`
-(`app/llm/providers_catalog.py`, the single source of truth for provider metadata, also served
-verbatim to the frontend via `GET /llm-settings/catalog`). Only Anthropic gets its own class
-(native SDK). Unlike the `.env` path (which splits Opus-for-plan / Haiku-for-quiz via
+`OpenAICompatibleProvider` (`app/llm/openai_compatible_provider.py`, built on raw `httpx`, no
+`openai` SDK dependency) serves the generic OpenAI-compatible providers: OpenAI, GLM (Zhipu) and
+Hugging Face (Inference Providers' router, `https://router.huggingface.co/v1`). OpenRouter uses
+its direct adapter, NVIDIA NIM uses `NvidiaNimProvider` and Anthropic uses its native SDK adapter.
+Each provider owns its metadata, configuration validation, request profile, runtime construction and
+verification contract under `app/llm/providers/`; `app/llm/provider_registry.py` is the sole assembly
+point. `PROVIDER_CATALOG` is a compatibility view derived from that registry and is served to the frontend
+via `GET /llm-settings/catalog`. Keep transport/retry/error primitives shared, but do not add vendor branches
+to the factory, settings service, profile resolver, or verification fingerprint. Unlike the `.env` path (which splits Opus-for-plan / Haiku-for-quiz via
 `AnthropicProvider._model_for`), a user-configured credential always uses **one fixed model for
-every call kind** — simpler UX, deliberate product decision, not an oversight. Adding Hugging Face
-required zero new provider code (only a `PROVIDER_CATALOG` entry + a new `LLMProviderName` member) —
-that's the payoff of this pattern; keep new OpenAI-compatible providers on this same path rather
-than writing a dedicated class.
+every call kind** — simpler UX, deliberate product decision, not an oversight. Adding a provider requires
+its own definition, registry entry, `LLMProviderName` member/database migration, and contract tests.
+
+**NVIDIA NIM is deliberately not generic**: its public catalog includes non-generative APIs, and
+hosted asynchronous responses can return `202` after accepting billable work. The source-controlled
+`app/llm/nvidia_models.py` registry is the authorization boundary for NVIDIA models and stores the
+payload contract, output limit and verification version per model. `NvidiaNimProvider` fixes the
+hosted endpoint to `https://integrate.api.nvidia.com/v1`, sends `stream: false`, disallows custom
+model IDs and URLs, and polls the documented NVCF status endpoint without ever reissuing the POST.
+If NVCF returns metadata instead of a completion, it raises `LLM_ASYNC_RESULT_UNAVAILABLE`; never
+guess a retrieval endpoint or retry the original request.
 
 **Hugging Face's catalog is a token, not the whole story**: `HF_TOKEN` (HF's own naming) is what the
 user pastes as this provider's "API key" — same BYO-key flow as every other provider, no special
@@ -211,8 +219,8 @@ if you add or reorder entries. `ProviderMeta.key_placeholder` (default `"sk-..."
 provider e.g. `"nvapi-..."` for NVIDIA, `"hf_..."` for Hugging Face) is UI-only — it's the input's
 placeholder text in `SettingsPage.tsx`, not validated against.
 
-**`base_url` is an SSRF surface**: `ProviderMeta.supports_custom_base_url` is false for Anthropic
-and Ollama; never accept an override for them. Anthropic historical overrides must fail with
+**`base_url` is an SSRF surface**: `ProviderMeta.supports_custom_base_url` is false for Anthropic,
+NVIDIA and Ollama; never accept an override for them. Anthropic historical overrides must fail with
 `LLM_UNSUPPORTED_CONFIGURATION` before the SDK is constructed, so the user can explicitly clear
 the stored value. For supported OpenAI-compatible providers, it is a free-text override that ends up as the
 `base_url` of a real outbound `httpx.Client`. `app/core/url_safety.py::assert_safe_outbound_url`
@@ -260,9 +268,10 @@ completely invisible to the user. Keep `error_message` on `PlanResponse` and kee
 key, dead/retired model, rate limit, etc.) without reading server logs.
 
 **Model changes never inherit verification evidence.** `update_model` stays a no-network draft
-write so users can recover from unavailable NVIDIA or provider models, but it invalidates the prior
-revision atomically. The UI then tests the saved draft and only enables activation after the server
-returns matching evidence. Catalog entries remain suggestions, not an authorization guarantee.
+write so users can recover from unavailable models, but it invalidates the prior revision atomically.
+The UI then tests the saved draft and only enables activation after the server returns matching
+evidence. Catalog entries remain suggestions for generic providers; NVIDIA's curated registry is an
+enforced authorization boundary.
 
 ### Config
 

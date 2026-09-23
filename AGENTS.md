@@ -60,6 +60,8 @@ npm run build
 - Plan and goal deletion explicitly removes `FlashcardReview` rows; SQLite foreign-key cascades are not relied upon.
 - Authentication is not implemented; requests use the fixed demo user `id=1`.
 - LLM credentials use revisioned phases: save/replace key -> save model/URL draft -> test that stored revision -> activate it. A non-empty model is not verification; activation requires current server evidence and encrypted keys must never leave the server.
+- Provider-specific metadata, validation, request profiles, construction, and verification versions belong in `backend/app/llm/providers/`; register a definition in `provider_registry.py` instead of adding provider branches to factory, settings, or credential-state code.
+- NVIDIA NIM is a dedicated hosted adapter: use only the source-controlled model registry and official fixed endpoint; never accept custom NVIDIA models or base URLs, and never repeat a POST after its `202` response.
 - Custom LLM `base_url` values must pass `app/core/url_safety.py` both when saved and before use; do not replace it with a string-prefix check.
 - YouTube resources must remain search URLs built from LLM keywords; never render an LLM-provided URL directly.
 
