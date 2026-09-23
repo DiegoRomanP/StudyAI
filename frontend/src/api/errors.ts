@@ -7,6 +7,7 @@ type ApiErrorPayload = Partial<LLMProviderErrorDTO> & { detail?: unknown };
 
 const LLM_ERROR_CODES = new Set<LLMProviderErrorCode>([
   "LLM_ACCESS_DENIED",
+  "LLM_ASYNC_RESULT_UNAVAILABLE",
   "LLM_AUTHENTICATION_FAILED",
   "LLM_CONNECTION_FAILED",
   "LLM_ENDPOINT_OR_MODEL_UNAVAILABLE",

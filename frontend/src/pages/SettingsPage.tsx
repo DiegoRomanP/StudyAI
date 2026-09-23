@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getApiErrorMessage } from "../api/errors";
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../api/types";
@@ -199,6 +199,7 @@ function ProviderCard({
   const test = useTestLlmCredential();
   const isOllama = catalogEntry.provider === "OLLAMA";
   const supportsCustomBaseUrl = catalogEntry.supports_custom_base_url;
+  const allowsCustomModel = catalogEntry.allows_custom_model;
   const ollamaModels = useOllamaModels(isOllama);
 
   const isVerified = credential?.is_verified ?? false;
@@ -215,7 +216,7 @@ function ProviderCard({
   const initialModel = credential?.model || catalogEntry.default_model;
   const initialIsCommon = modelOptions.some((m) => m.id === initialModel);
   const [modelChoice, setModelChoice] = useState(
-    initialIsCommon ? initialModel : CUSTOM_MODEL_VALUE,
+    initialIsCommon || !allowsCustomModel ? catalogEntry.default_model : CUSTOM_MODEL_VALUE,
   );
   const [customModel, setCustomModel] = useState(initialIsCommon ? "" : initialModel);
   const [showAdvanced, setShowAdvanced] = useState(Boolean(credential?.base_url));
@@ -223,11 +224,12 @@ function ProviderCard({
   const [syncedRevision, setSyncedRevision] = useState(credential?.config_revision);
   const [isDraftDirty, setIsDraftDirty] = useState(false);
   const [hasRemoteConflict, setHasRemoteConflict] = useState(false);
+  const isSavingLocalDraft = useRef(false);
 
   function syncDraft(source: LLMCredentialDTO) {
     const savedModel = source.model || catalogEntry.default_model;
     const savedIsCommon = modelOptions.some((model) => model.id === savedModel);
-    setModelChoice(savedIsCommon ? savedModel : CUSTOM_MODEL_VALUE);
+    setModelChoice(savedIsCommon || !allowsCustomModel ? catalogEntry.default_model : CUSTOM_MODEL_VALUE);
     setCustomModel(savedIsCommon ? "" : savedModel);
     setBaseUrl(source.base_url);
     setSyncedRevision(source.config_revision);
@@ -238,13 +240,17 @@ function ProviderCard({
   useEffect(() => {
     if (!credential) return;
     if (credential.config_revision === syncedRevision) return;
+    if (isSavingLocalDraft.current) return;
     if (isDraftDirty) {
       setHasRemoteConflict(true);
       return;
     }
     syncDraft(credential);
-  }, [credential?.config_revision]);
+  }, [credential?.config_revision, isDraftDirty, syncedRevision]);
   const resolvedModel = modelChoice === CUSTOM_MODEL_VALUE ? customModel.trim() : modelChoice;
+  const hasUnsupportedStoredModel = Boolean(
+    credential?.model && !modelOptions.some((model) => model.id === credential.model) && !allowsCustomModel,
+  );
   const showKeyForm = catalogEntry.requires_api_key && (!credential || changingKey);
   const operationPending =
     save.isPending ||
@@ -301,10 +307,16 @@ function ProviderCard({
           provider: catalogEntry.provider,
           payload: {},
         }));
+      const expectedRevision = credential
+        ? (syncedRevision ?? credential.config_revision)
+        : savedCredential.config_revision;
+      isSavingLocalDraft.current = true;
       const draft = await updateModel.mutateAsync({
         provider: catalogEntry.provider,
-        payload: { model: resolvedModel, expected_revision: savedCredential.config_revision },
+        payload: { model: resolvedModel, expected_revision: expectedRevision },
       });
+      syncDraft(draft);
+      isSavingLocalDraft.current = false;
       const verified = await test.mutateAsync({
         provider: catalogEntry.provider,
         payload: { expected_revision: draft.config_revision },
@@ -312,6 +324,8 @@ function ProviderCard({
       setTestMessage(`Modelo local ${verified.credential.model} verificado.`);
     } catch (e: unknown) {
       handleMutationError(e, "No se pudo conectar con Ollama.");
+    } finally {
+      isSavingLocalDraft.current = false;
     }
   }
 
@@ -323,18 +337,19 @@ function ProviderCard({
       return;
     }
     if (!credential) return;
+    const expectedRevision = syncedRevision ?? credential.config_revision;
+    isSavingLocalDraft.current = true;
     try {
       const draft = await updateModel.mutateAsync({
         provider: catalogEntry.provider,
         payload: {
           model: resolvedModel,
           base_url: baseUrl.trim(),
-          expected_revision: credential.config_revision,
+          expected_revision: expectedRevision,
         },
       });
-      setSyncedRevision(draft.config_revision);
-      setIsDraftDirty(false);
-      setHasRemoteConflict(false);
+      syncDraft(draft);
+      isSavingLocalDraft.current = false;
       const verified = await test.mutateAsync({
         provider: catalogEntry.provider,
         payload: { expected_revision: draft.config_revision },
@@ -342,6 +357,8 @@ function ProviderCard({
       setTestMessage(`Modelo ${verified.credential.model} guardado y verificado.`);
     } catch (e: unknown) {
       handleMutationError(e, "Error al guardar el modelo.");
+    } finally {
+      isSavingLocalDraft.current = false;
     }
   }
 
@@ -349,22 +366,24 @@ function ProviderCard({
     setError(null);
     setTestMessage(null);
     if (!credential) return;
+    const expectedRevision = syncedRevision ?? credential.config_revision;
+    isSavingLocalDraft.current = true;
     try {
       const draft = await updateModel.mutateAsync({
         provider: catalogEntry.provider,
         payload: {
           model: resolvedModel,
           base_url: "",
-          expected_revision: credential.config_revision,
+          expected_revision: expectedRevision,
         },
       });
-      setSyncedRevision(draft.config_revision);
-      setBaseUrl("");
-      setIsDraftDirty(false);
-      setHasRemoteConflict(false);
+      syncDraft(draft);
+      isSavingLocalDraft.current = false;
       setTestMessage("URL base personalizada eliminada. Guarda y verifica el modelo para continuar.");
     } catch (e: unknown) {
       handleMutationError(e, "No se pudo eliminar la URL base personalizada.");
+    } finally {
+      isSavingLocalDraft.current = false;
     }
   }
 
@@ -477,9 +496,9 @@ function ProviderCard({
                 {!isOllama && m.free ? " — gratis" : ""}
               </option>
             ))}
-            {!isOllama && <option value={CUSTOM_MODEL_VALUE}>Personalizado…</option>}
+            {!isOllama && allowsCustomModel && <option value={CUSTOM_MODEL_VALUE}>Personalizado…</option>}
           </select>
-          {modelChoice === CUSTOM_MODEL_VALUE && !isOllama && (
+          {modelChoice === CUSTOM_MODEL_VALUE && !isOllama && allowsCustomModel && (
             <input
               value={customModel}
               onChange={(e) => {
@@ -505,6 +524,11 @@ function ProviderCard({
           {isOllama && ollamaModels.error && (
             <p className="mt-2 text-xs text-red-600">
               {getApiErrorMessage(ollamaModels.error, "No se pudieron descubrir los modelos de Ollama.")}
+            </p>
+          )}
+          {hasUnsupportedStoredModel && (
+            <p className="mt-2 text-xs text-amber-700">
+              El modelo guardado ya no es compatible. Selecciona un modelo validado y vuelve a verificarlo.
             </p>
           )}
         </div>

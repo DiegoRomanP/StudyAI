@@ -152,6 +152,7 @@ export interface ProviderCatalogEntry {
   requires_api_key: boolean;
   supports_model_discovery: boolean;
   supports_custom_base_url: boolean;
+  allows_custom_model: boolean;
 }
 
 export interface LLMCredentialDTO {
@@ -168,6 +169,7 @@ export interface LLMCredentialDTO {
   requires_api_key: boolean;
   supports_model_discovery: boolean;
   supports_custom_base_url: boolean;
+  allows_custom_model: boolean;
   created_at: string;
 }
 
@@ -208,6 +210,7 @@ export interface LLMRuntimeDTO {
 
 export type LLMProviderErrorCode =
   | "LLM_ACCESS_DENIED"
+  | "LLM_ASYNC_RESULT_UNAVAILABLE"
   | "LLM_AUTHENTICATION_FAILED"
   | "LLM_CONNECTION_FAILED"
   | "LLM_ENDPOINT_OR_MODEL_UNAVAILABLE"

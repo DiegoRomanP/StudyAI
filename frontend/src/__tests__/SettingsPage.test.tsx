@@ -32,6 +32,7 @@ const catalog: ProviderCatalogEntry = {
   requires_api_key: true,
   supports_model_discovery: false,
   supports_custom_base_url: true,
+  allows_custom_model: true,
 };
 
 const credential: LLMCredentialDTO = {
@@ -48,16 +49,20 @@ const credential: LLMCredentialDTO = {
   requires_api_key: true,
   supports_model_discovery: false,
   supports_custom_base_url: true,
+  allows_custom_model: true,
   created_at: "2026-09-13T00:00:00Z",
 };
 
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <SettingsPage />
-    </QueryClientProvider>,
-  );
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsPage />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe("SettingsPage", () => {
@@ -117,6 +122,119 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("does not treat its own saved draft as a remote conflict", async () => {
+    api.testLlmCredential.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 502,
+        data: {
+          detail: "El proveedor no pudo verificar el borrador.",
+          code: "LLM_PROVIDER_ERROR",
+          provider: "OPENAI",
+          upstream_status: 404,
+          retryable: false,
+          retry_after_seconds: null,
+        },
+      },
+    });
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByPlaceholderText("https://api.openai.com/v1"), {
+      target: { value: "https://proxy-b.example/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
+
+    expect(await screen.findByText("El proveedor no pudo verificar el borrador.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("La configuración cambió en otra pestaña. Tu borrador local no se sobrescribió."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the draft's synchronized revision after a remote update", async () => {
+    const { queryClient } = renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByPlaceholderText("https://api.openai.com/v1"), {
+      target: { value: "https://local-proxy.example/v1" },
+    });
+    queryClient.setQueryData<LLMCredentialDTO[]>(["llm-credentials"], [
+      { ...credential, config_revision: 8, base_url: "https://remote-proxy.example/v1" },
+    ]);
+
+    expect(
+      await screen.findByText("La configuración cambió en otra pestaña. Tu borrador local no se sobrescribió."),
+    ).toBeInTheDocument();
+
+    api.updateLlmCredentialModel.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { detail: "La configuración cambió." } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
+
+    await waitFor(() => {
+      expect(api.updateLlmCredentialModel).toHaveBeenCalledWith("OPENAI", {
+        model: "gpt-4o-mini",
+        base_url: "https://local-proxy.example/v1",
+        expected_revision: 7,
+      });
+    });
+  });
+
+  it("uses a new Ollama credential's revision after deleting its previous configuration", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const ollamaCatalog: ProviderCatalogEntry = {
+      ...catalog,
+      provider: "OLLAMA",
+      label: "Ollama local",
+      default_model: "",
+      common_models: [],
+      requires_api_key: false,
+      supports_model_discovery: true,
+      supports_custom_base_url: false,
+    };
+    const ollamaCredential: LLMCredentialDTO = {
+      ...credential,
+      provider: "OLLAMA",
+      label: "Ollama local",
+      masked_api_key: "",
+      model: "qwen3.5:9b",
+      base_url: "",
+      config_revision: 7,
+      requires_api_key: false,
+      supports_model_discovery: true,
+      supports_custom_base_url: false,
+    };
+    const savedCredential = { ...ollamaCredential, config_revision: 1, is_verified: false };
+    const draft = { ...savedCredential, config_revision: 2 };
+
+    api.listProviderCatalog.mockResolvedValue([ollamaCatalog]);
+    api.listLlmCredentials
+      .mockResolvedValueOnce([ollamaCredential])
+      .mockResolvedValueOnce([]);
+    api.listOllamaModels.mockResolvedValue([
+      { id: "qwen3.5:9b", size_bytes: null, parameter_size: null, context_length: null },
+    ]);
+    api.saveLlmCredential.mockResolvedValue(savedCredential);
+    api.updateLlmCredentialModel.mockResolvedValue(draft);
+    api.testLlmCredential.mockResolvedValue({ ok: true, credential: draft });
+    renderSettings();
+
+    await screen.findByText("Ollama local");
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+
+    await waitFor(() => expect(api.listLlmCredentials).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Conectar y verificar modelo" }));
+
+    await waitFor(() => {
+      expect(api.updateLlmCredentialModel).toHaveBeenCalledWith("OLLAMA", {
+        model: "qwen3.5:9b",
+        expected_revision: 1,
+      });
+    });
+    confirmation.mockRestore();
+  });
+
   it("hides unsupported URL configuration and lets a historical Anthropic override be cleared", async () => {
     const anthropicCatalog: ProviderCatalogEntry = {
       ...catalog,
@@ -155,6 +273,36 @@ describe("SettingsPage", () => {
         expected_revision: 7,
       });
     });
+  });
+
+  it("limits NVIDIA to validated models and flags a historical unsupported model", async () => {
+    const nvidiaCatalog: ProviderCatalogEntry = {
+      ...catalog,
+      provider: "NVIDIA",
+      label: "NVIDIA NIM",
+      default_model: "meta/llama-3.3-70b-instruct",
+      default_base_url: "https://integrate.api.nvidia.com/v1",
+      common_models: [{ id: "meta/llama-3.3-70b-instruct", free: false }],
+      supports_custom_base_url: false,
+      allows_custom_model: false,
+    };
+    const historicalCredential: LLMCredentialDTO = {
+      ...credential,
+      provider: "NVIDIA",
+      label: "NVIDIA NIM",
+      model: "nvidia/gliner-pii",
+      base_url: "",
+      supports_custom_base_url: false,
+      allows_custom_model: false,
+    };
+    api.listProviderCatalog.mockResolvedValue([nvidiaCatalog]);
+    api.listLlmCredentials.mockResolvedValue([historicalCredential]);
+    renderSettings();
+
+    await screen.findByText("NVIDIA NIM");
+    expect(screen.queryByText("Personalizado…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Configuración avanzada")).not.toBeInTheDocument();
+    expect(screen.getByText(/modelo guardado ya no es compatible/i)).toBeInTheDocument();
   });
 
   it("invalidates runtime after saving a model draft before its test completes", async () => {
