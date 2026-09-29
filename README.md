@@ -333,6 +333,7 @@ en `/docs`.
 
 ## Documentación de mantenimiento
 
+- [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
