@@ -1,0 +1,119 @@
+{
+  "activity": "A02",
+  "captured_on": "2026-09-29",
+  "baseline_commit": "efea4b867770feb2bf3b9ad39e2339208508ccfa",
+  "provenance": {
+    "run_id": null,
+    "started_at_utc": null,
+    "classification": "historical_summary_without_request_response_trace",
+    "note": "This original capture's screenshots and summary are retained unchanged as historical evidence. Its missing run identity and detailed HTTP trace are not reconstructed or attributed to a later replay."
+  },
+  "correction_replays": [
+    {
+      "run_id": "a02-correction-20260929-01",
+      "outcome": "FAILED",
+      "report": "runs/a02-correction-20260929-01/flow-report.json",
+      "note": "Temporary run stopped on an exact accessible-name selector timeout before goal creation; retained separately and not counted as a completed flow."
+    },
+    {
+      "run_id": "a02-correction-20260929-02",
+      "outcome": "COMPLETED",
+      "report": "runs/a02-correction-20260929-02/flow-report.json",
+      "note": "Fresh temporary database, correlated sanitized HTTP trace, console/network instrumentation and run-scoped screenshots."
+    }
+  ],
+  "runtime": {
+    "os": "Linux",
+    "browser": "Chromium 151.0.7922.34",
+    "playwright": "1.62.1 (preinstalled outside this repository; no project dependency added)",
+    "frontend": "Vite dev server at http://127.0.0.1:5174",
+    "backend": "live Uvicorn/FastAPI at http://127.0.0.1:8011",
+    "isolated_storage": "A new temporary SQLite database, upload directory, and vector-store directory under /tmp/opencode; removed after capture",
+    "anthropic_api_key": "explicitly empty",
+    "llm_runtime_source": "MOCK",
+    "health": { "status_code": 200, "body_status": "ok" },
+    "wait_strategy": "DOM and application-state locators plus the real 202/PROCESSING-to-READY transition; no networkidle dependency"
+  },
+  "viewports_css_px": {
+    "desktop": { "width": 1440, "height": 1000 },
+    "mobile": { "width": 390, "height": 844 }
+  },
+  "navigation": {
+    "entry_route": "/",
+    "entry_result": "/documents",
+    "desktop_nav_visible": true,
+    "desktop_links": ["Documentos", "Metas", "Plan", "Dashboard", "Configuración"],
+    "mobile_nav_in_dom": true,
+    "mobile_nav_visible": false,
+    "mobile_document_width_css_px": 390,
+    "mobile_viewport_width_css_px": 390,
+    "mobile_horizontal_overflow_observed": false
+  },
+  "synthetic_flow": [
+    { "step": "Upload the Markdown fixture", "route": "/documents", "method": "POST", "endpoint": "/documents/upload", "status_code": 201, "upload_response_status": "PENDING", "eventual_ui_status": "Indexado" },
+    { "step": "Create a learning goal", "route": "/goals", "method": "POST", "endpoint": "/goals", "status_code": 201, "goal_type": "LEARNING", "title": "A02 · Carbono sintético" },
+    { "step": "Generate a plan", "route": "/plan", "method": "POST", "endpoint": "/plans/generate", "status_code": 202, "response_status": "PROCESSING", "eventual_status": "READY", "session_count": 3 },
+    { "step": "Open a real session", "route": "/session/1", "method": "GET", "endpoint": "/sessions/1", "status_code": 200 },
+    { "step": "Load and answer the quiz", "route": "/session/1", "method": "GET", "endpoint": "/quizzes/1", "status_code": 200, "question_count": 10, "submit_method": "POST", "submit_endpoint": "/quizzes/1/submit", "submit_status_code": 200, "score_percent": 100, "multiple_choice_correct": 5, "multiple_choice_total": 5 },
+    { "step": "Open the dashboard", "route": "/dashboard", "method": "GET", "endpoint": "/dashboard", "status_code": 200, "screenshot_shows_completed_sessions": 1, "screenshot_shows_average_score_percent": 100 },
+    { "step": "Reopen a completed session from its plan", "route": "/plan/1 -> /session/1", "plan_badge": "Completada", "session_link_count": 1, "session_route_opened": true, "reopened_phase": "Estudio (the session phase is not persisted)" }
+  ],
+  "observed_legacy_behavior": {
+    "quiz_result_heading_visible_after_success": false,
+    "completion_heading_visible": true,
+    "server_quiz_result": { "status_code": 200, "score": 100, "correct": 5, "total": 5 },
+    "flashcard_answer_visible_at_question_start": [
+      { "question": 1, "visible": false },
+      { "question": 2, "visible": true },
+      { "question": 3, "visible": true },
+      { "question": 4, "visible": true },
+      { "question": 5, "visible": true }
+    ],
+    "quiz_cache_invalidations_in_code": [["dashboard"], ["plan"]],
+    "related_keys_not_explicitly_invalidated": [["plans"], ["session", 1], ["quiz", 1]],
+    "cache_scope_note": "Revisiting /plan/1 and /session/1 produced fresh GETs, and the dashboard GET showed updated results. Because queries are stale on mount by default, this run does not assert a user-visible stale-data defect from the missing explicit invalidations; the key omissions are characterized from the mutation code."
+  },
+  "errors": {
+    "browser_console_errors": [],
+    "uncaught_page_errors": [],
+    "failed_backend_http_responses": []
+  },
+  "screenshots": [
+    {
+      "path": "docs/frontend-integration/evidence/a02/documents-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 53089,
+      "sha256": "25a1236ab0f594ec4ca1b308faa7c4dfcd20146c1e7b6b1349ed7989d38828e3"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/session-completed-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 44400,
+      "sha256": "4a3e9e0e6d6a52410d4c82cf210d3de39005c76ca39246b797a079416dea07b9"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/dashboard-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 52602,
+      "sha256": "567e58205707458fbebb34ee72600f60fd6efbd3d22608c5d20e0d315ee5fd89"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/dashboard-mobile.png",
+      "viewport_css_px": "390x970 (full-page screenshot at 390x844 viewport)",
+      "bytes": 35175,
+      "sha256": "06e00913c3b6bcc1ae45ba1f60e7418bcfc3559c3b8af5ff028a69e72cb77349"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/completed-session-reopened-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 103004,
+      "sha256": "8075a31956dbd3787a5338e3c71fc0acd1daf0fdb1676a70103a6e89a99dba88"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/completed-session-reopened-mobile.png",
+      "viewport_css_px": "390x1216 (full-page screenshot at 390x844 viewport)",
+      "bytes": 85396,
+      "sha256": "9ba7829e396d11a7000bf7e7b96a44f8bcd1f805ca6aff86832f5ae2612566dc"
+    }
+  ]
+}

@@ -1,0 +1,265 @@
+{
+  "activity": "A02",
+  "run_id": "a02-correction-20260929-01",
+  "started_at_utc": "2026-09-29T19:11:38.282Z",
+  "finished_at_utc": "2026-09-29T19:12:09.314Z",
+  "baseline_commit": "efea4b867770feb2bf3b9ad39e2339208508ccfa",
+  "environment": {
+    "app_origin": "http://127.0.0.1:5174",
+    "api_origin": "http://127.0.0.1:8011",
+    "browser": "Chromium via installed Playwright",
+    "viewport_css_px": {
+      "desktop": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mobile": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    "device_scale_factor": 1,
+    "fixture": {
+      "path": "docs/frontend-integration/evidence/a02/a02-carbon-cycle-synthetic.md",
+      "filename": "a02-carbon-cycle-synthetic.md",
+      "bytes": 335,
+      "sha256": "b2a7e334a06d936e274e539c233672e9bd7e716346630f3b5410d65f5077fc4d"
+    },
+    "storage": "Run-specific temporary SQLite, uploads and vector store; no development data used."
+  },
+  "exact_inputs": {
+    "goal": {
+      "goal_type": "LEARNING",
+      "title": "A02 · Carbono sintético",
+      "description": "Aprender ciclo del carbono, fotosíntesis, respiración y reservorios del material sintético."
+    },
+    "quiz_response_rule": "For every flashcard submit quality 5; for every multiple-choice item click the GET /quizzes/{session_id} option equal to that question's answer. The script persists only the selected option index, never prompt/answer text.",
+    "score_rule": "Multiple-choice only: correct / multiple_choice_total * 100, rounded to one decimal; flashcard ratings are submitted but excluded from score."
+  },
+  "steps": [
+    {
+      "index": 1,
+      "name": "open_app_and_check_demo_runtime",
+      "at_utc": "2026-09-29T19:11:38.391Z"
+    },
+    {
+      "index": 2,
+      "name": "upload_fixture_and_wait_until_indexed",
+      "at_utc": "2026-09-29T19:11:39.180Z"
+    },
+    {
+      "index": 3,
+      "name": "create_goal_with_exact_synthetic_input",
+      "at_utc": "2026-09-29T19:11:39.298Z",
+      "goal_type": "LEARNING",
+      "title": "A02 · Carbono sintético"
+    }
+  ],
+  "id_correlations": {
+    "document_id": 1
+  },
+  "quiz_calculation": null,
+  "post_completion": null,
+  "runtime_checks": {
+    "health": {
+      "status_code": 200,
+      "body_status": "ok"
+    },
+    "llm_runtime_source": "MOCK"
+  },
+  "network_events": [
+    {
+      "sequence": 1,
+      "kind": "request",
+      "request_sequence": 1,
+      "elapsed_ms": 850,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/documents",
+      "method": "GET"
+    },
+    {
+      "sequence": 2,
+      "kind": "request",
+      "request_sequence": 2,
+      "elapsed_ms": 850,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/health",
+      "method": "GET"
+    },
+    {
+      "sequence": 3,
+      "kind": "request",
+      "request_sequence": 3,
+      "elapsed_ms": 850,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/llm-settings/runtime",
+      "method": "GET"
+    },
+    {
+      "sequence": 4,
+      "kind": "response",
+      "request_sequence": 2,
+      "elapsed_ms": 889,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/health",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    {
+      "sequence": 5,
+      "kind": "response",
+      "request_sequence": 1,
+      "elapsed_ms": 895,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/documents",
+      "method": "GET",
+      "status_code": 200,
+      "body": []
+    },
+    {
+      "sequence": 6,
+      "kind": "response",
+      "request_sequence": 3,
+      "elapsed_ms": 896,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/llm-settings/runtime",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "source": "MOCK"
+      }
+    },
+    {
+      "sequence": 7,
+      "kind": "request",
+      "request_sequence": 7,
+      "elapsed_ms": 936,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/upload",
+      "method": "POST"
+    },
+    {
+      "sequence": 8,
+      "kind": "response",
+      "request_sequence": 7,
+      "elapsed_ms": 944,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/upload",
+      "method": "POST",
+      "status_code": 201,
+      "body": {
+        "id": 1,
+        "filename": "a02-carbon-cycle-synthetic.md",
+        "status": "PENDING",
+        "file_type": "md"
+      }
+    },
+    {
+      "sequence": 9,
+      "kind": "request",
+      "request_sequence": 9,
+      "elapsed_ms": 945,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents",
+      "method": "GET"
+    },
+    {
+      "sequence": 10,
+      "kind": "response",
+      "request_sequence": 9,
+      "elapsed_ms": 949,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents",
+      "method": "GET",
+      "status_code": 200,
+      "body": [
+        {
+          "id": 1,
+          "filename": "a02-carbon-cycle-synthetic.md",
+          "status": "INDEXED"
+        }
+      ]
+    },
+    {
+      "sequence": 11,
+      "kind": "request",
+      "request_sequence": 11,
+      "elapsed_ms": 972,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 12,
+      "kind": "response",
+      "request_sequence": 11,
+      "elapsed_ms": 976,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "filename": "a02-carbon-cycle-synthetic.md",
+        "status": "INDEXED",
+        "file_type": "md"
+      }
+    }
+  ],
+  "console_events": [
+    {
+      "at_utc": "2026-09-29T19:11:38.556Z",
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "at_utc": "2026-09-29T19:11:38.559Z",
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "at_utc": "2026-09-29T19:11:39.028Z",
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "at_utc": "2026-09-29T19:11:39.128Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+    },
+    {
+      "at_utc": "2026-09-29T19:11:39.128Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+    }
+  ],
+  "page_errors": [],
+  "failed_requests": [],
+  "failed_http_responses": [],
+  "screenshots": [
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-01/documents-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 53089,
+      "sha256": "25a1236ab0f594ec4ca1b308faa7c4dfcd20146c1e7b6b1349ed7989d38828e3",
+      "run_id": "a02-correction-20260929-01"
+    }
+  ],
+  "outcome": {
+    "status": "FAILED",
+    "last_completed_step": "create_goal_with_exact_synthetic_input",
+    "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('link', { name: 'Metas', exact: true })\u001b[22m\n\n    at /home/diego/Documentos/studyai/docs/frontend-integration/evidence/a02/replay.mjs:333:64"
+  },
+  "audit_summary": {
+    "backend_request_count": 6,
+    "backend_response_count": 6,
+    "console_event_count": 5,
+    "page_error_count": 0,
+    "failed_request_count": 0,
+    "failed_http_response_count": 0,
+    "all_backend_requests_have_responses": true
+  }
+}
