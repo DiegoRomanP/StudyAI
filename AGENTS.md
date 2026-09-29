@@ -34,11 +34,13 @@ Frontend commands run from `frontend/`:
 npm ci
 npm run dev
 npm run lint
+npm test
 npm run build
 ```
 
 - `npm run lint` is TypeScript checking (`tsc --noEmit`), not ESLint.
-- `npm run build` typechecks before running Vite; there is no frontend test script.
+- `npm test` runs the Vitest suite (`vitest run`).
+- `npm run build` typechecks before running Vite.
 - The Vite dev server uses port `5173`; the frontend API client defaults to backend port `8001`.
 - There is no repository CI, pre-commit setup, backend formatter, backend linter, or backend typecheck configuration.
 
@@ -50,6 +52,7 @@ npm run build
 - Plan generation intentionally makes `2 + N` LLM calls, not `2 + 2N`; do not split the merged material/quiz call.
 - Completing a session publishes `session.completed`; `ProgressService` handles it synchronously and updates SM-2 flashcard reviews.
 - The frontend uses the typed Axios boundary in `frontend/src/api/` and TanStack Query polling/mutations in `frontend/src/hooks/`.
+- LLM provider metadata, validation, profiles, builders, discovery and verification contracts live in `backend/app/llm/providers/`; `backend/app/llm/provider_registry.py` is the only assembly point.
 
 ## Invariants
 
@@ -75,4 +78,6 @@ npm run build
 ## Sources Of Truth
 
 - Use FastAPI `/openapi.json` and `/docs` as the runtime API contract; keep `docs/api_contract.yaml` synchronized.
-- `docs/AGENTS_STATUS.md` and `studyai_multiagent_plan.md` describe historical phases and workflows; do not trust their old provider, prompt, or test-count claims over the current implementation.
+- `README.md`, `CLAUDE.md`, and `docs/api_contract.yaml` describe the current product and runtime contract.
+- `docs/AGENTS_STATUS.md` is the current phase/status summary.
+- `studyai_multiagent_plan.md` and `plans/ResolveProblems.md` preserve historical planning context; use their current-status banners and the executable code/tests over any old task prompt or line reference.

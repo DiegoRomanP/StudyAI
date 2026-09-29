@@ -132,11 +132,11 @@ def test_nvidia_rejects_an_unsupported_model_without_replacing_the_key(client: T
     assert persisted["is_verified"] is False
 
     working_draft = _save_draft(
-        client, "NVIDIA", persisted["config_revision"], "meta/llama-3.1-70b-instruct"
+        client, "NVIDIA", persisted["config_revision"], "nvidia/nemotron-3-super-120b-a12b"
     )
     verified = _verify(client, "NVIDIA", working_draft["config_revision"])
 
-    assert verified["model"] == "meta/llama-3.1-70b-instruct"
+    assert verified["model"] == "nvidia/nemotron-3-super-120b-a12b"
     assert verified["is_verified"] is True
 
 
@@ -208,7 +208,7 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
 )
 def test_non_authentication_failures_do_not_revoke_verification(client: TestClient, provider: str, code: str):
     credential = _save_key(client, provider)
-    model = "meta/llama-3.3-70b-instruct" if provider == "NVIDIA" else "test-model"
+    model = "nvidia/nemotron-3-super-120b-a12b" if provider == "NVIDIA" else "test-model"
     draft = _save_draft(client, provider, credential["config_revision"], model)
     verified = _verify(client, provider, draft["config_revision"])
     assert client.post(
@@ -554,7 +554,7 @@ def test_revisioned_requests_reject_unknown_fields(client: TestClient):
     revision = credential["config_revision"]
     assert client.patch(
         "/llm-settings/NVIDIA/model",
-        json={"model": "meta/llama-3.1-70b-instruct", "expected_revision": revision, "extra": True},
+        json={"model": "nvidia/nemotron-3-super-120b-a12b", "expected_revision": revision, "extra": True},
     ).status_code == 422
     assert client.post(
         "/llm-settings/NVIDIA/test",

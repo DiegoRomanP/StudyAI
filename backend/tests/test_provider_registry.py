@@ -38,7 +38,7 @@ def test_each_provider_resolves_its_own_request_contract():
     )
     assert (
         get_provider_definition(LLMProviderName.NVIDIA)
-        .request_profile("meta/llama-3.3-70b-instruct")
+        .request_profile("nvidia/nemotron-3-super-120b-a12b")
         .identifier
         == "nvidia-standard-chat"
     )

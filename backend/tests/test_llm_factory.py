@@ -141,12 +141,12 @@ def test_factory_profile_controls_the_final_transport_payload(
 
 
 def test_active_nvidia_credential_builds_the_dedicated_provider(client: TestClient):
-    _configure_and_activate(client, "NVIDIA", "meta/llama-3.3-70b-instruct")
+    _configure_and_activate(client, "NVIDIA", "nvidia/nemotron-3-super-120b-a12b")
 
     provider = _provider_for_demo_user()
     try:
         assert isinstance(provider, NvidiaNimProvider)
-        assert provider._model == "meta/llama-3.3-70b-instruct"
+        assert provider._model == "nvidia/nemotron-3-super-120b-a12b"
         assert str(provider._client.base_url).rstrip("/") == "https://integrate.api.nvidia.com/v1"
     finally:
         provider.close()
@@ -180,7 +180,7 @@ def test_unverified_active_credential_is_not_usable(client: TestClient):
     saved = client.put("/llm-settings/NVIDIA", json={"api_key": "nvapi-1234567890abcdef"})
     draft = client.patch(
         "/llm-settings/NVIDIA/model",
-        json={"model": "meta/llama-3.1-70b-instruct", "expected_revision": saved.json()["config_revision"]},
+        json={"model": "nvidia/nemotron-3-super-120b-a12b", "expected_revision": saved.json()["config_revision"]},
     )
     assert draft.status_code == 200
 

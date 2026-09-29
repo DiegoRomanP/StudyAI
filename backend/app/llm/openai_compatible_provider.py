@@ -134,6 +134,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 while True:
                     remaining = self._remaining_seconds(deadline)
                     terminal_error: LLMError | None = None
+                    accepted_response = False
                     try:
                         response = await self._client.post(
                             "/chat/completions",
@@ -143,6 +144,7 @@ class OpenAICompatibleProvider(LLMProvider):
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider)
                         if response.status_code == httpx.codes.ACCEPTED:
+                            accepted_response = True
                             accepted_handler = (
                                 self._accepted_response_handler or self._handle_accepted_response
                             )
@@ -213,6 +215,10 @@ class OpenAICompatibleProvider(LLMProvider):
                     except LLMError as exc:
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider) from None
+                        if accepted_response:
+                            # The provider has already accepted this billable
+                            # POST. A status-poll failure must never replay it.
+                            raise
                         if (
                             exc.code == "LLM_RATE_LIMITED"
                             and rate_limit_attempt < policy.max_rate_limit_retries

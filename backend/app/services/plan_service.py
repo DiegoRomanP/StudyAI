@@ -120,13 +120,20 @@ class _Generator:
             self._generate(plan)
             plan.status = PlanStatus.READY
         except Exception as exc:  # noqa: BLE001 - record a safe failure for the client
+            upstream_status = None
             if isinstance(exc, LLMError):
                 error_message = str(exc)
                 error_code = exc.code
+                upstream_status = exc.upstream_status
             else:
                 error_message = "No se pudo generar el plan. Inténtalo de nuevo."
                 error_code = "PLAN_GENERATION_FAILED"
-            logger.error("Plan generation failed for plan %s (code=%s)", plan_id, error_code)
+            logger.error(
+                "Plan generation failed for plan %s (code=%s, upstream_status=%s)",
+                plan_id,
+                error_code,
+                upstream_status,
+            )
             plan.status = PlanStatus.FAILED
             plan.error_message = error_message
         finally:

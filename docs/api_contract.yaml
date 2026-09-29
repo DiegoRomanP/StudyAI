@@ -3,8 +3,10 @@ info:
   title: StudyAI API
   version: 0.1.0
   description: >
-    Contrato mínimo de la API de StudyAI. El backend (FastAPI) sirve además el
-    esquema OpenAPI completo y en vivo en /openapi.json y Swagger UI en /docs.
+    Contrato mantenido de la API de StudyAI, incluidos el ciclo revisionado de
+    credenciales LLM y los errores normalizados de proveedores. El backend
+    (FastAPI) sirve además el esquema OpenAPI completo y en vivo en /openapi.json
+    y Swagger UI en /docs.
 servers:
   - url: http://localhost:8001
 

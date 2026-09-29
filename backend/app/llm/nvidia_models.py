@@ -18,6 +18,7 @@ from app.llm.request_profiles import RequestProfile
 NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_NVCF_STATUS_URL = "https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/{request_id}"
 NVIDIA_ADAPTER_VERSION = "v1"
+NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS = 256
 NVIDIA_STANDARD_CHAT_PROFILE = RequestProfile(
     identifier="nvidia-standard-chat",
     version="v1",
@@ -53,40 +54,19 @@ class NvidiaModelSpec:
 
 _SPECS = (
     NvidiaModelSpec(
-        model_id="meta/llama-3.3-70b-instruct",
-        contract_id="nvidia-chat",
-        contract_version="v1",
-        message_mode=NvidiaMessageMode.SYSTEM_USER,
-        max_output_tokens=4096,
-        request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
-        docs_url="https://docs.api.nvidia.com/nim/reference/meta-llama-3_3-70b-instruct-infer",
-    ),
-    NvidiaModelSpec(
-        model_id="meta/llama-3.1-70b-instruct",
-        contract_id="nvidia-chat",
-        contract_version="v1",
-        message_mode=NvidiaMessageMode.SYSTEM_USER,
-        max_output_tokens=4096,
-        request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
-        docs_url="https://docs.api.nvidia.com/nim/reference/meta-llama-3_1-70b-infer",
-    ),
-    NvidiaModelSpec(
-        model_id="deepseek-ai/deepseek-v4-flash",
-        contract_id="nvidia-reasoning-chat",
-        contract_version="v1",
-        message_mode=NvidiaMessageMode.SYSTEM_USER,
-        max_output_tokens=16384,
-        request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
-        docs_url="https://docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-flash-infer",
-    ),
-    NvidiaModelSpec(
         model_id="nvidia/nemotron-3-super-120b-a12b",
         contract_id="nvidia-reasoning-chat",
-        contract_version="v1",
+        contract_version="v2",
         message_mode=NvidiaMessageMode.SYSTEM_USER,
         max_output_tokens=32768,
         request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
         docs_url="https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-super-120b-a12b-infer",
+        static_parameters=MappingProxyType(
+            {
+                "reasoning_effort": "low",
+                "reasoning_budget": NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
+            }
+        ),
     ),
 )
 

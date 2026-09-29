@@ -305,6 +305,38 @@ describe("SettingsPage", () => {
     expect(screen.getByText(/modelo guardado ya no es compatible/i)).toBeInTheDocument();
   });
 
+  it("keeps the saved NVIDIA model selected when credentials finish loading", async () => {
+    const nvidiaModel = "nvidia/nemotron-3-super-120b-a12b";
+    const nvidiaCatalog: ProviderCatalogEntry = {
+      ...catalog,
+      provider: "NVIDIA",
+      label: "NVIDIA NIM",
+      default_model: "meta/llama-3.3-70b-instruct",
+      default_base_url: "https://integrate.api.nvidia.com/v1",
+      common_models: [
+        { id: "meta/llama-3.3-70b-instruct", free: false },
+        { id: nvidiaModel, free: false },
+      ],
+      supports_custom_base_url: false,
+      allows_custom_model: false,
+    };
+    const nvidiaCredential: LLMCredentialDTO = {
+      ...credential,
+      provider: "NVIDIA",
+      label: "NVIDIA NIM",
+      model: nvidiaModel,
+      base_url: "",
+      supports_custom_base_url: false,
+      allows_custom_model: false,
+    };
+    api.listProviderCatalog.mockResolvedValue([nvidiaCatalog]);
+    api.listLlmCredentials.mockResolvedValue([nvidiaCredential]);
+    renderSettings();
+
+    await screen.findByText("NVIDIA NIM");
+    expect(screen.getByRole("combobox")).toHaveValue(nvidiaModel);
+  });
+
   it("invalidates runtime after saving a model draft before its test completes", async () => {
     api.testLlmCredential.mockRejectedValue({
       isAxiosError: true,

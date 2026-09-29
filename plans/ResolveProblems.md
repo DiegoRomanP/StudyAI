@@ -4,7 +4,24 @@ Fecha: 2026-09-11
 
 Ampliación técnica de proveedores: 2026-09-13.
 
-Estado: propuesto y documentado; pendiente de implementación.
+Estado: histórico. Las correcciones de proveedores y configuración descritas en
+la sección 3 se implementaron después de este diagnóstico; la optimización de
+PDF/tokens, las suscripciones y el rediseño visual siguen siendo propuestas.
+
+## Estado actual
+
+- IA-01 a IA-10: resueltos en el ciclo revisionado de credenciales, los perfiles
+  de solicitud, el mapeo de errores, el runtime y los contratos por proveedor.
+- OpenRouter y NVIDIA NIM tienen adaptadores dedicados; NVIDIA usa catálogo de
+  modelos curado, endpoint fijo y no repite el POST tras `202`.
+- La suite backend verificada tiene 239 tests; el frontend tiene 32 tests Vitest,
+  además de typecheck y build.
+- La comprobación con cuentas reales, el rediseño visual amplio, la reducción
+  adicional de tokens y las integraciones de suscripción permanecen pendientes.
+
+Este documento conserva el razonamiento y el inventario de la revisión original.
+Para el estado operativo actual usa `docs/AGENTS_STATUS.md`; para comandos y
+contratos usa `README.md`, `AGENTS.md`, `CLAUDE.md` y `docs/api_contract.yaml`.
 
 ## 1. Objetivo y alcance acordado
 
@@ -29,9 +46,9 @@ Se realizó una revisión estática transversal de configuración de proveedores
 credenciales, procesamiento de documentos, generación de planes, sesiones,
 cuestionarios y progreso.
 
-La comprobación del frontend `tsc --noEmit` pasó sin errores. La reproducción con
-proveedores reales, la ejecución de las pruebas del backend y la validación visual
-en navegador quedan pendientes para la implementación.
+La comprobación del frontend `tsc --noEmit`, la suite del backend, las pruebas
+Vitest y el build pasaron después de implementar las correcciones. La reproducción
+con proveedores reales y la validación visual amplia en navegador siguen pendientes.
 
 La causa exacta del error de NVIDIA comunicado por el usuario aún no está
 confirmada. Los hallazgos del código y los reportes externos son pistas que deben
@@ -56,18 +73,18 @@ Los defectos son la verificación acoplada al modelo, la falta de clasificación
 y los estados ambiguos; no está demostrado que NVIDIA rechace la clave por un
 fallo de StudyAI.
 
-Recorrido externo actual:
+Recorrido implementado actualmente:
 
 ```text
-ProviderCard.handleVerifyAndSave()
-  PUT /llm-settings/{provider}             guarda clave y URL; borra modelo
-  POST /llm-settings/{provider}/test       sin modelo candidato
-    LLMSettingsService.test_credential()
-      PROVIDER_CATALOG[provider].default_model
-      build_provider_from_credential()
-      test_connection() → complete(max_tokens=5)
-  PATCH /llm-settings/{provider}/model     guarda el modelo predeterminado
-  POST /llm-settings/{provider}/activate  solo comprueba que model no esté vacío
+SettingsPage
+  PUT /llm-settings/{provider}             guarda o reemplaza la clave
+  PATCH /llm-settings/{provider}/model     guarda modelo/URL como nueva revisión
+  POST /llm-settings/{provider}/test       prueba exactamente la revisión guardada
+  POST /llm-settings/{provider}/activate   exige evidencia vigente de esa revisión
+  GET /llm-settings/runtime                expone la fuente efectiva sin secretos
+
+provider_registry.py
+  metadatos → validación → perfil → construcción → verificación por proveedor
 ```
 
 Ollama tiene un recorrido diferente: descubre modelos locales, envía el modelo
@@ -77,16 +94,16 @@ todo problema del adaptador sea exclusivo de proveedores externos.
 
 | ID | Prioridad | Defecto | Estado |
 | --- | --- | --- | --- |
-| IA-01 | Alta | Modelo fijo bloquea la verificación y oculta el selector | Confirmado |
-| IA-02 | Alta | Es posible activar sin verificación real | Confirmado |
-| IA-03 | Alta | Se prueba una URL y se guarda otra | Confirmado |
-| IA-04 | Alta | Errores sin clasificar y respuestas externas expuestas como texto | Confirmado |
-| IA-05 | Alta | `max_tokens` incompatible con un modelo o-series sugerido | Confirmado en código y contrato oficial; prueba real pendiente |
-| IA-06 | Media | Prueba de 5 tokens y lectura insuficiente de respuestas | Límite confirmado; impacto depende del modelo |
-| IA-07 | Media | Reintentos de cuota agotada y espera mal acotada | Confirmado |
-| IA-08 | Alta | La UI anuncia demo aunque el servidor pueda usar Anthropic | Confirmado con `.env` configurado |
-| IA-09 | Media | `session_content` no usa el modelo económico del reparto Anthropic | Confirmado; afecta a la configuración por `.env` |
-| IA-10 | Media | La URL personalizada de Anthropic se guarda pero se ignora | Confirmado |
+| IA-01 | Alta | Modelo fijo bloquea la verificación y oculta el selector | Resuelto |
+| IA-02 | Alta | Es posible activar sin verificación real | Resuelto |
+| IA-03 | Alta | Se prueba una URL y se guarda otra | Resuelto |
+| IA-04 | Alta | Errores sin clasificar y respuestas externas expuestas como texto | Resuelto |
+| IA-05 | Alta | `max_tokens` incompatible con un modelo o-series sugerido | Resuelto en código y contrato; cuenta real pendiente |
+| IA-06 | Media | Prueba de 5 tokens y lectura insuficiente de respuestas | Resuelto mediante perfiles y validación de salida |
+| IA-07 | Media | Reintentos de cuota agotada y espera mal acotada | Resuelto |
+| IA-08 | Alta | La UI anuncia demo aunque el servidor pueda usar Anthropic | Resuelto con runtime efectivo |
+| IA-09 | Media | `session_content` no usa el modelo económico del reparto Anthropic | Resuelto para la ruta `.env` |
+| IA-10 | Media | La URL personalizada de Anthropic se guarda pero se ignora | Resuelto con rechazo explícito |
 
 ### 3.2. Corrección específica de cada defecto
 
@@ -307,7 +324,7 @@ sleep simulados, sin esperar minutos.
 no borra la clave del servidor. La fábrica también puede degradar a otra fuente
 si falla la construcción de una credencial activa.
 
-**Cambios propuestos para conservar la cadena existente:**
+**Implementación entregada para conservar la cadena existente:**
 
 - Añadir `GET /llm-settings/runtime`, servido por la misma lógica de resolución
   usada al construir el proveedor. Responder `source` (`USER`, `ENV`, `MOCK`),
@@ -435,7 +452,7 @@ desactivar solo filas sin evidencia válida; no revocar indiscriminadamente fila
 que ya se verificaron con el esquema nuevo. Informar que puede quedar como fuente
 efectiva la configuración `.env`, conforme a IA-08.
 
-#### Contrato HTTP propuesto
+#### Contrato HTTP implementado
 
 | Operación | Entrada y comportamiento |
 | --- | --- |
@@ -484,7 +501,7 @@ un 401 upstream como si hubiera caducado una sesión de usuario de StudyAI.
 Errores locales de configuración usan 400/422 y conflictos de revisión/verificación
 usan 409.
 
-Ejemplo propuesto, no respuesta existente:
+Ejemplo de contrato; la respuesta real debe contrastarse con `/openapi.json`:
 
 ```json
 {
@@ -497,7 +514,7 @@ Ejemplo propuesto, no respuesta existente:
 }
 ```
 
-| Señal upstream | Código propuesto | Acción |
+| Señal upstream | Código normalizado | Acción |
 | --- | --- | --- |
 | 401 / código inequívoco de autenticación | `LLM_AUTHENTICATION_FAILED` | Revisar/reemplazar credencial; sin retry automático. |
 | 403 sin causa más específica | `LLM_ACCESS_DENIED` | Revisar permisos/modelo/endpoint; no afirmar que la clave está validada. |
@@ -518,8 +535,10 @@ también a excepciones encadenadas y logs de SDK; truncar no es sanear.
 
 ### 3.5. Inventario de archivos y responsabilidades
 
-Todos los cambios de esta tabla son **propuestos**, no implementados al ampliar
-este documento. Las ubicaciones de errores están en 3.2.
+La tabla conserva el inventario de cambios de la revisión original. Los cambios
+de credenciales, proveedores, runtime y contrato que se listan aquí ya fueron
+implementados; las propuestas de PDF, suscripciones y rediseño permanecen en
+las secciones posteriores.
 
 | Archivo existente | Cambio concreto |
 | --- | --- |
@@ -546,7 +565,7 @@ este documento. Las ubicaciones de errores están en 3.2.
 | `docs/api_contract.yaml` | Nuevos cuerpos/respuestas y códigos 409/502; contrastar con OpenAPI generado. |
 | `AGENTS.md` y `CLAUDE.md` | Sustituir la regla obsoleta de «modelo no vacío = verificado» por revisión/evidencia; conservar prioridad de fuentes y excepciones de Ollama. |
 
-Archivos nuevos propuestos:
+Archivos nuevos incorporados durante la implementación:
 
 - `backend/app/llm/credential_state.py`: configuración efectiva y huella compartida.
 - `backend/app/llm/request_profiles.py`: perfiles de solicitud mínimos y explícitos.
@@ -569,10 +588,9 @@ estas correcciones no requieren sustituirla ni ampliar acceso a redes privadas.
 | `backend/tests/test_llm_verification_concurrency.py` — nuevo | Test en vuelo vs reemplazo/eliminación; dos activaciones concurrentes; escritura condicional sobre SQLite temporal real con sesiones separadas. |
 | `backend/tests/test_url_safety.py` y `test_ollama_client.py` | Mantener todas las regresiones actuales al cambiar fábrica y servicio. |
 
-Frontend: añadir `frontend/src/pages/SettingsPage.test.tsx` con Vitest, Testing
-Library y transporte simulado; configurar dependencias y script `test` en
-`frontend/package.json`, porque hoy no existe infraestructura de tests de UI.
-Verificar selección inicial, recuperación de modelo fallido sin repetir clave,
+Frontend: `frontend/src/__tests__/SettingsPage.test.tsx` ya cubre con Vitest, Testing
+Library y transporte simulado la selección inicial, recuperación de modelo fallido
+sin repetir clave,
 PATCH→test con revisión correcta, conflicto entre pestañas, activación bloqueada,
 error 422 renderizable, estado runtime y selección Ollama tras descubrimiento.
 Estas pruebas son de comportamiento observable, no de detalles internos del hook.
@@ -593,10 +611,11 @@ Orden específico:
 6. La integración de suscripciones de 3.8 se implementa después, en un adaptador
    separado, y no sustituye la corrección de autenticación API.
 
-### 3.7. Diagnóstico específico pendiente para NVIDIA
+### 3.7. Diagnóstico live específico para NVIDIA
 
-El defecto de UI está identificado; la causa del rechazo upstream no. El cierre
-del incidente NVIDIA requiere la siguiente evidencia reproducible:
+El adaptador y el contrato de NVIDIA ya están aislados y cubiertos con transporte
+simulado. La causa de un rechazo upstream con una cuenta real todavía requiere la
+siguiente evidencia reproducible:
 
 1. Registrar si falla guardar, probar o generar; modelo exacto y uso de URL
    predeterminada o personalizada, sin copiar la clave.
@@ -775,12 +794,16 @@ Archivos principales afectados:
 Estas correcciones deben tener casos de regresión específicos y no quedar ocultas
 dentro del cambio visual.
 
-## 7. Orden de ejecución
+## 7. Orden de ejecución original
+
+El orden siguiente documenta cómo se abordó el diagnóstico; no es una lista de
+tareas pendiente. La corrección de proveedores ya se entregó y las áreas abiertas
+se enumeran en `docs/AGENTS_STATUS.md`.
 
 1. **Establecer la línea base.** Ejecutar pruebas aisladas y reproducir el fallo de
    NVIDIA con diagnóstico saneado.
-2. **Corregir proveedores.** Implementar verificación real, clasificación de
-   errores, selección de modelos y regresiones de Ollama.
+2. **Corregir proveedores.** Implementar verificación revisionada, clasificación de
+   errores, selección de modelos y regresiones de Ollama. **Completado.**
 3. **Integrar Local Codex.** Conexión oficial, generación estructurada y manejo de
    desconexión y límites.
 4. **Implementar el procesamiento privado del PDF.** Conversión, presupuesto y
@@ -788,7 +811,8 @@ dentro del cambio visual.
 5. **Rediseñar el frontend y corregir el recorrido completo.** Navegación,
    formularios, sesiones y progreso.
 6. **Validación final y documentación.** Backend, TypeScript/build, pruebas de
-   interfaz y recorrido móvil/escritorio; actualizar README y contrato API.
+   interfaz y contrato API. **Completado para el MVP; la validación live y visual
+   amplia siguen pendientes.**
 
 Durante la implementación, mantener las capas routes/controllers → services →
 repositories → modelos y esquemas. Los cambios en tablas existentes requieren
@@ -797,21 +821,22 @@ tablas ya creadas.
 
 ## 8. Verificación y criterios de aceptación
 
-### Verificación prevista
+### Verificación ejecutada y pendientes
 
 - Ejecutar la suite del backend en un entorno aislado, sin reutilizar base de
   datos, uploads, vectores o credenciales reales.
-- Añadir casos de regresión para los defectos identificados, incluyendo errores
+- [x] Añadir casos de regresión para los defectos identificados, incluyendo errores
   de permisos, cuota, modelo y configuración no verificada.
-- Comprobar que Ollama y el modo demo conservan su funcionamiento.
-- Comprobar conexión y generación con Local Codex.
-- Medir tokens y calidad del contexto antes y después de la optimización.
+- [x] Comprobar que Ollama y el modo demo conservan su funcionamiento.
+- [ ] Comprobar conexión y generación con cuentas reales de cada proveedor.
+- [ ] Medir tokens y calidad del contexto antes y después de la optimización.
 - Verificar que los derivados Markdown no se exponen por la API o como archivos
   públicos y que se eliminan con su documento.
-- Ejecutar `npm run lint` y `npm run build` desde `frontend/`.
-- Verificar navegación, accesibilidad básica, estados de error y recorrido de
+- [x] Ejecutar `npm test`, `npm run lint` y `npm run build` desde `frontend/`.
+- [ ] Verificar navegación, accesibilidad básica, estados de error y recorrido de
   estudio completo en móvil y escritorio.
-- Sincronizar `README.md` y `docs/api_contract.yaml` con el resultado implementado.
+- [x] Sincronizar `README.md`, instrucciones de agentes y `docs/api_contract.yaml`
+  con el resultado implementado.
 
 ### Criterios de aceptación
 
@@ -820,7 +845,7 @@ tablas ya creadas.
 - La activación corresponde a una configuración realmente verificada.
 - La interfaz muestra el proveedor efectivamente utilizado.
 - Ollama conserva su funcionamiento local sin clave.
-- ChatGPT Plus/Pro utiliza la conexión oficial de Local Codex.
+- ChatGPT Plus/Pro utiliza la conexión oficial de Local Codex. **Pendiente.**
 - Claude por API funciona; Pro/Max permanece pendiente de autorización oficial.
 - El Markdown convertido permanece interno.
 - El ahorro de tokens se demuestra mediante medición contra los prompts actuales,
@@ -837,8 +862,9 @@ tablas ya creadas.
 - [PyMuPDF4LLM](https://github.com/pymupdf/pymupdf4llm).
 - [Reporte comparable de permisos NVIDIA](https://forums.developer.nvidia.com/t/403-forbidden-authorization-failed-on-integrate-api-nvidia-com-v1-newly-generated-nvapi-key-works-on-nvcf-but-not-on-chat-completions-endpoint/373402).
 
-## 10. Recomendación
+## 10. Próximos pasos recomendados
 
-Comenzar por la verificación de proveedores y la integridad de los resultados;
-después aplicar la optimización de PDF y el rediseño sobre ese funcionamiento
-corregido.
+Priorizar la verificación live con credenciales proporcionadas por el usuario y,
+después, decidir si la optimización de PDF/tokens y el rediseño visual justifican
+su coste frente al MVP actual. Las integraciones de suscripción deben mantenerse
+aisladas de la ruta de API-key.

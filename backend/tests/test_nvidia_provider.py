@@ -11,6 +11,7 @@ import respx
 from app.core.config import LLMCallPolicy
 from app.core.exceptions import LLMError
 from app.llm.nvidia_models import (
+    NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
     NVIDIA_NIM_BASE_URL,
     NVIDIA_NVCF_STATUS_URL,
     get_nvidia_model_spec,
@@ -28,7 +29,7 @@ def _policy() -> LLMCallPolicy:
     )
 
 
-def _provider(model: str = "meta/llama-3.3-70b-instruct") -> NvidiaNimProvider:
+def _provider(model: str = "nvidia/nemotron-3-super-120b-a12b") -> NvidiaNimProvider:
     spec = get_nvidia_model_spec(model)
     assert spec is not None
     return NvidiaNimProvider(
@@ -56,7 +57,7 @@ def _no_sleep(monkeypatch):
 
 @respx.mock
 def test_uses_the_fixed_hosted_endpoint_and_profile_payload():
-    provider = _provider("deepseek-ai/deepseek-v4-flash")
+    provider = _provider()
     route = respx.post(f"{NVIDIA_NIM_BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(200, json=_completion("ok"))
     )
@@ -69,13 +70,15 @@ def test_uses_the_fixed_hosted_endpoint_and_profile_payload():
     assert request.headers["Authorization"] == "Bearer nvapi-test-key"
     payload = json.loads(request.content)
     assert payload == {
-        "model": "deepseek-ai/deepseek-v4-flash",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
         "messages": [
             {"role": "system", "content": "system"},
             {"role": "user", "content": "prompt"},
         ],
         "stream": False,
-        "max_tokens": 16384,
+        "max_tokens": 32768,
+        "reasoning_effort": "low",
+        "reasoning_budget": NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
     }
 
 
@@ -93,6 +96,23 @@ def test_connection_requires_the_structured_probe_response():
     payload = json.loads(route.calls.last.request.content)
     assert payload["stream"] is False
     assert payload["max_tokens"] == 32
+
+
+@respx.mock
+def test_nemotron_bounds_reasoning_for_the_small_structured_probe():
+    provider = _provider("nvidia/nemotron-3-super-120b-a12b")
+    route = respx.post(f"{NVIDIA_NIM_BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(200, json=_completion('{"status":"ok"}'))
+    )
+    try:
+        provider.test_connection()
+    finally:
+        provider.close()
+
+    payload = json.loads(route.calls.last.request.content)
+    assert payload["max_tokens"] == 32
+    assert payload["reasoning_effort"] == "low"
+    assert payload["reasoning_budget"] == NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS
 
 
 @respx.mock
@@ -145,6 +165,32 @@ def test_completed_async_metadata_never_triggers_a_second_post():
 
     assert exc_info.value.code == "LLM_ASYNC_RESULT_UNAVAILABLE"
     assert post.call_count == 1
+
+
+@respx.mock
+def test_retryable_status_poll_failure_never_reposts_accepted_nvcf_request():
+    provider = _provider()
+    post = respx.post(f"{NVIDIA_NIM_BASE_URL}/chat/completions").mock(
+        side_effect=[
+            httpx.Response(
+                202,
+                headers={"NVCF-REQID": "11111111-1111-1111-1111-111111111111"},
+            ),
+            httpx.Response(200, json=_completion("replayed")),
+        ]
+    )
+    poll = respx.get(
+        NVIDIA_NVCF_STATUS_URL.format(request_id="11111111-1111-1111-1111-111111111111")
+    ).mock(side_effect=[httpx.Response(503), httpx.Response(503)])
+    try:
+        with pytest.raises(LLMError) as exc_info:
+            provider.complete(kind="quiz", system="system", prompt="prompt")
+    finally:
+        provider.close()
+
+    assert exc_info.value.code == "LLM_PROVIDER_UNAVAILABLE"
+    assert post.call_count == 1
+    assert poll.call_count == 2
 
 
 @respx.mock

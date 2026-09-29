@@ -22,7 +22,7 @@ class NvidiaDefinition(ProviderDefinition):
         label="NVIDIA NIM",
         default_base_url=NVIDIA_NIM_BASE_URL,
         requires_model_selection=True,
-        default_model="meta/llama-3.3-70b-instruct",
+        default_model="nvidia/nemotron-3-super-120b-a12b",
         common_models=tuple(ModelOption(model_id) for model_id in NVIDIA_MODEL_SPECS),
         key_placeholder="nvapi-...",
         supports_custom_base_url=False,
@@ -50,6 +50,12 @@ class NvidiaDefinition(ProviderDefinition):
         return spec.request_profile
 
     def verification_contract(self, model: str) -> tuple[str, ...]:
+        spec = get_nvidia_model_spec(model)
+        if spec is None:
+            # Existing credentials can retain a model after it is removed from
+            # the supported registry. Fingerprinting must still work so startup
+            # can invalidate that stale verification instead of aborting.
+            return (nvidia_verification_version(model), "unsupported")
         return (nvidia_verification_version(model), *super().verification_contract(model))
 
     def build_provider(

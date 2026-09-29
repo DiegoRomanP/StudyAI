@@ -1,6 +1,20 @@
-# StudyAI — Plan de Ejecución Multi-Agente (Local)
+# StudyAI — Plan Histórico de Ejecución Multi-Agente (Local)
 
-Este documento es la guía operativa para construir StudyAI usando **múltiples agentes de Claude Code trabajando en paralelo o en secuencia controlada**, cada uno con responsabilidad acotada, en pasos pequeños y verificables. El objetivo es que ningún agente reciba una tarea tan grande que "se sature" (pierda contexto, mezcle responsabilidades, o genere código inconsistente).
+Este documento fue la guía operativa original para construir StudyAI usando
+**múltiples agentes de Claude Code trabajando en paralelo o en secuencia
+controlada**, cada uno con responsabilidad acotada, en pasos pequeños y
+verificables.
+
+> **Estado: histórico.** StudyAI se implementó finalmente como un monorepo
+> coherente, no mediante la coreografía de ramas descrita aquí. No ejecutes este
+> plan literalmente ni uses sus recuentos, prompts o estados como fuente de
+> verdad. Para el estado actual consulta `docs/AGENTS_STATUS.md`, y para el
+> contrato visible consulta `README.md`, `AGENTS.md`, `CLAUDE.md` y
+> `docs/api_contract.yaml`.
+
+La separación por capas y los patrones de diseño siguen vigentes. La arquitectura
+actual de proveedores LLM, incluyendo `backend/app/llm/providers/` y
+`provider_registry.py`, reemplaza las simplificaciones de este plan.
 
 > Este plan asume que ya tienes el documento `studyai_plan.md` (arquitectura, patrones, stack, estructura de carpetas) como referencia. Este nuevo documento NO repite esa arquitectura, la **ejecuta**.
 
@@ -27,7 +41,7 @@ Dividir el trabajo en **agentes especializados con carpetas propias** y **tareas
 
 ---
 
-## 2. Los 5 Agentes y su scope
+## 2. Los 6 roles originales y su scope
 
 | Agente | Nombre | Carpetas que posee | Depende de |
 |---|---|---|---|
@@ -81,7 +95,11 @@ Estado: PENDIENTE ⬜
 
 ### 3.2 Contrato de API (evita que Frontend espere al Backend)
 
-El Agente A, en la Fase 0, crea `docs/api_contract.yaml` (OpenAPI mínimo) con los endpoints esperados, sus request/response shapes — **sin implementación real**. El Agente E (Frontend) construye contra ese contrato usando mocks (`msw` o JSON estático), y el Agente B/D implementan después contra el mismo contrato. Cuando ambos lados están listos, se conectan y se valida con el Agente F.
+En el plan original, el Agente A crea `docs/api_contract.yaml` (OpenAPI mínimo)
+con los endpoints esperados, sus request/response shapes y **sin implementación
+real**. En la implementación actual, ese contrato se mantiene sincronizado con el
+OpenAPI servido por FastAPI; el frontend usa la API real y el modo demo, no la
+coreografía de mocks descrita aquí.
 
 ### 3.3 Aislamiento de carpetas (evita conflictos de git)
 
@@ -296,8 +314,11 @@ Cada tarea está escrita como **el prompt exacto que le darías al agente** en s
 
 **Criterio**: test que verifica que el filtro de Pareto efectivamente reduce la lista de temas a ~20% antes de construir el prompt.
 
-#### Tarea 2.7 — Prompt de generación de contenido + quiz
-> **Prompt**: "Implementa `backend/app/llm/prompts/content_gen.py` (genera markdown con resumen, explicación y keywords para YouTube) y `quiz_gen.py` (genera 5 flashcards + 5 multiple choice por sesión), ambos siguiendo el Flujo 2 (LLM call #3) del plan original."
+#### Tarea 2.7 — Prompt histórico de generación de contenido + quiz
+> **Prompt histórico**: "Implementa `backend/app/llm/prompts/content_gen.py` (genera markdown con resumen, explicación y keywords para YouTube) y `quiz_gen.py` (genera 5 flashcards + 5 multiple choice por sesión), ambos siguiendo el Flujo 2 (LLM call #3) del plan original."
+
+La implementación actual usa `session_content.py` para una única llamada fusionada
+por sesión y conserva `2 + N` llamadas totales.
 
 **Criterio**: revisión manual de que el prompt pide explícitamente el formato de salida (markdown para contenido, JSON con schema para quiz).
 

@@ -130,6 +130,7 @@ def test_plan_failure_persists_and_logs_only_the_safe_llm_message(client: TestCl
     assert plan["status"] == "FAILED"
     assert plan["error_message"] == "El proveedor de IA rechazó el acceso al modelo."
     assert "leaked-key-123" not in caplog.text
+    assert "code=LLM_ACCESS_DENIED, upstream_status=403" in caplog.text
 
 
 def test_session_plan_provider_failure_does_not_continue_with_session_content(client: TestClient, monkeypatch):

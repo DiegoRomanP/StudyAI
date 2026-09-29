@@ -216,7 +216,11 @@ function ProviderCard({
   const initialModel = credential?.model || catalogEntry.default_model;
   const initialIsCommon = modelOptions.some((m) => m.id === initialModel);
   const [modelChoice, setModelChoice] = useState(
-    initialIsCommon || !allowsCustomModel ? catalogEntry.default_model : CUSTOM_MODEL_VALUE,
+    initialIsCommon
+      ? initialModel
+      : !allowsCustomModel
+        ? catalogEntry.default_model
+        : CUSTOM_MODEL_VALUE,
   );
   const [customModel, setCustomModel] = useState(initialIsCommon ? "" : initialModel);
   const [showAdvanced, setShowAdvanced] = useState(Boolean(credential?.base_url));
@@ -229,7 +233,9 @@ function ProviderCard({
   function syncDraft(source: LLMCredentialDTO) {
     const savedModel = source.model || catalogEntry.default_model;
     const savedIsCommon = modelOptions.some((model) => model.id === savedModel);
-    setModelChoice(savedIsCommon || !allowsCustomModel ? catalogEntry.default_model : CUSTOM_MODEL_VALUE);
+    setModelChoice(
+      savedIsCommon ? savedModel : !allowsCustomModel ? catalogEntry.default_model : CUSTOM_MODEL_VALUE,
+    );
     setCustomModel(savedIsCommon ? "" : savedModel);
     setBaseUrl(source.base_url);
     setSyncedRevision(source.config_revision);

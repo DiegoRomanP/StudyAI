@@ -21,7 +21,7 @@ install the optional deps and set a key. Never break this property when touching
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # core — runs the full MVP (mock LLM, hashing embedder, in-memory vector store)
-pip install -r requirements-dev.txt      # pytest, httpx
+pip install -r requirements-dev.txt      # pytest, httpx, respx
 pip install -r requirements-rag.txt      # optional: PyMuPDF, sentence-transformers, chromadb (pulls in torch)
 
 cp .env.example .env
@@ -31,7 +31,7 @@ uvicorn main:app --reload --port 8001    # http://localhost:8001, Swagger at /do
 Tests:
 
 ```bash
-python -m pytest -q                                    # full suite (86 tests)
+python -m pytest -q                                    # full backend suite
 python -m pytest tests/test_sm2.py -q                   # single file
 python -m pytest tests/test_sm2.py::test_third_review_multiplies_by_ef -q   # single test
 ```
@@ -49,6 +49,7 @@ npm install
 cp .env.example .env      # VITE_API_URL, defaults to http://localhost:8001
 npm run dev               # http://localhost:5173
 npm run lint              # tsc --noEmit (no separate linter configured)
+npm test                  # Vitest suite
 npm run build             # tsc --noEmit && vite build
 ```
 
@@ -88,8 +89,9 @@ All routes mount at the **root path** (`/documents`, `/goals`, ...), not under `
   - `Chunker`: LangChain `RecursiveCharacterTextSplitter` vs. pure-Python splitter.
   - `PDFProcessor`: PyMuPDF, imported lazily so its absence doesn't break boot.
   - `LLMProvider` (`app/llm/base.py`): real providers (`AnthropicProvider`,
-    `OpenAICompatibleProvider`) vs. `MockLLMProvider` (deterministic, schema-valid fake JSON per
-    `kind`) — see "LLM provider settings" below for the full selection chain. Never crashes boot
+    `OpenAICompatibleProvider`, `OpenRouterProvider`, `NvidiaNimProvider`) vs.
+    `MockLLMProvider` (deterministic, schema-valid fake JSON per `kind`) — see
+    "LLM provider settings" below for the full selection chain. Never crashes boot
     even on a bad key (falls back to mock with a logged warning).
   When adding a new capability here, follow the same shape: one interface, two backends, silent
   degrade with a log line — never a hard dependency on the optional package.
@@ -304,7 +306,8 @@ Vite + React 18 + TypeScript + Tailwind + TanStack Query + React Router + Axios.
 `/settings`). `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since
 generation is async on the backend. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
 (fetched from the backend, not hardcoded) so the provider list/model suggestions never drift from
-`app/llm/providers_catalog.py`.
+`app/llm/providers_catalog.py`, whose compatibility view is derived from
+`app/llm/provider_registry.py`.
 
 **Security-relevant, don't regress**: YouTube resource links are always built as a *search URL*
 from LLM-provided keywords (`src/lib/youtube.ts`) — an LLM-generated URL is never rendered directly.

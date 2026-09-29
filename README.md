@@ -8,8 +8,9 @@ de temas débiles (**Pareto**) para el repaso.
 
 Funciona **de fábrica sin claves ni dependencias pesadas**: usa un proveedor LLM
 *mock* determinista, un *embedder* por hashing y un *vector store* en memoria.
-Al instalar las dependencias opcionales y una API key de Anthropic, se
-auto-mejora a Claude + RAG semántico real sin tocar código.
+Al instalar las dependencias opcionales y configurar Anthropic, otro proveedor
+compatible o una instancia local de Ollama, se puede usar inferencia real y RAG
+semántico sin tocar el código.
 
 ---
 
@@ -33,7 +34,7 @@ studyai/
 │       ├── schemas/         # DTOs Pydantic (entrada/salida de la API)
 │       ├── processors/      # Parseo de documentos (PDF / Markdown) + Factory
 │       ├── rag/             # Chunker, Embedder, VectorStore, Retriever, Pipeline
-│       ├── llm/             # Proveedores (Anthropic / OpenAI-compatible / Mock), prompts, parsers
+│       ├── llm/             # Contratos y adaptadores LLM por proveedor, prompts y parsers
 │       ├── strategies/      # Estrategias por tipo de meta
 │       ├── algorithms/      # SM-2 (repaso) y Pareto (priorización)
 │       ├── events/          # Bus de eventos de sesión (Observer)
@@ -48,10 +49,10 @@ studyai/
 **Stack**
 
 - **Backend:** FastAPI, SQLAlchemy 2 (SQLite por defecto), Pydantic v2, Alembic,
-  Anthropic SDK. Opcional: PyMuPDF, sentence-transformers, ChromaDB,
+  Anthropic SDK, httpx. Opcional: PyMuPDF, sentence-transformers, ChromaDB,
   LangChain text-splitters.
 - **Frontend:** React 18, TypeScript, Vite, TailwindCSS, TanStack Query, React
-  Router, Axios, Recharts, react-markdown.
+  Router, Axios, Recharts, react-markdown, Vitest y Testing Library.
 
 ---
 
@@ -72,7 +73,7 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt        # núcleo, suficiente para el MVP
-pip install -r requirements-dev.txt    # tests (pytest, httpx)
+pip install -r requirements-dev.txt    # tests (pytest, httpx, respx)
 # Opcional — RAG semántico real + parseo de PDF (paquetes grandes, incluye torch):
 # pip install -r requirements-rag.txt
 
@@ -95,6 +96,8 @@ npm install
 cp .env.example .env                   # VITE_API_URL apunta al backend
 npm run dev                            # http://localhost:5173
 ```
+
+Para validar el cliente ejecuta `npm run lint`, `npm test` y `npm run build`.
 
 ---
 
@@ -162,19 +165,33 @@ cualquier proveedor, "Personalizado…" acepta cualquier otro ID de modelo del
 Hub que Inference Providers sirva.
 
 Para NVIDIA NIM, StudyAI usa siempre `https://integrate.api.nvidia.com/v1` y
-solo admite modelos generativos cuyo contrato está validado en el servidor:
-`meta/llama-3.3-70b-instruct`, `meta/llama-3.1-70b-instruct`,
-`deepseek-ai/deepseek-v4-flash` y `nvidia/nemotron-3-super-120b-a12b`. NVIDIA
-no ofrece campos de URL ni de modelo personalizado: su catálogo también
-incluye clasificadores, guardas y extractores que no sirven para generar planes.
+solo admite modelos generativos cuyo contrato está validado en el servidor. El
+catálogo actual ofrece `nvidia/nemotron-3-super-120b-a12b`; en la evaluación
+live del 2026-09-29, NVIDIA respondió `410 Gone` indicando fin de vida para los
+dos modelos Llama y `deepseek-ai/deepseek-v4-flash` que antes aparecían aquí, por
+lo que se retiraron de la lista admitida. Nemotron se invoca con `stream: false`,
+`reasoning_effort: low` y un `reasoning_budget` acotado para reservar tokens de
+salida a las respuestas JSON de StudyAI. NVIDIA no ofrece campos de URL ni de
+modelo personalizado: su catálogo general también incluye clasificadores,
+guardas y extractores que no sirven para generar planes.
+
+La verificación corta y una solicitud directa de contenido de sesión pasaron,
+pero una generación completa observada falló con HTTP `503` en la etapa de
+contenido de sesión, después de analizar temas y crear la primera sesión. La
+misma solicitud de contenido respondió `200` en una repetición directa; esto
+apunta a disponibilidad/capacidad intermitente de NVIDIA, no a un contrato de
+payload incompatible. StudyAI registra el estado HTTP upstream en el log seguro
+de generación y no repite automáticamente el POST de NIM ante fallos transitorios.
 
 Internamente, cada proveedor posee su contrato en `backend/app/llm/providers/`:
-metadatos de la UI, validacion de clave/modelo/URL, perfil de solicitud,
-construccion del adaptador y version de verificacion. `provider_registry.py` los
+metadatos de la UI, validación de clave/modelo/URL, perfil de solicitud,
+construcción del adaptador y versión de verificación. `provider_registry.py` los
 ensambla; el transporte HTTP, presupuestos y errores seguros se comparten para
-evitar duplicar logica de reintentos. Para incorporar un proveedor nuevo, agrega
-su definicion, registrala y cubrela con pruebas de contrato en lugar de anadir
-condicionales a la factoria o al servicio de configuracion.
+evitar duplicar lógica de reintentos. OpenAI, GLM y Hugging Face usan el transporte
+de chat común; Anthropic, OpenRouter, NVIDIA y Ollama conservan sus adaptadores o
+contratos específicos. Para incorporar un proveedor nuevo, agrega su definición,
+regístrala y cúbrela con pruebas de contrato en lugar de añadir condicionales a la
+factoría o al servicio de configuración.
 
 El flujo de configuración se realiza en cuatro pasos:
 
@@ -314,6 +331,14 @@ en `/docs`.
 
 ---
 
+## Documentación de mantenimiento
+
+- [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
+- [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
+- [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
+- [`studyai_multiagent_plan.md`](studyai_multiagent_plan.md): plan histórico de ejecución multi-agente.
+- [`plans/ResolveProblems.md`](plans/ResolveProblems.md): diagnóstico histórico y estado de sus propuestas.
+
 ## Tests
 
 ```bash
@@ -325,24 +350,24 @@ python -m pytest -q
 Cubren SM-2, Pareto, chunker, parsers de salida del LLM, `ProcessorFactory`,
 `GoalStrategy`, borrado de documentos/metas/planes (incluida la cascada
 meta → planes → sesiones/quizzes/repasos de flashcards), cifrado/enmascarado
-de claves, el proveedor OpenAI-compatible (mockeado con `respx`, sin red
-real) incluyendo su manejo de rate-limit (HTTP 429 con `Retry-After` numérico o
-fecha HTTP, cuota sin reintento y presupuesto total acotado), la selección
-de proveedor de `get_llm_provider` (incluido Hugging Face y que hereda
-`LLM_TIMEOUT_SECONDS`/`LLM_MAX_RETRIES` de la config) y los endpoints de
-`/llm-settings`, el pipeline de generación de planes (recuento exacto de
-llamadas al LLM, conteos de flashcards/opción múltiple según la estrategia de
-meta), además de un test de integración end-to-end (upload → plan → sesión →
-quiz → dashboard) con el LLM mockeado.
+de claves, el transporte OpenAI-compatible y los adaptadores directos de
+OpenRouter y NVIDIA (mockeados con `respx`, sin red real), perfiles de payload,
+reintentos y límites de presupuesto, el registro y aislamiento de proveedores,
+el ciclo revisionado de `/llm-settings`, migraciones de evidencia, el pipeline
+de generación de planes (`2 + N` llamadas) y un flujo end-to-end con el LLM
+mockeado.
 
 Frontend — pruebas, typecheck y build de producción:
 
 ```bash
 cd frontend
-npm run test
+npm test
 npm run lint     # tsc --noEmit
 npm run build
 ```
+
+La cobertura actual incluye pruebas de errores API y de `SettingsPage`, incluida
+la sincronización de revisiones y las restricciones de NVIDIA.
 
 ---
 
@@ -357,6 +382,9 @@ npm run build
 - Los overrides compatibles de `base_url` (URL base personalizada) se validan para evitar
   SSRF: se resuelve el host y se rechazan direcciones privadas, loopback o de
   enlace local (incluida la IP de metadatos de nube `169.254.169.254`).
+- NVIDIA usa únicamente el endpoint hospedado oficial y modelos con contrato
+  curado; no acepta URLs/modelos personalizados ni repite el POST después de un
+  `202` aceptado.
 - Los enlaces de YouTube se construyen como **búsqueda** desde palabras clave;
   nunca se renderiza una URL generada por el LLM.
 

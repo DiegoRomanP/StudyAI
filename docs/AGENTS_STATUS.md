@@ -1,67 +1,81 @@
 # Estado del Proyecto — StudyAI
 
-> Este MVP se construyó como **monorepo único** (backend + frontend) en lugar de
-> la coreografía de 5 agentes/ramas del plan multi-agente. Ese esquema es un
-> *método de trabajo*, no un requisito del producto; para un MVP demostrable, un
-> solo repo coherente es más simple y evita conflictos de merge. La arquitectura
-> por capas y los patrones del plan (Repository, Factory, Strategy, Pipeline,
-> Observer) **sí** se respetan.
+Última actualización: 2026-09-22.
 
-## Fase 0 — Setup ✅
-- [x] Estructura de carpetas (backend por capas + frontend)
-- [x] FastAPI app factory + `GET /health`
-- [x] Configuración con `pydantic-settings` (`app/core/config.py`) + `.env.example`
-- [x] SQLAlchemy engine/session + `Base` + Alembic configurado (`create_all` al arranque)
-- [x] Contrato de API (`docs/api_contract.yaml`) — además el backend sirve OpenAPI en `/docs`
-- Estado: **COMPLETA**
+Este archivo describe el estado implementado del monorepo. El plan multi-agente
+original se conserva en `studyai_multiagent_plan.md` como referencia histórica;
+no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 
-## Fase 1A — Backend Core / Datos ✅
-- [x] Modelos: User, Document, Goal, Plan, PlanTopic, Session, SessionMaterial,
-      Quiz, QuizQuestion, QuizResult, FlashcardReview
-- [x] Schemas Pydantic (document, goal, plan, session, quiz, dashboard)
-- [x] Repository Pattern (`base` + document/goal/plan/session/quiz/flashcard)
-- [x] Endpoints CRUD de Goals (`POST/GET/PUT /goals`)
-- [x] Upload de documentos (`POST /documents/upload`) con validación y estado `PENDING`
-- Estado: **COMPLETA**
+## Resumen
 
-## Fase 1B — RAG y Procesamiento ✅
-- [x] `BaseProcessor` + `PDFProcessor` (PyMuPDF, import perezoso) + `MarkdownProcessor`
-- [x] `DocumentProcessorFactory` (Factory)
-- [x] `Chunker` (LangChain con *fallback* puro-Python)
-- [x] `Embedder` (sentence-transformers con *fallback* hashing determinista, 384-d)
-- [x] `VectorStore` (ChromaDB con *fallback* cosine en memoria)
-- [x] `Retriever` + `IngestionPipeline` (Validate→Parse→Chunk→Embed→Store)
-- Estado: **COMPLETA** — corre sin dependencias pesadas; se auto-mejora al instalarlas.
+- Backend FastAPI y frontend Vite/React funcionando como monorepo.
+- Modo demo operativo sin claves ni dependencias RAG pesadas.
+- Generación de planes en segundo plano con `2 + N` llamadas LLM.
+- Configuración BYO-key con ciclo `PUT clave → PATCH borrador → POST test → POST activate`.
+- Suite backend: `239 passed` en la última verificación.
+- Frontend: lint, 32 pruebas Vitest y build de producción pasan.
 
-## Fase 2 — LLM y Lógica de Negocio ✅
-- [x] Proveedor LLM *pluggable*: `AnthropicProvider` (SDK, reintentos+backoff) /
-      `MockLLMProvider` (offline determinista). `get_llm_provider()` decide por config.
-- [x] `parse_llm_json` (limpia fences, repara comas colgantes)
-- [x] Prompts: topic_analysis, plan_generation, content_gen, quiz_gen
-- [x] `GoalStrategy` (Exam/Learning/Memorization) + Factory
-- [x] Algoritmo SM-2 (`app/algorithms/sm2.py`) + Pareto (`app/algorithms/pareto.py`)
-- [x] `PlanService` orquestador + generación asíncrona (`BackgroundTask`)
-- [x] `SessionEventBus` (Observer) → `session.completed`
-- [x] `SessionService`, `QuizService` (autocalifica opción múltiple), `ProgressService` (SM-2)
-- Estado: **COMPLETA**
+## Fases
 
-## Fase 3 — Frontend ✅
-- [x] Vite + React + TypeScript + TailwindCSS + TanStack Query + React Router + Axios
-- [x] Páginas: Documentos, Metas, Plan (con polling), Sesión (estudio→receso→test), Dashboard
-- [x] Timer, flashcards con flip + rating 0-5, opción múltiple, links de búsqueda de YouTube
-- Estado: **COMPLETA (MVP)** — conectado a la API real (sin mocks).
+### Fase 0 — Setup ✅
 
-## Fase 4 — QA / Docs ✅
-- [x] Tests unitarios: sm2, chunker, output_parsers, ProcessorFactory, GoalStrategy, pareto
-- [x] Test de integración end-to-end (upload→plan→sesión→quiz→dashboard) con LLM mockeado
-- [x] `README.md` con instalación y ejecución
-- Estado: **22 tests en verde**
+- [x] Estructura backend/frontend y configuración por entorno.
+- [x] FastAPI, health check, CORS y OpenAPI en `/openapi.json`/`/docs`.
+- [x] SQLAlchemy, SQLite por defecto, `create_all()` al inicio y backfills aditivos.
+- [x] Contrato mantenido en `docs/api_contract.yaml`.
 
-## Checklist de seguridad básica
-- [x] Upload valida extensión (`.pdf`/`.md`) y tamaño máximo (`MAX_UPLOAD_MB`)
-- [x] Sin SQL crudo: todo vía SQLAlchemy ORM parametrizado
-- [x] API key no hardcodeada: se lee de entorno; `.env` en `.gitignore`
-- [x] URLs de YouTube se construyen como búsqueda desde keywords — **nunca** se
-      renderizan URLs generadas por el LLM (Mejora 1 del plan)
-- [ ] Pendiente (post-MVP): autenticación real (hoy usuario demo único), rate limiting,
-      withholding de respuestas del quiz hasta el submit.
+### Fase 1 — Datos, RAG y procesamiento ✅
+
+- [x] Modelos, schemas, repositorios y endpoints CRUD.
+- [x] Ingesta asíncrona `Validate → Parse → Chunk → Embed → Store`.
+- [x] Fallbacks puros de Python para PDF opcional, embeddings, chunking y vector store.
+- [x] Recuperación de contexto para la generación de planes.
+
+### Fase 2 — LLM y lógica de negocio ✅
+
+- [x] Anthropic nativo, OpenAI/GLM/Hugging Face mediante transporte común, OpenRouter directo, NVIDIA NIM dedicado, Ollama local y mock determinista.
+- [x] Contratos por proveedor en `backend/app/llm/providers/` y registro único en `provider_registry.py`.
+- [x] Perfiles de payload por modelo/proveedor, clasificación segura de errores, presupuestos y reintentos.
+- [x] NVIDIA limitado a modelos curados, endpoint fijo, polling NVCF tras `202` y sin repetir POST.
+- [x] Revisión, fingerprint y evidencia persistida para activar credenciales verificadas.
+- [x] SM-2, Pareto, estrategias de meta, generación asíncrona y eventos de sesión.
+
+### Fase 3 — Frontend ✅
+
+- [x] Documentos, metas, planes con polling, sesiones, quizzes y dashboard.
+- [x] Página de configuración con catálogo servido por backend y estado runtime efectivo.
+- [x] Manejo de conflictos de revisión, modelos históricos incompatibles y restricciones de NVIDIA.
+- [x] Enlaces de YouTube construidos como búsquedas a partir de keywords.
+
+### Fase 4 — QA y documentación ✅
+
+- [x] Pruebas backend unitarias, de integración y de contratos de proveedores.
+- [x] Pruebas frontend de errores API y `SettingsPage` con Vitest/Testing Library.
+- [x] Typecheck, build frontend y sincronización del contrato API.
+- [x] README, instrucciones de agentes y documentación de arquitectura actualizados.
+
+## Seguridad y límites vigentes
+
+- [x] Claves cifradas en reposo; la API solo devuelve una vista enmascarada.
+- [x] URLs personalizadas validadas contra SSRF al guardar y antes de usar.
+- [x] Anthropic, NVIDIA y Ollama rechazan overrides de URL; NVIDIA también rechaza modelos no curados.
+- [x] Cuerpos de error upstream, prompts, payloads y encabezados de autorización no se exponen.
+- [x] La verificación no equivale a tener un modelo no vacío; requiere evidencia de la revisión actual.
+- [x] No se renderizan URLs entregadas por el LLM.
+
+## Pendiente fuera del MVP
+
+- Autenticación real y multiusuario.
+- Rate limiting propio de la aplicación.
+- Ocultar respuestas del quiz hasta el envío.
+- Integración de suscripciones ChatGPT Plus/Pro mediante Local Codex.
+- Integración de Claude Pro/Max, pendiente de autorización y contrato oficial.
+- Rediseño visual amplio y optimización adicional de PDF/tokens; la extracción y recuperación actuales siguen funcionando con fallbacks.
+- Verificación live con cuentas reales de cada proveedor; la suite usa transporte simulado y no consume claves.
+
+## Fuentes de verdad
+
+- Código y pruebas ejecutables.
+- `README.md`: instalación, uso y comportamiento visible.
+- `CLAUDE.md`/`AGENTS.md`: arquitectura y reglas para agentes.
+- `docs/api_contract.yaml`: contrato mantenido junto al OpenAPI de FastAPI.
