@@ -59,7 +59,7 @@ studyai/
 ## Requisitos
 
 - **Python** ≥ 3.11 (probado en 3.14)
-- **Node.js** ≥ 18 (probado en 26) y npm
+- **Node.js** ≥ 22 y npm (lockfile frontend verificado con 24.19.0)
 
 ---
 
@@ -98,6 +98,18 @@ npm run dev                            # http://localhost:5173
 ```
 
 Para validar el cliente ejecuta `npm run lint`, `npm test` y `npm run build`.
+
+### QA aislado
+
+Las pruebas de API y navegador con Playwright/Bruno usan dependencias npm
+fijadas, Chromium instalado por `npm --prefix frontend exec -- playwright install chromium`
+y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core. Sigue
+[`docs/frontend-integration/qa.md`](docs/frontend-integration/qa.md) para
+prepararlo y ejecutar `npm --prefix frontend run test:qa`; la guía explica los
+puertos, el aislamiento de datos, los reportes y la cobertura provisional de API
+hasta A04. Mientras no exista la colección A04, Bruno queda explícitamente como
+`not-run`; cuando exista, el runner valida su reporte JSON y exige requests y
+aserciones ejecutadas (un exit `0` por sí solo no cuenta como cobertura).
 
 ---
 

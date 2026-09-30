@@ -8,7 +8,12 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "node scripts/run-qa.mjs e2e",
+    "test:api": "node scripts/run-qa.mjs api",
+    "test:qa": "node scripts/run-qa.mjs all",
+    "test:qa:types": "tsc --noEmit -p tsconfig.qa.json",
+    "test:qa:runner": "node --test scripts/run-qa.test.mjs scripts/qa-runtime.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.0",
@@ -22,8 +27,11 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
+    "@types/node": "24.19.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@playwright/test": "1.62.1",
+    "@usebruno/cli": "4.2.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "jsdom": "^25.0.1",
