@@ -1,15 +1,12 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import type { GoalDTO, GoalType } from "../api/types";
-import { Badge, Button, Card, Spinner } from "../components/ui";
+import { getApiErrorMessage } from "../api/errors";
+import { GoalTemplatePicker } from "../components/goals/GoalTemplatePicker";
+import { Badge, Button, Card, Input, Spinner } from "../components/ui";
 import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
+import type { GoalTemplate } from "../lib/goalTemplates";
 import { useShowMore } from "../hooks/useShowMore";
-
-const TEMPLATES: { type: GoalType; label: string; title: string; emoji: string }[] = [
-  { type: "EXAM", label: "Sacar buena nota", title: "Aprobar el examen", emoji: "🏆" },
-  { type: "LEARNING", label: "Solo quiero aprender", title: "Aprender el tema", emoji: "💡" },
-  { type: "MEMORIZATION", label: "Necesito memorizar", title: "Memorizar el material", emoji: "🧩" },
-];
 
 const TYPE_LABELS: Record<GoalType, string> = {
   EXAM: "Examen",
@@ -23,22 +20,38 @@ export function GoalsPage() {
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(goals);
 
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
+  const [selectedTemplateType, setSelectedTemplateType] = useState<GoalType | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  function applyTemplate(t: (typeof TEMPLATES)[number]) {
-    setGoalType(t.type);
-    setTitle(t.title);
+  function applyTemplate(template: GoalTemplate) {
+    setGoalType(template.type);
+    setSelectedTemplateType(template.type);
+    setTitle(template.title);
     setSaved(false);
+    setCreateError(null);
   }
 
   async function save() {
-    if (!title.trim()) return;
-    await createGoal.mutateAsync({ goal_type: goalType, title, description });
-    setSaved(true);
-    setTitle("");
-    setDescription("");
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+
+    setCreateError(null);
+    try {
+      await createGoal.mutateAsync({
+        goal_type: goalType,
+        title: normalizedTitle,
+        description,
+      });
+      setSaved(true);
+      setSelectedTemplateType(null);
+      setTitle("");
+      setDescription("");
+    } catch (error) {
+      setCreateError(getApiErrorMessage(error, "No se pudo guardar la meta."));
+    }
   }
 
   return (
@@ -50,52 +63,48 @@ export function GoalsPage() {
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {TEMPLATES.map((t) => (
-          <button
-            key={t.type}
-            onClick={() => applyTemplate(t)}
-            className={`rounded-xl border p-4 text-left transition ${
-              goalType === t.type
-                ? "border-brand-500 bg-brand-50"
-                : "border-slate-200 bg-white hover:bg-slate-50"
-            }`}
-          >
-            <div className="text-2xl">{t.emoji}</div>
-            <div className="mt-1 font-medium text-slate-800">{t.label}</div>
-          </button>
-        ))}
-      </div>
+      <GoalTemplatePicker selectedGoalType={selectedTemplateType} onSelect={applyTemplate} />
 
       <Card className="space-y-4">
+        <Input
+          id="new-goal-title"
+          label="Título"
+          hint="El título no puede quedar vacío."
+          value={title}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            setSelectedTemplateType(null);
+            setSaved(false);
+            setCreateError(null);
+          }}
+          placeholder="Ej. Aprobar el parcial de Cálculo"
+        />
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Título</label>
-          <input
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
+          <label
+            htmlFor="new-goal-description"
+            className="mb-1 block text-sm font-medium text-text-primary"
+          >
+            Descripción
+          </label>
+          <textarea
+            id="new-goal-description"
+            value={description}
+            onChange={(event) => {
+              setDescription(event.target.value);
               setSaved(false);
             }}
-            placeholder="Ej. Aprobar el parcial de Cálculo"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripción</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
             placeholder="Detalles: temas a cubrir, fecha, énfasis..."
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           />
         </div>
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={!title.trim() || createGoal.isPending}>
             {createGoal.isPending ? "Guardando..." : "Guardar meta"}
           </Button>
-          {saved && <span className="text-sm text-green-600">✓ Meta guardada</span>}
+          {saved && <span role="status" className="text-sm text-state-success">Meta guardada.</span>}
         </div>
+        {createError && <p role="alert" className="text-sm text-state-error">{createError}</p>}
       </Card>
 
       <section className="space-y-3">
@@ -131,6 +140,10 @@ export function GoalsPage() {
 function GoalRow({ goal }: { goal: GoalDTO }) {
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
+  const fieldPrefix = useId();
+  const typeId = `${fieldPrefix}-type`;
+  const titleId = `${fieldPrefix}-title`;
+  const descriptionId = `${fieldPrefix}-description`;
 
   const [editing, setEditing] = useState(false);
   const [goalType, setGoalType] = useState<GoalType>(goal.goal_type);
@@ -183,11 +196,14 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
     return (
       <Card className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
+          <label htmlFor={typeId} className="mb-1 block text-sm font-medium text-text-primary">
+            Tipo
+          </label>
           <select
+            id={typeId}
             value={goalType}
             onChange={(e) => setGoalType(e.target.value as GoalType)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           >
             {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
               <option key={t} value={t}>
@@ -197,20 +213,29 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Título</label>
+          <label htmlFor={titleId} className="mb-1 block text-sm font-medium text-text-primary">
+            Título
+          </label>
           <input
+            id={titleId}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripción</label>
+          <label
+            htmlFor={descriptionId}
+            className="mb-1 block text-sm font-medium text-text-primary"
+          >
+            Descripción
+          </label>
           <textarea
+            id={descriptionId}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
 import type {
+  DocumentDTO,
   LLMCredentialDTO,
   GoalCreate,
   GoalUpdate,
@@ -60,7 +61,21 @@ export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (file: File) => api.uploadDocument(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: (uploadedDocument) => {
+      qc.setQueryData<DocumentDTO[]>(["documents"], (documents) => {
+        if (!documents) return [uploadedDocument];
+
+        const existingIndex = documents.findIndex(
+          (document) => document.id === uploadedDocument.id,
+        );
+        if (existingIndex === -1) return [...documents, uploadedDocument];
+
+        return documents.map((document) =>
+          document.id === uploadedDocument.id ? uploadedDocument : document,
+        );
+      });
+      return qc.invalidateQueries({ queryKey: ["documents"] });
+    },
   });
 }
 

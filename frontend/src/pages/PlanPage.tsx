@@ -1,8 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import type { PlanDTO } from "../api/types";
+import type { DocumentDTO, PlanDTO } from "../api/types";
 import { Badge, Button, Card, Spinner } from "../components/ui";
+import { DocumentPicker } from "../components/documents/DocumentPicker";
 import {
   useDeletePlan,
   useDocuments,
@@ -20,28 +22,50 @@ const STATUS = {
 
 export function PlanPage() {
   const { data: goals } = useGoals();
-  const { data: documents } = useDocuments();
+  const documentsQuery = useDocuments();
+  const { data: documents } = documentsQuery;
   const { data: plans, isLoading } = usePlans();
   const generate = useGeneratePlan();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
 
   const [goalId, setGoalId] = useState<number | "">("");
   const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
-
-  const indexedDocs = (documents ?? []).filter((d) => d.status === "INDEXED");
-
-  function toggleDoc(id: number) {
-    setSelectedDocs((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
+  const indexedDocumentIds = new Set(
+    (documents ?? [])
+      .filter((document) => document.status === "INDEXED")
+      .map((document) => document.id),
+  );
+  const selectedIndexedDocumentIds = selectedDocs.filter((id) => indexedDocumentIds.has(id));
+  const documentsAreReliable = documents !== undefined && documentsQuery.status === "success";
+  const canGeneratePlan =
+    goalId !== "" &&
+    !generate.isPending &&
+    documentsAreReliable &&
+    selectedIndexedDocumentIds.length > 0;
 
   async function handleGenerate() {
     if (goalId === "") return;
+
+    const latestDocumentQuery = queryClient.getQueryState<DocumentDTO[]>(["documents"]);
+    const latestDocuments = latestDocumentQuery?.data;
+    const latestListIsReliable =
+      latestDocuments !== undefined && latestDocumentQuery?.status === "success";
+    const currentIndexedDocumentIds = new Set(
+      (latestDocuments ?? [])
+        .filter((document) => document.status === "INDEXED")
+        .map((document) => document.id),
+    );
+    const documentIds = selectedDocs.filter((id) => currentIndexedDocumentIds.has(id));
+    if (documentIds.length !== selectedDocs.length) {
+      setSelectedDocs(documentIds);
+    }
+    if (!latestListIsReliable || documentIds.length === 0) return;
+
     const res = await generate.mutateAsync({
       goalId: Number(goalId),
-      documentIds: selectedDocs,
+      documentIds,
     });
     navigate(`/plan/${res.id}`);
   }
@@ -79,40 +103,50 @@ export function PlanPage() {
           )}
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Documentos ({selectedDocs.length} seleccionados)
-          </label>
-          {indexedDocs.length === 0 ? (
-            <p className="text-xs text-amber-600">
+        <DocumentPicker
+          documents={documents ?? []}
+          selectedDocumentIds={selectedDocs}
+          onSelectionChange={setSelectedDocs}
+          emptyState={
+            <p>
               No hay documentos indexados. Sube apuntes en{" "}
               <Link className="underline" to="/documents">Documentos</Link>.
             </p>
-          ) : (
-            <div className="grid min-w-0 grid-cols-1 gap-2">
-              {indexedDocs.map((d) => (
-                <label
-                  key={d.id}
-                  className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedDocs.includes(d.id)}
-                    onChange={() => toggleDoc(d.id)}
-                  />
-                  <span className="min-w-0 truncate">{d.filename}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+          }
+        />
 
-        <Button
-          onClick={handleGenerate}
-          disabled={goalId === "" || generate.isPending}
-        >
-          {generate.isPending ? "Iniciando…" : "Generar plan"}
-        </Button>
+        <div className="space-y-2">
+          <Button onClick={handleGenerate} disabled={!canGeneratePlan}>
+            {generate.isPending ? "Iniciando…" : "Generar plan"}
+          </Button>
+          {!documentsAreReliable ? (
+            <div className="space-y-2">
+              <p
+                role={documentsQuery.isError ? "alert" : "status"}
+                className="text-sm text-state-warning"
+              >
+                {documentsQuery.isError
+                  ? "No se puede verificar la lista de documentos. Reintenta antes de generar el plan."
+                  : "Cargando y verificando la lista de documentos…"}
+              </p>
+              {documentsQuery.isError && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void documentsQuery.refetch()}
+                  disabled={documentsQuery.isFetching}
+                >
+                  {documentsQuery.isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
+                </Button>
+              )}
+            </div>
+          ) : selectedIndexedDocumentIds.length === 0 ? (
+            <p role="status" className="text-sm text-state-warning">
+              {(documents ?? []).some((document) => document.status === "INDEXED")
+                ? "Selecciona al menos un documento indexado para generar el plan."
+                : "Necesitas al menos un documento indexado para generar el plan."}
+            </p>
+          ) : null}
+        </div>
       </Card>
 
       <section className="space-y-3">

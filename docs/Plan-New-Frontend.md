@@ -4,7 +4,7 @@
 
 **Arquitectura:** integración incremental sobre React 18 + TypeScript + Vite + Tailwind 3. Las páginas compondrán componentes reutilizables; la coordinación de operaciones estará en hooks; las llamadas al servidor seguirán pasando por TanStack Query y el cliente Axios tipado.
 
-**Estado:** integración incremental. A01 tiene hallazgos Dev-Reviewer `CAMBIOS REQUERIDOS`; A02–A04 están implementadas y aprobadas técnicamente; A05 está aprobada técnicamente, con diseño/Penpot pendiente; A06 está implementada y aprobada técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente. Sus cambios siguen en el diff local sobre HEAD `c703f8f`; aún no existe commit A06. A07–A18 siguen pendientes y no se adelantan en esta actualización documental.
+**Estado:** integración incremental. A01 tiene hallazgos Dev-Reviewer `CAMBIOS REQUERIDOS`; A02–A04 están implementadas y aprobadas técnicamente; A05 está aprobada técnicamente, con diseño/Penpot pendiente; A06 está aprobada técnicamente y committed en `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. En A07, tras cambios requeridos en la primera revisión y el primer ciclo de corrección, la segunda revisión volvió a solicitar cambios; el segundo y último ciclo técnico de corrección sigue pendiente de revisión/aceptación final. A08–A18 siguen pendientes y no se adelantan en esta actualización. A01, `PEN-03` y las dos decisiones de producto de la sección 8 continúan abiertas.
 
 ## 1. Hallazgos que condicionan el trabajo
 
@@ -289,32 +289,40 @@ Comprobar etiquetas y estado deshabilitado de `Input`/`Select`, navegación sem�
 
 **Criterio de salida:** todas las secciones son alcanzables con teclado y a 320 px, incluido un enlace directo a plan o sesión.
 
-> **Estado A06:** aprobada técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente. La evidencia registrada incluye 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; y `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con retrasos controlados de 500 ms en GETs del backend. Los cambios están en el diff local sobre HEAD `c703f8f`; aún no existe commit A06. Las casillas reflejan entregables implementados y esta aprobación es técnica, no visual. `PEN-03` sigue sin decisión: no se aprobó un sexto tab/barra inferior persistente. Las dos decisiones de la sección 8 también siguen sin respuesta; el menú móvil no implica aprobación visual ni paridad con Penpot. Véase [`frontend-integration/a06-responsive-navigation.md`](frontend-integration/a06-responsive-navigation.md).
+> **Estado A06:** aprobada técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente; commit `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. La evidencia registrada incluye 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; y `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con retrasos controlados de 500 ms en GETs del backend. Las casillas reflejan entregables implementados y esta aprobación es técnica, no visual. `PEN-03` sigue sin decisión: no se aprobó un sexto tab/barra inferior persistente. Las dos decisiones de la sección 8 también siguen sin respuesta; el menú móvil no implica aprobación visual ni paridad con Penpot. Véase [`frontend-integration/a06-responsive-navigation.md`](frontend-integration/a06-responsive-navigation.md).
 
 ## A07. Extraer subida de documentos y plantillas compartidas
 
 **Dependencias:** A05.
 
-**Archivos:** componentes de documentos/metas, `goalTemplates.ts`, `documentValidation.ts`, `DocumentsPage.tsx`, `GoalsPage.tsx`.
+**Archivos:** componentes de documentos/metas, `goalTemplates.ts`, `documentValidation.ts`, `DocumentsPage.tsx`, `GoalsPage.tsx`, `PlanPage.tsx`.
 
-- [ ] Extraer una única definición de las tres plantillas actuales.
-- [ ] Mantener que elegir plantilla rellena datos, pero no crea una meta.
-- [ ] Implementar subida por selector nativo y arrastre.
-- [ ] Validar `.pdf`, `.md`, `.markdown`, archivo vacío y tamaño.
-- [ ] Utilizar el límite documentado de `25 × 1024 × 1024` bytes para el perfil actual y mantener el error del servidor como autoridad final.
-- [ ] Conservar carga múltiple y mostrar resultado individual por archivo.
-- [ ] Permitir volver a seleccionar un archivo cuyo intento haya fallado.
-- [ ] Mostrar claramente subida aceptada frente a indexación terminada.
-- [ ] Deshabilitar selección para generación de documentos `PENDING` o `FAILED`.
-- [ ] Mantener gestión, edición y borrado en las páginas completas.
+- [x] Extraer una única definición de las tres plantillas actuales.
+- [x] Mantener que elegir plantilla rellena datos, pero no crea una meta.
+- [x] Implementar subida por selector nativo y arrastre.
+- [x] Validar `.pdf`, `.md`, `.markdown`, archivo vacío y tamaño.
+- [x] Utilizar el límite documentado de `25 × 1024 × 1024` bytes para el perfil actual y mantener el error del servidor como autoridad final.
+- [x] Conservar carga múltiple y mostrar resultado individual por archivo.
+- [x] Permitir volver a seleccionar un archivo cuyo intento haya fallado.
+- [x] Mostrar claramente subida aceptada frente a indexación terminada.
+- [x] Permitir seleccionar solo documentos `INDEXED`; sincronizar la selección cuando un documento cambia de estado o desaparece, exigir al menos un ID actualmente indexado y volver a validarlos contra el estado de caché más reciente justo antes de generar.
+- [x] Distinguir carga inicial, lista vacía, error de lectura y error de actualización; ofrecer reintento manual, conservar datos disponibles y no presentar una lista fallida como vacía.
+- [x] Deshabilitar generación y explicar junto al CTA cuando no hay documentos seleccionados `INDEXED` o la lista falta/falló; no enviar `document_ids: []` ni usar el fallback del backend de “todos los documentos”.
+- [x] Tras recibir `PENDING` del POST de subida, sembrar/actualizar `['documents']` por ID sin perder ni duplicar los demás DTOs, e invalidar después la consulta para revalidar.
+- [x] Si falla el GET tras una subida aceptada, mantener el DTO `PENDING` conocido para el polling automático cada 2 s y mostrar que los datos visibles pueden ser parciales; solo una respuesta exitosa con `INDEXED`/`FAILED` confirma el estado final. Si la lectura sigue fallando, permanecen el aviso y el reintento manual.
+- [x] Marcar como aplicada una plantilla solo después de elegirla; la edición manual del título no se anuncia como selección de plantilla y el tipo `LEARNING` puede seguir siendo el valor por defecto de creación manual.
+- [x] Mantener gestión, edición y borrado en las páginas completas.
 
 **Pruebas:**
 
 - `DocumentUpload.test.tsx`: carga múltiple, error parcial, archivo vacío, límite exacto y límite + 1 byte.
-- `DocumentPicker.test.tsx`: solo `INDEXED` seleccionable.
-- `GoalsPage.test.tsx`: plantilla no persistida, título vacío y creación confirmada.
+- `DocumentPicker.test.tsx` y `PlanPage.test.tsx`: solo `INDEXED` seleccionable, limpieza tras cambio/borrado, CTA bloqueado con selección vacía/lista fallida, protección ante clic obsoleto y payload con solo los IDs aún válidos.
+- `DocumentsPage.test.tsx`, `DocumentUpload.test.tsx` y `queries.test.tsx`: GET inicial y refetch fallidos sin datos previos, cache seed desde POST sin sobrescribir otros documentos ni duplicar el ID, polling controlado a 2 s hasta confirmar `INDEXED` o `FAILED`, sin repetir POST y sin ocultar un fallo persistente/reintento.
+- `GoalsPage.test.tsx`: ninguna plantilla aplicada al inicio, selección explícita, edición manual, plantilla no persistida hasta guardar y creación confirmada.
 
 **Criterio de salida:** Inicio y páginas completas pueden reutilizar las mismas piezas sin duplicar reglas.
+
+> **Estado A07:** Dev-Reviewer solicitó cambios en la primera y segunda revisión; se completó el segundo y último ciclo técnico de corrección, pendiente de revisión/aceptación final independiente. No se declara A07 aceptada. `DocumentsPage`, `GoalsPage` y `PlanPage` componen las piezas compartidas. Sus contratos basados en callbacks quedan disponibles para Home, cuya integración se reserva para A10; esta actividad no anticipa el flujo de Inicio. La integración reutiliza los tokens A05 y no afirma paridad visual con Penpot. A01, `PEN-03` y las dos decisiones de la sección 8 siguen abiertas. Véase [`frontend-integration/a07-shared-upload-and-goal-templates.md`](frontend-integration/a07-shared-upload-and-goal-templates.md).
 
 ## A08. Extraer configuración de proveedor para Inicio y Configuración
 

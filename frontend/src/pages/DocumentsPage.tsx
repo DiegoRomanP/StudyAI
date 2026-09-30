@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import type { DocumentDTO } from "../api/types";
+import { getApiErrorMessage } from "../api/errors";
 import { Badge, Button, Card, Spinner } from "../components/ui";
+import { DocumentUpload } from "../components/documents/DocumentUpload";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
 
@@ -12,24 +14,16 @@ const STATUS_COLORS = {
 } as const;
 
 export function DocumentsPage() {
-  const { data: documents, isLoading } = useDocuments();
+  const {
+    data: documents,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useDocuments();
   const upload = useUploadDocument();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(documents);
-
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setError(null);
-    for (const file of Array.from(files)) {
-      try {
-        await upload.mutateAsync(file);
-      } catch (e: any) {
-        setError(e?.response?.data?.detail ?? "Error al subir el archivo.");
-      }
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -40,47 +34,32 @@ export function DocumentsPage() {
         </p>
       </header>
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          handleFiles(e.dataTransfer.files);
-        }}
-        onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition ${
-          dragging ? "border-brand-500 bg-brand-50" : "border-slate-300 bg-white hover:bg-slate-50"
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.md,.markdown"
-          multiple
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <div className="text-4xl">⬆️</div>
-        <p className="mt-2 font-medium text-slate-700">
-          Arrastra archivos aquí o haz clic para seleccionar
-        </p>
-        <p className="text-sm text-slate-400">PDF o Markdown, hasta 25 MB</p>
-        {upload.isPending && (
-          <div className="mt-4 flex justify-center">
-            <Spinner label="Subiendo..." />
-          </div>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <DocumentUpload
+        onUpload={(file) => upload.mutateAsync(file)}
+        documents={documents ?? []}
+        documentsError={isError}
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus documentos</h2>
-        {isLoading ? (
+        {isError && (
+          <div role="alert" className="space-y-2 rounded-surface border border-state-error bg-state-error-subtle p-4 text-sm text-state-error">
+            <p>
+              {documents === undefined
+                ? "No se pudieron cargar los documentos."
+                : "No se pudo actualizar la lista; se conservan los últimos datos visibles, que pueden ser parciales hasta confirmar una nueva respuesta."}
+            </p>
+            <p>{getApiErrorMessage(error, "Comprueba la conexión e inténtalo de nuevo.")}</p>
+            <Button
+              variant="secondary"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
+            </Button>
+          </div>
+        )}
+        {isLoading && documents === undefined ? (
           <Spinner label="Cargando..." />
         ) : documents && documents.length > 0 ? (
           <>
@@ -100,9 +79,9 @@ export function DocumentsPage() {
               </Button>
             )}
           </>
-        ) : (
+        ) : !isError ? (
           <p className="text-sm text-slate-400">Aún no has subido documentos.</p>
-        )}
+        ) : null}
       </section>
     </div>
   );

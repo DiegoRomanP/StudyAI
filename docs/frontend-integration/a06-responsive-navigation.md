@@ -1,6 +1,6 @@
 # A06 — Navegación responsive y rutas
 
-> Estado: aprobación técnica de Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente. QA registrado: 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con retrasos controlados de 500 ms en GETs del backend. Los cambios están en el diff local sobre HEAD `c703f8f`; aún no existe commit A06. Esta aprobación técnica no resuelve decisiones de producto ni declara aprobación visual o paridad con Penpot.
+> Estado: aprobación técnica de Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente. Commit `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. QA registrado: 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con retrasos controlados de 500 ms en GETs del backend. Esta aprobación técnica no resuelve decisiones de producto ni declara aprobación visual o paridad con Penpot.
 
 ## Alcance entregado
 

@@ -13,7 +13,7 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - Generación de planes en segundo plano con `2 + N` llamadas LLM.
 - Configuración BYO-key con ciclo `PUT clave → PATCH borrador → POST test → POST activate`.
 - Suite backend: `239 passed` en la última verificación.
-- Frontend: lint, 75 pruebas Vitest, build de producción y typecheck QA pasan en la verificación actual; el build aún advierte un chunk JS >500 kB.
+- Frontend: lint, 100 pruebas Vitest, build de producción, typecheck QA y las suites A03/A04/E2E pasan en la verificación del 2026-09-30; el build aún advierte un chunk JS >500 kB (824.30 kB minificado, 244.37 kB gzip).
 
 ## Fases
 
@@ -89,7 +89,8 @@ Seguimiento de [`Plan-New-Frontend.md`](Plan-New-Frontend.md), independiente del
 - A03: entorno QA aislado implementado y aprobado, commit `46bebfa`; guía en [`qa.md`](frontend-integration/qa.md).
 - A04: smoke Bruno HTTP real implementado y aprobado, commit `0e01e89`; colección `frontend/bruno/smoke/` y guía en [`qa.md`](frontend-integration/qa.md).
 - A05: tokens y componentes base implementados y técnicamente aprobados en commit `c703f8f`; revisión visual/paridad con Penpot sigue pendiente por A01 y falta de autenticación.
-- A06: navegación responsive, Home mínima, 404, validación de IDs, títulos/foco y ajustes responsive legacy implementados y aprobados técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión. Evidencia registrada: 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con GETs del backend retrasados 500 ms. Los cambios permanecen en el diff local sobre HEAD `c703f8f`; aún no existe commit A06.
+- A06: navegación responsive, Home mínima, 404, validación de IDs, títulos/foco y ajustes responsive legacy implementados y aprobados técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión. Commit `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. Evidencia registrada: 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con GETs del backend retrasados 500 ms.
+- A07: implementa `DocumentUpload`, `DocumentPicker`, `GoalTemplatePicker`, reglas compartidas y su uso en Documentos, Metas y Plan. Tras `CAMBIOS REQUERIDOS` en la segunda revisión, el segundo y último ciclo técnico bloquea generación sin lista fiable y sin selección `INDEXED` vigente, revalida IDs contra la caché síncrona y conserva la respuesta `PENDING` del upload en TanStack Query para polling automático aunque fallen GET inicial/refetch; la lista provisional/error no se presenta como vacía y conserva reintento manual. Verificación final: 100 Vitest; lint/build/typecheck QA exit 0; `test:qa:runner` 33/33; `test:api` 3/3 + Bruno 21/21 requests y 51/51 aserciones; `test:e2e` 3/3; `test:qa` 78/78, runtime `MOCK`, cleanup confirmado. **Pendiente de re-revisión/aceptación de Dev-Reviewer**; Inicio la compondrá en A10. Véase [`a07-shared-upload-and-goal-templates.md`](frontend-integration/a07-shared-upload-and-goal-templates.md).
 - `PEN-03` sigue abierto: no se confirmó si Inicio ocupa un sexto tab/barra inferior persistente. A06 usa un menú móvil no modal con Inicio y las secciones, sin afirmar aprobación visual ni paridad Penpot.
-- Las dos decisiones de producto de la sección 8 de `Plan-New-Frontend.md` siguen pendientes; no se adoptan en A06.
+- Las dos decisiones de producto de la sección 8 de `Plan-New-Frontend.md` siguen pendientes; no se adoptan en A06 ni A07.
 - Ver detalle, límites no cerrados y evidencias en [`a06-responsive-navigation.md`](frontend-integration/a06-responsive-navigation.md).

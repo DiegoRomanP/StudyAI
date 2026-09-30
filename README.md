@@ -80,11 +80,64 @@ Dev-Reviewer aprobó técnicamente A06 tras dos ciclos de corrección y una terc
 revisión. La evidencia registrada incluye 75 pruebas Vitest, dos ejecuciones del
 runner QA con 33/33 casos cada una y `test:qa` con 78/78 checks (API 3, E2E 3 y
 Bruno 72); runtime `MOCK` y E2E a 320 px con retraso controlado de 500 ms en los
-GET del backend. Los cambios siguen en el diff local sobre HEAD `c703f8f`; aún no
-existe un commit de A06. La ubicación persistente de Inicio en la navegación
-móvil (PEN-03/A01) sigue sin decisión; esta entrega no añade una barra inferior
-ni declara paridad visual con Penpot. Véase
+GET del backend. A06 está committed en
+`58e3a97861993122f41a712310bc9b5d5d5dc2ca`. La ubicación persistente de Inicio
+en la navegación móvil (PEN-03/A01) sigue sin decisión; esta entrega no añade
+una barra inferior ni declara paridad visual con Penpot. Véase
 [`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md).
+
+### Subida y plantillas reutilizables (A07)
+
+`DocumentsPage` usa `DocumentUpload`, que conserva el selector nativo y ofrece
+arrastre, validación temprana por extensión/tamaño (máximo actual
+`25 × 1024 × 1024` bytes) y resultado separado por archivo. La respuesta del
+servidor decide la aceptación. `PENDING` se muestra como aceptación con
+indexación en curso mientras se confirma; si falla el GET de documentos, la UI
+indica que el estado actual no está confirmado y permite reintentar. En un error
+de lectura conserva los datos disponibles, que pueden ser parciales, y muestra
+un aviso sin convertir el fallo en lista vacía. El polling existente de
+`useDocuments` cada 2 s mientras la caché contiene un DTO `PENDING` sigue intacto.
+`PlanPage` usa `DocumentPicker`, que solo permite
+elegir documentos `INDEXED`, elimina IDs seleccionados cuando dejan de ser
+válidos y vuelve a filtrarlos justo antes de `api.generatePlan`. Los errores HTTP
+por archivo siguen visibles y el control nativo se restablece para permitir
+repetir el mismo nombre.
+
+Para generar un plan debe existir una lista fiable y al menos un documento
+`INDEXED` seleccionado. Si la lectura inicial o una actualización falla, el CTA
+explica el bloqueo, ofrece reintentar y no envía una selección vacía al backend.
+Al generar, `PlanPage` vuelve a validar sincrónicamente contra la caché más
+reciente de TanStack Query y conserva solo los IDs todavía indexados.
+
+Después de que la API acepta un documento como `PENDING`, `useUploadDocument`
+incorpora el DTO a `['documents']` por ID, preserva los documentos conocidos y
+actualiza una entrada existente sin duplicarla; luego invalida/refresca la lista.
+Así el polling de 2 s continúa aunque falle la lectura inicial o la revalidación.
+Una lista visible durante ese fallo puede ser parcial; la UI mantiene el estado
+de indexación como no confirmado y el reintento manual hasta que un GET confirme
+`INDEXED` o `FAILED`.
+
+Las tres plantillas actuales tienen una sola definición en
+`frontend/src/lib/goalTemplates.ts`; `GoalTemplatePicker` es controlado, no
+presenta una plantilla como aplicada al inicio y solo rellena los campos tras una
+elección explícita. La edición manual del título quita ese estado visual; el tipo
+`LEARNING` se mantiene como valor por defecto para creación manual. En `GoalsPage`
+la meta se crea tras pulsar Guardar, con título recortado y respuesta/error
+confirmados. Las mutaciones continúan en los hooks
+TanStack Query; no hay cambios de backend, endpoints ni URL. Las piezas reciben
+callbacks y datos, listas para la composición posterior de Inicio en A10; la
+Home actual no se adelantó en A07. Dev-Reviewer aún debe revisar y aceptar esta
+implementación. A01, PEN-03 y las dos decisiones de §8 siguen abiertas.
+
+La suite completa frontend terminó con 100/100 pruebas Vitest. La corrida
+integrada de QA aislado terminó con 78/78 checks (API 3, E2E 3, Bruno 72), cero
+fallos/omisiones, runtime `MOCK` y limpieza de procesos/datos; no se usó un
+proveedor LLM real. Build conserva la advertencia ya conocida de chunk >500 kB
+(824.30 kB minificado, 244.37 kB gzip). Dev-Reviewer solicitó cambios en sus
+dos revisiones; el segundo y último ciclo técnico queda pendiente de
+re-revisión/aceptación independiente. No se declara aceptado. El reporte QA, el
+detalle A07, la secuencia TDD y las limitaciones de evidencia están en
+[`docs/frontend-integration/a07-shared-upload-and-goal-templates.md`](docs/frontend-integration/a07-shared-upload-and-goal-templates.md).
 
 ---
 
