@@ -1,0 +1,196 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { describe, expect, it, vi } from "vitest";
+
+import { AsyncState } from "../components/AsyncState";
+import { ActivityIndicator, Button, ButtonLink, Input, Select, Skeleton } from "../components/ui";
+import { SessionDone } from "../pages/SessionPage";
+
+describe("UI primitives", () => {
+  it("associates visible labels and errors with native form controls", () => {
+    render(
+      <>
+        <Input id="email" name="email" label="Correo" error="Escribe un correo válido." disabled />
+        <Select id="study-type" name="studyType" label="Tipo de estudio" disabled>
+          <option value="exam">Examen</option>
+        </Select>
+      </>,
+    );
+
+    const email = screen.getByRole("textbox", { name: "Correo" });
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveAttribute("aria-describedby", "email-error");
+    expect(email).toBeDisabled();
+    expect(screen.getByText("Escribe un correo válido.")).toHaveAttribute("id", "email-error");
+    const studyType = screen.getByRole("combobox", { name: "Tipo de estudio" });
+    expect(studyType).toHaveAttribute("name", "studyType");
+    expect(studyType).toBeDisabled();
+  });
+
+  it("keeps disabled buttons inoperable and exposes a button-like destination as a link", () => {
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <Button disabled onClick={onClick}>
+        Guardar cambios
+      </Button>,
+    );
+
+    const disabledButton = screen.getByRole("button", { name: "Guardar cambios" });
+    expect(disabledButton).toBeDisabled();
+    fireEvent.click(disabledButton);
+    expect(onClick).not.toHaveBeenCalled();
+
+    rerender(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ButtonLink to="/documents">Ver documentos</ButtonLink>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Ver documentos" })).toHaveAttribute("href", "/documents");
+    expect(screen.queryByRole("button", { name: "Ver documentos" })).not.toBeInTheDocument();
+  });
+
+  it("navigates from the completed-session view through named links only", () => {
+    const renderDoneView = () =>
+      render(
+        <MemoryRouter
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          initialEntries={["/session/42"]}
+        >
+          <Routes>
+            <Route path="/session/42" element={<SessionDone planId={17} />} />
+            <Route path="/dashboard" element={<p>Dashboard destino</p>} />
+            <Route path="/plan/:planId" element={<p>Plan destino</p>} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+    const firstRender = renderDoneView();
+    const dashboardLink = screen.getByRole("link", { name: "Ver Dashboard" });
+    expect(dashboardLink).toHaveAttribute("href", "/dashboard");
+    expect(dashboardLink.querySelector("button")).toBeNull();
+    fireEvent.click(dashboardLink);
+    expect(screen.getByText("Dashboard destino")).toBeInTheDocument();
+    firstRender.unmount();
+
+    renderDoneView();
+    const planLink = screen.getByRole("link", { name: "Volver al plan" });
+    expect(planLink).toHaveAttribute("href", "/plan/17");
+    expect(planLink.querySelector("button")).toBeNull();
+    fireEvent.click(planLink);
+    expect(screen.getByText("Plan destino")).toBeInTheDocument();
+  });
+
+  it("announces activity with a readable status name", () => {
+    render(<ActivityIndicator label="Indexando documento" />);
+
+    expect(screen.getByRole("status", { name: "Indexando documento" })).toBeInTheDocument();
+  });
+});
+
+describe("AsyncState", () => {
+  it("shows a reserved loading skeleton before data is available", () => {
+    const { container } = render(
+      <AsyncState<string[]>
+        data={undefined}
+        isLoading
+        isError={false}
+        loading={<Skeleton height={48} width="100%" />}
+        empty={<p>No hay recursos todavía.</p>}
+        onRetry={() => undefined}
+      >
+        {(resources) => <p>{resources.join(", ")}</p>}
+      </AsyncState>,
+    );
+
+    expect(container.querySelector('[aria-hidden="true"]')).toHaveStyle({ height: "48px", width: "100%" });
+    expect(screen.queryByText("No hay recursos todavía.")).not.toBeInTheDocument();
+  });
+
+  it("falls back to safe dimensions when skeleton size props are invalid", () => {
+    const { container } = render(<Skeleton height={Number.NaN} width="120%" />);
+
+    expect(container.querySelector('[aria-hidden="true"]')).toHaveStyle({ height: "16px", width: "100%" });
+  });
+
+  it("offers an explicit retry for an initial load error instead of showing empty state", () => {
+    const onRetry = vi.fn();
+    render(
+      <AsyncState<string[]>
+        data={undefined}
+        isLoading={false}
+        isError
+        loading={<Skeleton height={48} />}
+        empty={<p>No hay documentos.</p>}
+        onRetry={onRetry}
+      >
+        {(documents) => <p>{documents.join(", ")}</p>}
+      </AsyncState>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los datos.");
+    expect(screen.queryByText("No hay documentos.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps loaded content visible while retrying a failed refresh", () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <AsyncState
+        data={["Apuntes de biología"]}
+        isLoading={false}
+        isError
+        isFetching={false}
+        isEmpty={(documents) => documents.length === 0}
+        loading={<Skeleton height={48} />}
+        empty={<p>No hay documentos.</p>}
+        onRetry={onRetry}
+      >
+        {(documents) => <ul>{documents.map((document) => <li key={document}>{document}</li>)}</ul>}
+      </AsyncState>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron actualizar los datos.");
+    expect(screen.getByText("Apuntes de biología")).toBeInTheDocument();
+    expect(screen.queryByText("No hay documentos.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar actualización" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <AsyncState
+        data={["Apuntes de biología"]}
+        isLoading={false}
+        isError={false}
+        isFetching
+        isEmpty={(documents) => documents.length === 0}
+        loading={<Skeleton height={48} />}
+        empty={<p>No hay documentos.</p>}
+        onRetry={onRetry}
+      >
+        {(documents) => <ul>{documents.map((document) => <li key={document}>{document}</li>)}</ul>}
+      </AsyncState>,
+    );
+
+    expect(screen.getByText("Apuntes de biología")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Actualizando datos…" })).toBeInTheDocument();
+  });
+
+  it("renders an explicit empty state for successfully loaded empty data", () => {
+    render(
+      <AsyncState
+        data={[]}
+        isLoading={false}
+        isError={false}
+        isEmpty={(documents) => documents.length === 0}
+        loading={<Skeleton height={48} />}
+        empty={<p>No hay documentos. Sube el primero.</p>}
+        onRetry={() => undefined}
+      >
+        {(documents) => <p>{documents.join(", ")}</p>}
+      </AsyncState>,
+    );
+
+    expect(screen.getByText("No hay documentos. Sube el primero.")).toBeInTheDocument();
+  });
+});

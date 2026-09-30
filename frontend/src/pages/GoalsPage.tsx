@@ -77,7 +77,7 @@ export function GoalsPage() {
               setSaved(false);
             }}
             placeholder="Ej. Aprobar el parcial de Cálculo"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           />
         </div>
         <div>
@@ -87,7 +87,7 @@ export function GoalsPage() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Detalles: temas a cubrir, fecha, énfasis..."
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -187,7 +187,7 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
           <select
             value={goalType}
             onChange={(e) => setGoalType(e.target.value as GoalType)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           >
             {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
               <option key={t} value={t}>
@@ -201,7 +201,7 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           />
         </div>
         <div>
@@ -210,7 +210,7 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}

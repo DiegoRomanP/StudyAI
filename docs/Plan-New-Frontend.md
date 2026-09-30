@@ -241,21 +241,25 @@ python -m pytest -q
 
 **Archivos:** tokens, CSS global, Tailwind, `components/ui.tsx`, `AsyncState.tsx`.
 
-- [ ] Mapear tokens de Penpot a variables CSS semánticas y utilidades Tailwind.
-- [ ] Resolver y documentar cualquier diferencia con los valores candidatos de la especificación.
-- [ ] Definir tipografía, espaciado, bordes, superficies, acciones y estados.
-- [ ] Implementar botón, enlace con aspecto de botón, input, select, avisos y estado de actividad.
-- [ ] Mantener semántica correcta; evitar botones dentro de enlaces.
-- [ ] Incorporar foco visible, áreas táctiles objetivo de 44 × 44 px y movimiento reducido.
-- [ ] Crear estados de carga, vacío y error con acciones contextuales.
-- [ ] Diferenciar error inicial de error al actualizar datos ya disponibles.
-- [ ] Reservar el espacio necesario en skeletons.
+> Estado: implementación para revisión independiente. Las casillas `[x]` registran entregables implementados; no equivalen a aceptación de A05, aprobación de A01 ni paridad validada con Penpot.
+
+- [x] Mapear valores observados del handoff Penpot a variables CSS semánticas y utilidades Tailwind.
+- [x] Resolver/documentar las decisiones de implementación y las diferencias/candidatos que siguen pendientes de validación en Penpot.
+- [x] Definir tipografía, espaciado, bordes, superficies, acciones y estados.
+- [x] Implementar botón, enlace con aspecto de botón, input, select, avisos y estado de actividad.
+- [x] Mantener semántica correcta; el enlace con aspecto de botón es un `<a>` y se migraron los dos enlaces con botones anidados del estado completado de `SessionPage`.
+- [x] Incorporar foco visible, áreas táctiles objetivo de 44 × 44 px y movimiento reducido.
+- [x] Crear estados de carga, vacío y error con acciones contextuales.
+- [x] Diferenciar error inicial de error al actualizar datos ya disponibles, conservando el contenido previo.
+- [x] Reservar el espacio necesario en skeletons con dimensiones explícitas.
 
 **Pruebas:** `src/__tests__/ui.test.tsx`
 
-Comprobar nombres accesibles, estado deshabilitado, acción de reintento y que un error de actualización no oculta datos existentes.
+Comprobar etiquetas y estado deshabilitado de `Input`/`Select`, navegación semántica de `ButtonLink`, skeleton, vacío, error inicial/reintento y conservación del contenido al reintentar una actualización. `e2e/smoke/a05-focus.spec.ts` verifica con teclado y estilos computados el foco de controles legacy a 320/390 px, el enlace de navegación en escritorio y el comportamiento con hover/movimiento reducido.
 
 **Criterio de salida:** los componentes base se pueden usar en todas las páginas sin introducir lógica de negocio.
+
+> La implementación A05 queda pendiente de revisión independiente. Este registro no declara aceptada A05, no certifica paridad/contraste WCAG y no cierra los hallazgos pendientes de la revisión A01. Véase [`frontend-integration/a05-tokens-and-components.md`](frontend-integration/a05-tokens-and-components.md).
 
 ## A06. Integrar navegación responsive y rutas
 

@@ -84,7 +84,7 @@ export function DocumentsPage() {
           <Spinner label="Cargando..." />
         ) : documents && documents.length > 0 ? (
           <>
-            <div className="grid gap-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3">
               {visible.map((doc) => (
                 <DocumentRow key={doc.id} doc={doc} />
               ))}

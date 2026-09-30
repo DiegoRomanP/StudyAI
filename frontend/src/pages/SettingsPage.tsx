@@ -474,7 +474,7 @@ function ProviderCard({
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder={catalogEntry.key_placeholder}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
               autoComplete="off"
             />
             <Button variant="secondary" onClick={() => setShowKey((v) => !v)} type="button">
@@ -493,7 +493,7 @@ function ProviderCard({
               setModelChoice(e.target.value);
               setIsDraftDirty(true);
             }}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
           >
             <option value="">Selecciona un modelo</option>
             {modelOptions.map((m) => (
@@ -512,7 +512,7 @@ function ProviderCard({
                 setIsDraftDirty(true);
               }}
               placeholder="ID exacto del modelo"
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
             />
           )}
           {isOllama && (
@@ -557,7 +557,7 @@ function ProviderCard({
                 setIsDraftDirty(true);
               }}
               placeholder={catalogEntry.default_base_url ?? "URL base personalizada"}
-              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500"
             />
           )}
         </div>

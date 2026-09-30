@@ -44,7 +44,7 @@ export function DashboardPage() {
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 5, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-line))" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                 <Tooltip
@@ -56,9 +56,10 @@ export function DashboardPage() {
                 <Line
                   type="monotone"
                   dataKey="score"
-                  stroke="#4f46e5"
+                  stroke="rgb(var(--color-action-primary))"
                   strokeWidth={2}
                   dot={{ r: 4 }}
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>

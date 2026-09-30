@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 
 import type { QuizAnswer, QuizQuestionDTO } from "../api/types";
-import { Badge, Button, Card, ProgressBar, Spinner } from "../components/ui";
+import { Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../components/ui";
 import { useQuiz, useSession, useSubmitQuiz } from "../hooks/queries";
 import { formatTime, useTimer } from "../hooks/useTimer";
 import { youtubeSearchUrl } from "../lib/youtube";
@@ -49,23 +49,27 @@ export function SessionPage() {
         <TestPhase sessionId={id} onDone={() => setPhase("done")} />
       )}
       {phase === "done" && (
-        <Card className="text-center">
-          <div className="text-4xl">🎉</div>
-          <h2 className="mt-2 text-lg font-semibold">¡Sesión completada!</h2>
-          <p className="text-sm text-slate-500">
-            Tus flashcards se reprogramaron con SM-2. Revisa tu progreso en el Dashboard.
-          </p>
-          <div className="mt-4 flex justify-center gap-3">
-            <Link to="/dashboard">
-              <Button>Ver Dashboard</Button>
-            </Link>
-            <Link to={`/plan/${session.plan_id}`}>
-              <Button variant="secondary">Volver al plan</Button>
-            </Link>
-          </div>
-        </Card>
+        <SessionDone planId={session.plan_id} />
       )}
     </div>
+  );
+}
+
+export function SessionDone({ planId }: { planId: number }) {
+  return (
+    <Card className="text-center">
+      <div className="text-4xl">🎉</div>
+      <h2 className="mt-2 text-lg font-semibold">¡Sesión completada!</h2>
+      <p className="text-sm text-slate-500">
+        Tus flashcards se reprogramaron con SM-2. Revisa tu progreso en el Dashboard.
+      </p>
+      <div className="mt-4 flex justify-center gap-3">
+        <ButtonLink to="/dashboard">Ver Dashboard</ButtonLink>
+        <ButtonLink to={`/plan/${planId}`} variant="secondary">
+          Volver al plan
+        </ButtonLink>
+      </div>
+    </Card>
   );
 }
 

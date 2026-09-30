@@ -54,6 +54,18 @@ studyai/
 - **Frontend:** React 18, TypeScript, Vite, TailwindCSS, TanStack Query, React
   Router, Axios, Recharts, react-markdown, Vitest y Testing Library.
 
+### Base visual del frontend
+
+El frontend incluye tokens CSS semánticos y utilidades Tailwind, controles
+nativos reutilizables y una primitiva `AsyncState` que conserva los datos
+previos ante un error de actualización cuando las páginas la integran. La tabla
+de valores observados/candidatos, ratios de contraste calculados y límites del
+handoff Penpot están en
+[`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md).
+La documentación no declara paridad visual ni certificación WCAG; los aliases
+`brand-*` y de paletas antiguas solo mantienen compatibilidad para las vistas
+que aún no se han extraído.
+
 ---
 
 ## Requisitos
@@ -353,6 +365,7 @@ en `/docs`.
 ## Documentación de mantenimiento
 
 - [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
+- [`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md): tokens implementados, componentes base, contraste calculado y límites/gaps A01 de la entrega A05.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.

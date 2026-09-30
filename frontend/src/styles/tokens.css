@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light;
+
+  /* Semantic colors use RGB channels so Tailwind opacity utilities remain available. */
+  --color-canvas: 245 247 246;
+  --color-surface-paper: 255 255 255;
+  --color-surface-muted: 233 240 237;
+  --color-surface-subtle: 239 245 242;
+  --color-surface-action-subtle: 234 243 240;
+  --color-surface-success: 231 244 236;
+  --color-surface-warning: 248 240 222;
+  --color-surface-error: 251 234 236;
+
+  --color-text-primary: 24 43 49;
+  --color-text-muted: 76 98 104;
+  --color-text-on-action: 255 255 255;
+
+  --color-action-primary: 18 108 99;
+  /* Specified candidate; no matching hover fill/stroke was observed in Penpot. */
+  --color-action-hover: 12 81 75;
+  --color-line: 212 224 220;
+  --color-line-strong: 181 208 200;
+  /* Darker border candidate reserved for form-control boundaries. */
+  --color-control-border: 112 134 127;
+
+  --color-state-success: 23 108 74;
+  --color-state-warning: 138 90 18;
+  --color-state-error: 165 47 51;
+
+  --font-ui: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-reading: "Source Serif 4", Georgia, serif;
+  --font-size-body: 1rem;
+  --font-size-small: 0.875rem;
+  --font-size-caption: 0.75rem;
+  --line-height-ui: 1.5;
+  --line-height-reading: 1.6;
+  --measure-reading: 72ch;
+
+  --space-study-1: 0.5rem;
+  --space-study-2: 0.75rem;
+  --space-study-3: 1rem;
+  --space-study-4: 1.5rem;
+  --space-study-5: 2rem;
+  --space-study-6: 3rem;
+
+  /* Representative radii chosen from the literal values present in Penpot. */
+  --radius-control: 0.5rem;
+  --radius-surface: 0.75rem;
+}
