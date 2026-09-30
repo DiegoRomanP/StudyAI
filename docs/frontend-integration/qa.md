@@ -129,6 +129,17 @@ smoke HTTP positivo contra el FastAPI aislado real. La cobertura API combina
 readiness Playwright A03, consumo de fixture solo-lectura Playwright y el flujo
 Bruno A04; no se presenta como la suite de UI de A15–A17.
 
+El runner Node se ejecuta secuencialmente (`node --test --test-concurrency=1`)
+para que procesos Bruno/Playwright de archivos distintos no compitan por CPU.
+Los casos de colección HTTP controlada en `bruno-smoke.test.mjs` tienen un límite
+de seguridad de 30 segundos por prueba; no usan un umbral fijo de tiempo
+transcurrido como prueba de que el polling fue
+acotado. Esa propiedad se comprueba por separado con los límites configurados,
+el número exacto de GET permitidos, la ausencia de escrituras posteriores y el
+reporte/salida que conserva la compuerta fail-closed. Este timeout pertenece al
+test Node; los intervalos, deadlines, máximos de intentos y comportamiento
+`FAILED` de la colección A04 no se relajan.
+
 ## Aislamiento y secuencia
 
 - Cada invocación obtiene un `runId` único y un directorio `mkdtemp` propio para
@@ -159,10 +170,12 @@ Bruno A04; no se presenta como la suite de UI de A15–A17.
   de desarrollo ni se inicia `vite dev`.
 - Antes de tests, el runner espera `/health` (`200`, `status="ok"`), comprueba el
   runtime MOCK y, en suites con UI, espera que `/` del preview responda `200`.
-  El E2E verifica con Playwright el rol `heading` «Documentos» y un `GET
-  /documents` real con respuesta `200`/`[]`, demostrando conexión desde la UI,
-  CORS y DB nueva. Las esperas usan respuestas HTTP y locators web-first; no
-  dependen de `networkidle`.
+  El E2E verifica con Playwright el heading y título de Inicio, navega mediante
+  «Explorar documentos» y espera el `GET /documents` real con respuesta `200`/`[]`
+  junto con el estado vacío «Aún no has subido documentos.». Esto demuestra
+  conexión desde la UI, CORS y DB nueva; no afirma que Documentos tenga ese
+  heading en el smoke de app-load. Las esperas usan respuestas HTTP y locators
+  web-first; no dependen de `networkidle`.
 - Playwright selecciona los proyectos `api` y `e2e` por directorios, no por
   etiquetas del título; los specs nuevos dentro de esas rutas se incluyen sin
   necesitar tags. `workers: 1`, `retries: 0`, `forbidOnly: true` y suites
@@ -215,6 +228,8 @@ los paths esperados con los observados.
 
 La suite Playwright API comprueba readiness y runtime demo; la suite Bruno A04
 cubre el flujo HTTP real de documento/meta/plan/sesiones/quiz/dashboard/limpieza.
-La suite E2E actual sigue limitada a disponibilidad básica de la página y no
-sustituye los recorridos UI posteriores A15–A17. Las decisiones de la sección 8
-del plan continúan pendientes y no se resuelven en esta actividad.
+Los E2E actuales incluyen el foco legacy A05, navegación A06 a 320 px con datos
+sintéticos y un smoke sin interceptores que comprueba `GET /documents` `200`/`[]`
+desde el preview de producción. No sustituyen los recorridos UI A15–A17. Las
+decisiones de la sección 8 del plan continúan pendientes y no se resuelven en
+estas actividades.

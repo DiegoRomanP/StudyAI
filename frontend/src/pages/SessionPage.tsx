@@ -3,9 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 
 import type { QuizAnswer, QuizQuestionDTO } from "../api/types";
-import { Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../components/ui";
+import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../components/ui";
 import { useQuiz, useSession, useSubmitQuiz } from "../hooks/queries";
 import { formatTime, useTimer } from "../hooks/useTimer";
+import { parsePositiveSafeRouteId } from "../lib/routeIds";
 import { youtubeSearchUrl } from "../lib/youtube";
 
 type Phase = "study" | "break" | "test" | "done";
@@ -20,14 +21,56 @@ const BREAK_ACTIVITIES = [
 
 export function SessionPage() {
   const { sessionId } = useParams();
-  const id = sessionId ? Number(sessionId) : null;
-  const { data: session, isLoading } = useSession(id);
+  const id = parsePositiveSafeRouteId(sessionId);
+  const { data: session, isLoading, isError, refetch } = useSession(id);
   const [phase, setPhase] = useState<Phase>("study");
+
+  if (id === null) {
+    return (
+      <section className="space-y-4" aria-labelledby="invalid-session-title">
+        <h1 id="invalid-session-title" className="text-2xl font-bold">Enlace a la sesión no válido</h1>
+        <Alert tone="error">
+          <p>El identificador de la sesión debe ser un entero decimal positivo y seguro.</p>
+          <ButtonLink to="/plan" variant="secondary">Ir a tus planes</ButtonLink>
+        </Alert>
+      </section>
+    );
+  }
+
+  if (isError && !session) {
+    return (
+      <section className="space-y-4" aria-labelledby="session-load-error-title">
+        <h1 id="session-load-error-title" className="text-2xl font-bold">No se pudo abrir la sesión</h1>
+        <Alert tone="error">
+          <p>La sesión no está disponible. Comprueba la conexión o vuelve a tus planes.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={() => void refetch()}>
+              Reintentar
+            </Button>
+            <ButtonLink to="/plan" variant="ghost">Volver a tus planes</ButtonLink>
+          </div>
+        </Alert>
+      </section>
+    );
+  }
 
   if (isLoading || !session) return <Spinner label="Cargando sesión…" />;
 
+  const updateError = isError ? (
+    <Alert tone="error" title="No se pudo actualizar la sesión">
+      <p>Se mantienen visibles los datos que ya estaban cargados.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => void refetch()}>
+          Reintentar actualización
+        </Button>
+        <ButtonLink to="/plan" variant="ghost">Volver a tus planes</ButtonLink>
+      </div>
+    </Alert>
+  ) : null;
+
   return (
     <div className="space-y-6">
+      {updateError}
       <div>
         <Link to={`/plan/${session.plan_id}`} className="text-sm text-brand-600 hover:underline">
           ← Volver al plan
@@ -107,14 +150,14 @@ function StudyPhase({
 
   return (
     <div className="space-y-4">
-      <Card className="flex items-center justify-between">
+      <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="text-3xl font-mono font-semibold text-brand-700">
             {formatTime(remaining)}
           </span>
           <span className="text-sm text-slate-500">tiempo de estudio</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {!running && remaining > 0 && <Button onClick={start}>▶ Iniciar</Button>}
           <Button variant="secondary" onClick={finish}>
             Saltar al receso →

@@ -227,13 +227,13 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
   }
 
   return (
-    <Card className="flex items-start justify-between gap-3">
+    <Card className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         <p className="font-medium text-slate-800">{goal.title}</p>
         {goal.description && <p className="mt-1 text-sm text-slate-500">{goal.description}</p>}
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
         <Badge color="brand">{TYPE_LABELS[goal.goal_type]}</Badge>
         <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={startEdit}>
           Editar

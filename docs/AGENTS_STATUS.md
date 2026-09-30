@@ -1,6 +1,6 @@
 # Estado del Proyecto — StudyAI
 
-Última actualización: 2026-09-22.
+Última actualización: 2026-09-30.
 
 Este archivo describe el estado implementado del monorepo. El plan multi-agente
 original se conserva en `studyai_multiagent_plan.md` como referencia histórica;
@@ -13,7 +13,7 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - Generación de planes en segundo plano con `2 + N` llamadas LLM.
 - Configuración BYO-key con ciclo `PUT clave → PATCH borrador → POST test → POST activate`.
 - Suite backend: `239 passed` en la última verificación.
-- Frontend: lint, 32 pruebas Vitest y build de producción pasan.
+- Frontend: lint, 75 pruebas Vitest, build de producción y typecheck QA pasan en la verificación actual; el build aún advierte un chunk JS >500 kB.
 
 ## Fases
 
@@ -79,3 +79,17 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - `README.md`: instalación, uso y comportamiento visible.
 - `CLAUDE.md`/`AGENTS.md`: arquitectura y reglas para agentes.
 - `docs/api_contract.yaml`: contrato mantenido junto al OpenAPI de FastAPI.
+
+## Integración incremental del frontend
+
+Seguimiento de [`Plan-New-Frontend.md`](Plan-New-Frontend.md), independiente del estado del MVP legacy:
+
+- A01: mapa de diseño y matriz entregados como handoff, pero Dev-Reviewer devolvió `CAMBIOS REQUERIDOS`; no está aprobada. Siguen pendientes el acuerdo del CTA deshabilitado/contenido largo, la contención visual parcial y la reproducibilidad de extractos históricos. Penpot no estuvo autenticado en esta corrección.
+- A02: línea base implementada y aprobada por Dev-Reviewer, commit `cc3f115`; evidencia en [`baseline.md`](frontend-integration/baseline.md).
+- A03: entorno QA aislado implementado y aprobado, commit `46bebfa`; guía en [`qa.md`](frontend-integration/qa.md).
+- A04: smoke Bruno HTTP real implementado y aprobado, commit `0e01e89`; colección `frontend/bruno/smoke/` y guía en [`qa.md`](frontend-integration/qa.md).
+- A05: tokens y componentes base implementados y técnicamente aprobados en commit `c703f8f`; revisión visual/paridad con Penpot sigue pendiente por A01 y falta de autenticación.
+- A06: navegación responsive, Home mínima, 404, validación de IDs, títulos/foco y ajustes responsive legacy implementados y aprobados técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión. Evidencia registrada: 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con GETs del backend retrasados 500 ms. Los cambios permanecen en el diff local sobre HEAD `c703f8f`; aún no existe commit A06.
+- `PEN-03` sigue abierto: no se confirmó si Inicio ocupa un sexto tab/barra inferior persistente. A06 usa un menú móvil no modal con Inicio y las secciones, sin afirmar aprobación visual ni paridad Penpot.
+- Las dos decisiones de producto de la sección 8 de `Plan-New-Frontend.md` siguen pendientes; no se adoptan en A06.
+- Ver detalle, límites no cerrados y evidencias en [`a06-responsive-navigation.md`](frontend-integration/a06-responsive-navigation.md).

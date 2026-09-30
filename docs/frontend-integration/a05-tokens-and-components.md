@@ -1,6 +1,6 @@
 # A05 — Tokens y componentes base
 
-> Estado: implementación para revisión independiente. No es una aprobación de A05, una declaración de paridad con Penpot ni una certificación WCAG. Basado en el handoff A01 y `docs/fronted-design.md`.
+> Estado: A05 está aprobada técnicamente en el commit `c703f8f`; el diseño/paridad con Penpot sigue pendiente. No es una aprobación de A01 ni una certificación WCAG. Basado en el handoff A01 y `docs/fronted-design.md`.
 
 ## Alcance y fuente
 

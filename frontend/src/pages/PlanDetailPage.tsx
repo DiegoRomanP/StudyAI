@@ -1,19 +1,62 @@
 import { Link, useParams } from "react-router-dom";
 
 import type { PlanTopicDTO, SessionSummaryDTO } from "../api/types";
-import { Badge, Card, ProgressBar, Spinner } from "../components/ui";
+import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../components/ui";
 import { usePlan } from "../hooks/queries";
+import { parsePositiveSafeRouteId } from "../lib/routeIds";
 
 export function PlanDetailPage() {
   const { planId } = useParams();
-  const id = planId ? Number(planId) : null;
-  const { data: plan, isLoading } = usePlan(id);
+  const id = parsePositiveSafeRouteId(planId);
+  const { data: plan, isLoading, isError, refetch } = usePlan(id);
+
+  if (id === null) {
+    return (
+      <section className="space-y-4" aria-labelledby="invalid-plan-title">
+        <h1 id="invalid-plan-title" className="text-2xl font-bold">Enlace al plan no válido</h1>
+        <Alert tone="error">
+          <p>El identificador del plan debe ser un entero decimal positivo y seguro.</p>
+          <ButtonLink to="/plan" variant="secondary">Ir a los planes</ButtonLink>
+        </Alert>
+      </section>
+    );
+  }
+
+  if (isError && !plan) {
+    return (
+      <section className="space-y-4" aria-labelledby="plan-load-error-title">
+        <h1 id="plan-load-error-title" className="text-2xl font-bold">No se pudo abrir el plan</h1>
+        <Alert tone="error">
+          <p>El plan no está disponible. Comprueba la conexión o vuelve a la lista de planes.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={() => void refetch()}>
+              Reintentar
+            </Button>
+            <ButtonLink to="/plan" variant="ghost">Volver a los planes</ButtonLink>
+          </div>
+        </Alert>
+      </section>
+    );
+  }
 
   if (isLoading || !plan) return <Spinner label="Cargando plan…" />;
+
+  const updateError = isError ? (
+    <Alert tone="error" title="No se pudo actualizar el plan">
+      <p>Se mantienen visibles los datos que ya estaban cargados.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" onClick={() => void refetch()}>
+          Reintentar actualización
+        </Button>
+        <ButtonLink to="/plan" variant="ghost">Volver a los planes</ButtonLink>
+      </div>
+    </Alert>
+  ) : null;
 
   if (plan.status === "PROCESSING") {
     return (
       <div className="space-y-4">
+        {updateError}
         <Link to="/plan" className="text-sm text-brand-600 hover:underline">
           ← Volver
         </Link>
@@ -35,6 +78,7 @@ export function PlanDetailPage() {
   if (plan.status === "FAILED") {
     return (
       <div className="space-y-4">
+        {updateError}
         <Link to="/plan" className="text-sm text-brand-600 hover:underline">
           ← Volver
         </Link>
@@ -66,6 +110,7 @@ export function PlanDetailPage() {
 
   return (
     <div className="space-y-6">
+      {updateError}
       <div>
         <Link to="/plan" className="text-sm text-brand-600 hover:underline">
           ← Volver

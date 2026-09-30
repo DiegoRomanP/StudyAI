@@ -66,6 +66,26 @@ La documentación no declara paridad visual ni certificación WCAG; los aliases
 `brand-*` y de paletas antiguas solo mantienen compatibilidad para las vistas
 que aún no se han extraído.
 
+### Navegación y rutas (A06)
+
+`/` explica el propósito de StudyAI y enlaza a sus secciones. La navegación de
+escritorio y el menú móvil permiten volver a Inicio o visitar Documentos, Metas,
+Plan, Dashboard y Configuración; los enlaces a planes y sesiones existentes
+siguen funcionando directamente. Las rutas desconocidas tienen una página 404
+con regreso al inicio. El menú móvil es una divulgación no modal que no bloquea
+el contenido: Escape lo cierra y devuelve el foco al botón. Los IDs de plan y
+sesión se validan antes de consultar la API.
+
+Dev-Reviewer aprobó técnicamente A06 tras dos ciclos de corrección y una tercera
+revisión. La evidencia registrada incluye 75 pruebas Vitest, dos ejecuciones del
+runner QA con 33/33 casos cada una y `test:qa` con 78/78 checks (API 3, E2E 3 y
+Bruno 72); runtime `MOCK` y E2E a 320 px con retraso controlado de 500 ms en los
+GET del backend. Los cambios siguen en el diff local sobre HEAD `c703f8f`; aún no
+existe un commit de A06. La ubicación persistente de Inicio en la navegación
+móvil (PEN-03/A01) sigue sin decisión; esta entrega no añade una barra inferior
+ni declara paridad visual con Penpot. Véase
+[`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md).
+
 ---
 
 ## Requisitos
@@ -119,7 +139,8 @@ y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core
 [`docs/frontend-integration/qa.md`](docs/frontend-integration/qa.md) para
 prepararlo y ejecutar `npm --prefix frontend run test:qa`. `test:api` ejecuta
 readiness Playwright y el flujo HTTP A04 completo de Bruno; `test:qa` añade el
-smoke básico de la UI de producción. La colección versionada
+smoke de la UI de producción, incluido foco A05 y navegación A06 a 320 px (no es
+el recorrido completo de estudio A15–A17). La colección versionada
 `frontend/bruno/smoke/` comparte el Markdown canónico
 `frontend/qa/fixtures/studyai-a04-smoke.md` con el consumidor de solo-lectura
 `frontend/e2e/api/a04-shared-fixture.spec.ts`; este no escribe en la base QA
@@ -128,7 +149,9 @@ cuerpos y valida el reporte Bruno 4.2.0: salida `0` sola no cuenta como
 cobertura; exige requests y aserciones ejecutadas y rechaza fallos, saltos u
 omisiones. `test:qa:runner` también ejecuta casos Bruno negativos contra
 respuestas HTTP locales controladas; son distintos del smoke positivo FastAPI
-real que corre `test:api`.
+real que corre `test:api`. El runner Node ejecuta las pruebas en serie y acota el
+polling con contadores de GET/deadlines configurados, no con un umbral frágil de
+tiempo total del host; no cambia los límites reales ni el gate de Bruno.
 
 ---
 
@@ -366,6 +389,7 @@ en `/docs`.
 
 - [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
 - [`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md): tokens implementados, componentes base, contraste calculado y límites/gaps A01 de la entrega A05.
+- [`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md): rutas, navegación móvil/teclado, guardas de IDs, evidencias y decisiones abiertas de A06.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
@@ -399,8 +423,10 @@ npm run lint     # tsc --noEmit
 npm run build
 ```
 
-La cobertura actual incluye pruebas de errores API y de `SettingsPage`, incluida
-la sincronización de revisiones y las restricciones de NVIDIA.
+La cobertura actual incluye pruebas de errores API, `SettingsPage` (sincronización
+de revisiones y restricciones de NVIDIA), navegación/shell/rutas A06 y enlaces
+profundos de plan/sesión. Playwright verifica el flujo de navegación con teclado
+a 320 px y el acceso directo a recursos en el build de producción.
 
 ---
 

@@ -89,18 +89,18 @@ export function PlanPage() {
               <Link className="underline" to="/documents">Documentos</Link>.
             </p>
           ) : (
-            <div className="grid gap-2">
+            <div className="grid min-w-0 grid-cols-1 gap-2">
               {indexedDocs.map((d) => (
                 <label
                   key={d.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                  className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
                 >
                   <input
                     type="checkbox"
                     checked={selectedDocs.includes(d.id)}
                     onChange={() => toggleDoc(d.id)}
                   />
-                  <span className="truncate">{d.filename}</span>
+                  <span className="min-w-0 truncate">{d.filename}</span>
                 </label>
               ))}
             </div>
@@ -166,12 +166,12 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
 
   return (
     <Card className="space-y-1">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link to={`/plan/${plan.id}`} className="min-w-0 flex-1">
           <p className="truncate font-medium text-slate-800 hover:text-brand-600">{plan.title}</p>
           <p className="text-xs text-slate-400">{plan.sessions.length} sesiones</p>
         </Link>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Badge color={meta.color}>{meta.label}</Badge>
           <Button
             variant="danger"

@@ -167,7 +167,7 @@ test("Playwright projects select API and E2E by directory without requiring titl
   assert.match(e2e.stdout, /app-load\.spec\.ts/);
   assert.doesNotMatch(e2e.stdout, /health\.spec\.ts/);
   assert.match(api.stdout, /GET \/health reports a ready backend/);
-  assert.match(e2e.stdout, /production app loads Documents/);
+  assert.match(e2e.stdout, /production app loads the StudyAI home page/);
 });
 
 test("Playwright report counts are explicit and empty, failed, or skipped suites cannot pass", () => {
