@@ -1,28 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
 import type { DocumentDTO } from "../api/types";
+import { DOCUMENTS_QUERY_KEY, useUploadDocument } from "../hooks/queries";
 import { PlanPage } from "../pages/PlanPage";
-
-vi.mock("../components/documents/DocumentPicker", () => ({
-  DocumentPicker: ({
-    documents,
-    onSelectionChange,
-  }: {
-    documents: DocumentDTO[];
-    onSelectionChange: (ids: number[]) => void;
-  }) => (
-    <div>
-      <button type="button" onClick={() => onSelectionChange([12, 34])}>
-        Select previously indexed documents
-      </button>
-      <p>Current documents: {documents.map((document) => document.id).join(", ")}</p>
-    </div>
-  ),
-}));
 
 const documents: DocumentDTO[] = [
   {
@@ -45,6 +29,14 @@ const documents: DocumentDTO[] = [
   },
 ];
 
+function seedConfirmedDocuments(queryClient: QueryClient, documents: DocumentDTO[]) {
+  queryClient.setQueryData(DOCUMENTS_QUERY_KEY, {
+    documents,
+    source: "GET",
+    revision: 0,
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -66,7 +58,7 @@ describe("PlanPage generation", () => {
         created_at: "2026-09-30T00:00:00Z",
       },
     ]);
-    queryClient.setQueryData(["documents"], [documents[0]]);
+    seedConfirmedDocuments(queryClient, [documents[0]]);
     queryClient.setQueryData(["plans"], []);
     vi.spyOn(api, "listGoals").mockResolvedValue([]);
     vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
@@ -86,12 +78,16 @@ describe("PlanPage generation", () => {
     );
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "73" } });
-    fireEvent.click(screen.getByRole("button", { name: "Select previously indexed documents" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: documents[0].filename }));
     const generateButton = screen.getByRole("button", { name: "Generar plan" });
     expect(generateButton).toBeEnabled();
 
     act(() => {
-      queryClient.setQueryData(["documents"], []);
+      queryClient.setQueryData(DOCUMENTS_QUERY_KEY, {
+        documents: [],
+        source: "GET",
+        revision: 1,
+      });
       // Click the still-enabled DOM button in the same batch as the cache update.
       fireEvent.click(generateButton);
     });
@@ -144,6 +140,343 @@ describe("PlanPage generation", () => {
     expect(generatePlan).not.toHaveBeenCalled();
   });
 
+  it("shows an empty state only after a successful document-list response", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([]);
+    let rejectInitialList: ((error: Error) => void) | undefined;
+    vi.spyOn(api, "listDocuments")
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectInitialList = reject;
+          }),
+      )
+      .mockResolvedValueOnce([]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    const generatePlan = vi.spyOn(api, "generatePlan").mockResolvedValue({
+      id: 51,
+      status: "PROCESSING",
+      error_message: "",
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(/cargando y verificando la lista de documentos/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+
+    await act(async () => {
+      rejectInitialList?.(new Error("documents unavailable"));
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /no se puede verificar la lista de documentos/i,
+    );
+    expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(generatePlan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga de documentos" }));
+
+    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Reintentar carga de documentos" })).not.toBeInTheDocument();
+    expect(generatePlan).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a POST-seeded pending document as a GET-confirmed empty list", async () => {
+    const pendingDocument: DocumentDTO = {
+      ...documents[0],
+      id: 91,
+      filename: "new-notes.md",
+      status: "PENDING",
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([]);
+    let rejectPostRefetch: ((error: Error) => void) | undefined;
+    const listDocuments = vi
+      .spyOn(api, "listDocuments")
+      .mockRejectedValueOnce(new Error("initial documents GET failed"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectPostRefetch = reject;
+          }),
+      )
+      .mockResolvedValueOnce([]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    vi.spyOn(api, "uploadDocument").mockResolvedValue(pendingDocument);
+    const generatePlan = vi.spyOn(api, "generatePlan").mockResolvedValue({
+      id: 51,
+      status: "PROCESSING",
+      error_message: "",
+    });
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    render(
+      <Wrapper>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </Wrapper>,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    const upload = renderHook(() => useUploadDocument(), { wrapper: Wrapper });
+
+    act(() => {
+      upload.result.current.mutate(new File(["notes"], pendingDocument.filename));
+    });
+    await waitFor(() => expect(listDocuments).toHaveBeenCalledTimes(2));
+
+    expect(queryClient.getQueryData(DOCUMENTS_QUERY_KEY)).toEqual({
+      documents: [pendingDocument],
+      source: "POST",
+      revision: 1,
+    });
+    expect(screen.getByText(pendingDocument.filename)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: pendingDocument.filename })).toBeDisabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Reintentar carga de documentos" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      rejectPostRefetch?.(new Error("post-upload documents GET failed"));
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(generatePlan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga de documentos" }));
+
+    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(generatePlan).not.toHaveBeenCalled();
+    upload.unmount();
+  });
+
+  it("preserves the selected confirmed document but blocks generation after a pending upload", async () => {
+    const pendingDocument: DocumentDTO = {
+      ...documents[0],
+      id: 91,
+      filename: "new-notes.md",
+      status: "PENDING",
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([
+      {
+        id: 73,
+        goal_type: "LEARNING",
+        title: "Aprender biología",
+        description: "",
+        created_at: "2026-09-30T00:00:00Z",
+      },
+    ]);
+    let rejectPostRefetch: ((error: Error) => void) | undefined;
+    const listDocuments = vi
+      .spyOn(api, "listDocuments")
+      .mockResolvedValueOnce([documents[0]])
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectPostRefetch = reject;
+          }),
+      );
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    vi.spyOn(api, "uploadDocument").mockResolvedValue(pendingDocument);
+    const generatePlan = vi.spyOn(api, "generatePlan").mockResolvedValue({
+      id: 51,
+      status: "PROCESSING",
+      error_message: "",
+    });
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    render(
+      <Wrapper>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </Wrapper>,
+    );
+
+    await screen.findByRole("option", { name: "Aprender biología" });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "73" } });
+    const confirmedDocument = await screen.findByRole("checkbox", { name: documents[0].filename });
+    fireEvent.click(confirmedDocument);
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeEnabled();
+
+    const upload = renderHook(() => useUploadDocument(), { wrapper: Wrapper });
+    act(() => {
+      upload.result.current.mutate(new File(["notes"], pendingDocument.filename));
+    });
+    await waitFor(() => expect(listDocuments).toHaveBeenCalledTimes(2));
+
+    expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: pendingDocument.filename })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(generatePlan).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rejectPostRefetch?.(new Error("post-upload documents GET failed"));
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: pendingDocument.filename })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(generatePlan).not.toHaveBeenCalled();
+    upload.unmount();
+  });
+
+  it("hides a confirmed empty state while a later document-list refetch is failing", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([]);
+    vi.spyOn(api, "listDocuments")
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("documents refetch failed"));
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["documents"] });
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+  });
+
+  it("preserves a previously selected indexed document after a refetch error", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["goals"], []);
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([]);
+    vi.spyOn(api, "listDocuments").mockRejectedValue(new Error("documents refresh failed"));
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    const generatePlan = vi.spyOn(api, "generatePlan").mockResolvedValue({
+      id: 51,
+      status: "PROCESSING",
+      error_message: "",
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const documentCheckbox = screen.getByRole("checkbox", { name: documents[0].filename });
+    fireEvent.click(documentCheckbox);
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["documents"] });
+    });
+
+    expect(api.listDocuments).toHaveBeenCalledOnce();
+    expect(queryClient.getQueryState(DOCUMENTS_QUERY_KEY)?.status).toBe("error");
+    expect(screen.getByText(documents[0].filename)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+    expect(generatePlan).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a previously loaded pending-only list as empty while refresh is failing", async () => {
+    const pendingDocument: DocumentDTO = {
+      ...documents[0],
+      status: "PENDING",
+      filename: "processing-notes.md",
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    queryClient.setQueryData(["goals"], []);
+    seedConfirmedDocuments(queryClient, [pendingDocument]);
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([]);
+    vi.spyOn(api, "listDocuments").mockRejectedValue(new Error("documents refresh failed"));
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["documents"] });
+    });
+
+    expect(api.listDocuments).toHaveBeenCalledOnce();
+    expect(screen.getByText(pendingDocument.filename)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
+    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
+  });
+
   it("sends only currently indexed document IDs when selection becomes stale before generation", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -160,7 +493,7 @@ describe("PlanPage generation", () => {
         created_at: "2026-09-30T00:00:00Z",
       },
     ]);
-    queryClient.setQueryData(["documents"], documents);
+    seedConfirmedDocuments(queryClient, documents);
     queryClient.setQueryData(["plans"], []);
     vi.spyOn(api, "listGoals").mockResolvedValue([]);
     vi.spyOn(api, "listDocuments").mockResolvedValue([]);
@@ -180,11 +513,19 @@ describe("PlanPage generation", () => {
     );
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "73" } });
-    fireEvent.click(screen.getByRole("button", { name: "Select previously indexed documents" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: documents[0].filename }));
+    fireEvent.click(screen.getByRole("checkbox", { name: documents[1].filename }));
     act(() => {
-      queryClient.setQueryData(["documents"], [documents[1]]);
+      queryClient.setQueryData(DOCUMENTS_QUERY_KEY, {
+        documents: [documents[1]],
+        source: "GET",
+        revision: 1,
+      });
     });
-    expect(await screen.findByText("Current documents: 34")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("checkbox", { name: documents[0].filename })).not.toBeInTheDocument();
+      expect(screen.getByRole("checkbox", { name: documents[1].filename })).toBeChecked();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Generar plan" }));
 
     await waitFor(() => expect(api.generatePlan).toHaveBeenCalledWith(73, [34]));

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
 import type { DocumentDTO, DocumentStatus } from "../api/types";
+import { DOCUMENTS_QUERY_KEY } from "../hooks/queries";
 import { DocumentsPage } from "../pages/DocumentsPage";
 
 function makeDocument(id: number, filename: string, status: DocumentStatus): DocumentDTO {
@@ -57,7 +58,7 @@ describe("DocumentsPage query failures", () => {
     ["INDEXED", "Subida aceptada e indexada."],
     ["FAILED", "La indexación falló: No se pudo indexar el archivo."],
   ] as const)(
-    "automatically confirms a pending upload as %s after the initial and invalidated GET fail",
+    "keeps polling after initial, invalidated, and first automatic GET failures until confirming %s",
     async (status, finalFeedback) => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
       const pendingDocument = makeDocument(29, "nuevo-material.md", "PENDING");
@@ -66,6 +67,7 @@ describe("DocumentsPage query failures", () => {
         .spyOn(api, "listDocuments")
         .mockRejectedValueOnce(new Error("initial list failed"))
         .mockRejectedValueOnce(new Error("post-upload refresh failed"))
+        .mockRejectedValueOnce(new Error("first automatic refresh failed"))
         .mockResolvedValueOnce([confirmedDocument]);
       const uploadDocument = vi.spyOn(api, "uploadDocument").mockResolvedValue(pendingDocument);
       const { queryClient, unmount } = renderDocumentsPage();
@@ -86,12 +88,21 @@ describe("DocumentsPage query failures", () => {
       expect(
         screen.getByText(/estado de indexación no confirmado/i),
       ).toBeInTheDocument();
-      expect(queryClient.getQueryData(["documents"])).toEqual([pendingDocument]);
+      expect(queryClient.getQueryData(DOCUMENTS_QUERY_KEY)).toEqual({
+        documents: [pendingDocument],
+        source: "POST",
+        revision: 1,
+      });
+      expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+      expect(screen.queryByText(finalFeedback)).not.toBeInTheDocument();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1999);
       });
       expect(listDocuments).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+      expect(screen.getByText(/estado de indexación no confirmado/i)).toBeInTheDocument();
+      expect(screen.queryByText(finalFeedback)).not.toBeInTheDocument();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1);
@@ -99,6 +110,22 @@ describe("DocumentsPage query failures", () => {
       await flushAsyncTasks();
 
       expect(listDocuments).toHaveBeenCalledTimes(3);
+      expect(uploadDocument).toHaveBeenCalledOnce();
+      expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
+      expect(screen.getByText(/estado de indexación no confirmado/i)).toBeInTheDocument();
+      expect(screen.queryByText(finalFeedback)).not.toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1999);
+      });
+      expect(listDocuments).toHaveBeenCalledTimes(3);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      await flushAsyncTasks();
+
+      expect(listDocuments).toHaveBeenCalledTimes(4);
       expect(uploadDocument).toHaveBeenCalledOnce();
       expect(await screen.findByText(finalFeedback)).toBeInTheDocument();
       expect(screen.queryByText(/estado de indexación no confirmado/i)).not.toBeInTheDocument();

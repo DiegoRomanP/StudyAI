@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
 import type {
@@ -47,13 +52,58 @@ function invalidateLlmCredentialsOnConflict(
 }
 
 // --- Documents -------------------------------------------------------------
+export const DOCUMENTS_QUERY_KEY = ["documents"] as const;
+
+export interface DocumentListCache {
+  documents: DocumentDTO[];
+  source: "GET" | "POST";
+  revision: number;
+}
+
+export function getDocumentsListSnapshot(queryClient: QueryClient) {
+  const query = queryClient.getQueryState<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+  const cachedList = query?.data;
+
+  return {
+    documents: cachedList?.documents,
+    isConfirmedByGet: query?.status === "success" && cachedList?.source === "GET",
+  };
+}
+
+function mergeDocumentLists(
+  fetchedDocuments: DocumentDTO[],
+  newerDocuments: DocumentDTO[],
+) {
+  const documentsById = new Map(fetchedDocuments.map((document) => [document.id, document]));
+  for (const document of newerDocuments) {
+    documentsById.set(document.id, document);
+  }
+  return [...documentsById.values()];
+}
+
 export function useDocuments() {
   return useQuery({
-    queryKey: ["documents"],
-    queryFn: api.listDocuments,
+    queryKey: DOCUMENTS_QUERY_KEY,
+    queryFn: async ({ client }) => {
+      const revisionAtFetchStart =
+        client.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY)?.revision ?? 0;
+      const documents = await api.listDocuments();
+      const latestCache = client.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+
+      // Keep useful rows from a stale GET, but do not let it confirm the newer POST seed.
+      if (latestCache && latestCache.revision !== revisionAtFetchStart) {
+        return {
+          ...latestCache,
+          documents: mergeDocumentLists(documents, latestCache.documents),
+        };
+      }
+
+      return { documents, source: "GET" as const, revision: revisionAtFetchStart };
+    },
+    select: (snapshot) => snapshot.documents,
     // While anything is still indexing, keep refreshing so the UI updates.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((d) => d.status === "PENDING") ? 2000 : false,
+      (query.state.data?.documents ?? []).some((d) => d.status === "PENDING") ? 2000 : false,
   });
 }
 
@@ -62,19 +112,24 @@ export function useUploadDocument() {
   return useMutation({
     mutationFn: (file: File) => api.uploadDocument(file),
     onSuccess: (uploadedDocument) => {
-      qc.setQueryData<DocumentDTO[]>(["documents"], (documents) => {
-        if (!documents) return [uploadedDocument];
+      const cachedList = qc.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+      const documents = cachedList?.documents ?? [];
+      const existingIndex = documents.findIndex(
+        (document) => document.id === uploadedDocument.id,
+      );
+      const nextDocuments =
+        existingIndex === -1
+          ? [...documents, uploadedDocument]
+          : documents.map((document) =>
+              document.id === uploadedDocument.id ? uploadedDocument : document,
+            );
 
-        const existingIndex = documents.findIndex(
-          (document) => document.id === uploadedDocument.id,
-        );
-        if (existingIndex === -1) return [...documents, uploadedDocument];
-
-        return documents.map((document) =>
-          document.id === uploadedDocument.id ? uploadedDocument : document,
-        );
+      qc.setQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY, {
+        documents: nextDocuments,
+        source: "POST",
+        revision: (cachedList?.revision ?? 0) + 1,
       });
-      return qc.invalidateQueries({ queryKey: ["documents"] });
+      return qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY });
     },
   });
 }
@@ -83,7 +138,7 @@ export function useDeleteDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteDocument(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY }),
   });
 }
 

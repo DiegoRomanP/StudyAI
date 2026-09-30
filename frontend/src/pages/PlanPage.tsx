@@ -2,10 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import type { DocumentDTO, PlanDTO } from "../api/types";
+import type { PlanDTO } from "../api/types";
 import { Badge, Button, Card, Spinner } from "../components/ui";
 import { DocumentPicker } from "../components/documents/DocumentPicker";
 import {
+  getDocumentsListSnapshot,
   useDeletePlan,
   useDocuments,
   useGeneratePlan,
@@ -38,7 +39,10 @@ export function PlanPage() {
       .map((document) => document.id),
   );
   const selectedIndexedDocumentIds = selectedDocs.filter((id) => indexedDocumentIds.has(id));
-  const documentsAreReliable = documents !== undefined && documentsQuery.status === "success";
+  const documentsAreReliable =
+    documents !== undefined &&
+    documentsQuery.status === "success" &&
+    getDocumentsListSnapshot(queryClient).isConfirmedByGet;
   const canGeneratePlan =
     goalId !== "" &&
     !generate.isPending &&
@@ -48,10 +52,9 @@ export function PlanPage() {
   async function handleGenerate() {
     if (goalId === "") return;
 
-    const latestDocumentQuery = queryClient.getQueryState<DocumentDTO[]>(["documents"]);
-    const latestDocuments = latestDocumentQuery?.data;
-    const latestListIsReliable =
-      latestDocuments !== undefined && latestDocumentQuery?.status === "success";
+    const latestDocumentList = getDocumentsListSnapshot(queryClient);
+    const latestDocuments = latestDocumentList.documents;
+    const latestListIsReliable = latestDocumentList.isConfirmedByGet;
     const currentIndexedDocumentIds = new Set(
       (latestDocuments ?? [])
         .filter((document) => document.status === "INDEXED")
@@ -107,6 +110,7 @@ export function PlanPage() {
           documents={documents ?? []}
           selectedDocumentIds={selectedDocs}
           onSelectionChange={setSelectedDocs}
+          showEmptyState={documentsAreReliable && indexedDocumentIds.size === 0}
           emptyState={
             <p>
               No hay documentos indexados. Sube apuntes en{" "}

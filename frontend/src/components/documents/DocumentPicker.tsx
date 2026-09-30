@@ -7,6 +7,7 @@ interface DocumentPickerProps {
   selectedDocumentIds: number[];
   onSelectionChange: (documentIds: number[]) => void;
   emptyState?: ReactNode;
+  showEmptyState?: boolean;
 }
 
 function getStatusLabel(document: DocumentDTO) {
@@ -20,6 +21,7 @@ export function DocumentPicker({
   selectedDocumentIds,
   onSelectionChange,
   emptyState,
+  showEmptyState = true,
 }: DocumentPickerProps) {
   const idPrefix = useId();
   const indexedCount = documents.filter((document) => document.status === "INDEXED").length;
@@ -47,7 +49,7 @@ export function DocumentPicker({
         Documentos ({selectedCount} seleccionados)
       </legend>
 
-      {indexedCount === 0 && (
+      {showEmptyState && indexedCount === 0 && (
         <div role="status" className="text-sm text-state-warning">
           {emptyState ?? "No hay documentos indexados disponibles para generar."}
         </div>
