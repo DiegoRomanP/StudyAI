@@ -105,11 +105,18 @@ Las pruebas de API y navegador con Playwright/Bruno usan dependencias npm
 fijadas, Chromium instalado por `npm --prefix frontend exec -- playwright install chromium`
 y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core. Sigue
 [`docs/frontend-integration/qa.md`](docs/frontend-integration/qa.md) para
-prepararlo y ejecutar `npm --prefix frontend run test:qa`; la guía explica los
-puertos, el aislamiento de datos, los reportes y la cobertura provisional de API
-hasta A04. Mientras no exista la colección A04, Bruno queda explícitamente como
-`not-run`; cuando exista, el runner valida su reporte JSON y exige requests y
-aserciones ejecutadas (un exit `0` por sí solo no cuenta como cobertura).
+prepararlo y ejecutar `npm --prefix frontend run test:qa`. `test:api` ejecuta
+readiness Playwright y el flujo HTTP A04 completo de Bruno; `test:qa` añade el
+smoke básico de la UI de producción. La colección versionada
+`frontend/bruno/smoke/` comparte el Markdown canónico
+`frontend/qa/fixtures/studyai-a04-smoke.md` con el consumidor de solo-lectura
+`frontend/e2e/api/a04-shared-fixture.spec.ts`; este no escribe en la base QA
+nueva y vacía. El runner conserva reportes JSON/HTML/JUnit sin cabeceras ni
+cuerpos y valida el reporte Bruno 4.2.0: salida `0` sola no cuenta como
+cobertura; exige requests y aserciones ejecutadas y rechaza fallos, saltos u
+omisiones. `test:qa:runner` también ejecuta casos Bruno negativos contra
+respuestas HTTP locales controladas; son distintos del smoke positivo FastAPI
+real que corre `test:api`.
 
 ---
 

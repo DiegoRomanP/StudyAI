@@ -1,0 +1,23 @@
+meta {
+  name: Confirm deleted plan left no dashboard progress or reviews
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/dashboard
+}
+
+assert {
+  res.status: eq 200
+  res.body.sessions_completed: eq 0
+  res.body.upcoming_reviews: isEmpty
+}
+
+tests {
+  test("deleting the plan removes its quiz score and SM-2 review records", function() {
+    expect(res.body.sessions_completed).to.equal(0);
+    expect(res.body.scores).to.deep.equal([]);
+    expect(res.body.upcoming_reviews).to.deep.equal([]);
+  });
+}

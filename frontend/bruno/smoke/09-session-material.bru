@@ -1,0 +1,25 @@
+meta {
+  name: Read generated session material
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/sessions/{{sessionId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.plan_id: isDefined
+  res.body.material: isDefined
+}
+
+tests {
+  test("session has non-empty material and belongs to the generated plan", function() {
+    expect(res.body.id).to.equal(bru.getVar("sessionId"));
+    expect(res.body.plan_id).to.equal(bru.getVar("planId"));
+    expect(res.body.topic_name.trim()).not.to.equal("");
+    expect(res.body.material.content_markdown.trim()).not.to.equal("");
+    expect(res.body.material.youtube_keywords).to.be.an("array");
+  });
+}

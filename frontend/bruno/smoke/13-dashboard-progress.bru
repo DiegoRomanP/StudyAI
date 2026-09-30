@@ -1,0 +1,26 @@
+meta {
+  name: Verify dashboard completion and SM-2 reviews
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/dashboard
+}
+
+assert {
+  res.status: eq 200
+  res.body.sessions_completed: gt 0
+  res.body.upcoming_reviews: isNotEmpty
+}
+
+tests {
+  test("dashboard includes the completed session and rated flashcard reviews", function() {
+    expect(res.body.sessions_completed).to.be.at.least(1);
+    expect(res.body.scores).to.be.an("array");
+    expect(res.body.scores.some((score) => score.session_id === bru.getVar("sessionId"))).to.equal(true);
+    const reviewCount = res.body.upcoming_reviews.reduce((total, review) => total + review.count, 0);
+    expect(reviewCount).to.be.above(0);
+    expect(res.body.average_score).to.be.within(0, 100);
+  });
+}

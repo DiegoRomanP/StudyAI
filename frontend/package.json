@@ -13,7 +13,7 @@
     "test:api": "node scripts/run-qa.mjs api",
     "test:qa": "node scripts/run-qa.mjs all",
     "test:qa:types": "tsc --noEmit -p tsconfig.qa.json",
-    "test:qa:runner": "node --test scripts/run-qa.test.mjs scripts/qa-runtime.test.mjs"
+    "test:qa:runner": "node --test scripts/run-qa.test.mjs scripts/qa-runtime.test.mjs scripts/bruno-smoke.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.0",

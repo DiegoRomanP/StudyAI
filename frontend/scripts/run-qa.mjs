@@ -26,6 +26,14 @@ const projectDirectory = resolve(frontendDirectory, "..");
 const backendDirectory = join(projectDirectory, "backend");
 const QA_REPORT_ROOT = join(frontendDirectory, "qa-results");
 const QA_BRUNO_COLLECTION = join(frontendDirectory, "bruno");
+const BRUNO_ENVIRONMENT_OVERRIDES = [
+  { environmentName: "STUDYAI_BRUNO_POLL_INTERVAL_MS", collectionName: "pollIntervalMs", max: 60_000 },
+  { environmentName: "STUDYAI_BRUNO_DOCUMENT_POLL_MAX_ATTEMPTS", collectionName: "documentPollMaxAttempts", max: 10_000 },
+  { environmentName: "STUDYAI_BRUNO_DOCUMENT_POLL_TIMEOUT_MS", collectionName: "documentPollTimeoutMs", max: 600_000 },
+  { environmentName: "STUDYAI_BRUNO_PLAN_POLL_MAX_ATTEMPTS", collectionName: "planPollMaxAttempts", max: 10_000 },
+  { environmentName: "STUDYAI_BRUNO_PLAN_POLL_TIMEOUT_MS", collectionName: "planPollTimeoutMs", max: 600_000 },
+  { environmentName: "STUDYAI_BRUNO_REQUEST_TIMEOUT_MS", collectionName: "requestTimeoutMs", max: 120_000 },
+];
 
 /**
  * @typedef {{
@@ -48,7 +56,7 @@ const QA_BRUNO_COLLECTION = join(frontendDirectory, "bruno");
  */
 
 const USAGE = `Uso:
-  npm run test:api   # /health + runtime MOCK; Bruno smoke cuando A04 cree la colección
+  npm run test:api   # readiness Playwright + flujo HTTP A04 de Bruno (si la colección está lista)
   npm run test:e2e   # build de producción + smoke de carga de la UI
   npm run test:qa    # API y UI en una ejecución aislada
   npm run test:qa:types
@@ -747,36 +755,68 @@ function viteCli(frontendRoot) {
   return join(frontendRoot, "node_modules", "vite", "bin", "vite.js");
 }
 
-/** @param {string} frontendRoot @param {string} reportDirectory @param {string} apiUrl */
-async function resolveBrunoCli(frontendRoot, reportDirectory, apiUrl) {
+/**
+ * @param {NodeJS.ProcessEnv} environment
+ * @param {string} name
+ * @param {number} fallback
+ * @param {number} max
+ * @param {boolean} [allowZero]
+ */
+function readBrunoIntegerOption(environment, name, fallback, max, allowZero = false) {
+  const rawValue = environment[name];
+  if (rawValue === undefined || rawValue.trim() === "") return fallback;
+  if (!/^(?:0|[1-9]\d*)$/.test(rawValue)) {
+    throw new Error(`${name} debe ser un entero ${allowZero ? "no negativo" : "positivo"}.`);
+  }
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || (allowZero ? value < 0 : value <= 0) || value > max) {
+    throw new Error(`${name} debe estar entre ${allowZero ? 0 : 1} y ${max}.`);
+  }
+  return value;
+}
+
+/** @param {string} frontendRoot @param {string} reportDirectory @param {string} apiUrl @param {NodeJS.ProcessEnv} environment */
+async function resolveBrunoCli(frontendRoot, reportDirectory, apiUrl, environment) {
   const packagePath = join(frontendRoot, "node_modules", "@usebruno", "cli", "package.json");
   if (!existsSync(packagePath)) throw new Error("No está instalada la dependencia versionada @usebruno/cli; ejecuta npm ci.");
   const packageMetadata = JSON.parse(await readFile(packagePath, "utf8"));
   const executable = typeof packageMetadata.bin === "string" ? packageMetadata.bin : packageMetadata.bin?.bru;
   if (typeof executable !== "string") throw new Error("@usebruno/cli no publica el ejecutable bru esperado.");
+  const delayMs = readBrunoIntegerOption(environment, "STUDYAI_BRUNO_DELAY_MS", 500, 60_000, true);
+  const args = [
+    "run",
+    "smoke",
+    "-r",
+    "--env",
+    "qa",
+    "--sandbox",
+    "safe",
+    "--delay",
+    String(delayMs),
+    "--bail",
+    "--noproxy",
+    "--env-var",
+    `baseUrl=${apiUrl}`,
+  ];
+  for (const { environmentName, collectionName, max } of BRUNO_ENVIRONMENT_OVERRIDES) {
+    const value = environment[environmentName];
+    if (value === undefined || value.trim() === "") continue;
+    const parsed = readBrunoIntegerOption(environment, environmentName, 1, max);
+    args.push("--env-var", `${collectionName}=${parsed}`);
+  }
+  args.push(
+    "--reporter-json",
+    join(reportDirectory, "bruno-report.json"),
+    "--reporter-html",
+    join(reportDirectory, "bruno-report.html"),
+    "--reporter-junit",
+    join(reportDirectory, "bruno-report.xml"),
+    "--reporter-skip-all-headers",
+    "--reporter-skip-body",
+  );
   return {
     executable: join(dirname(packagePath), executable),
-    args: [
-      "run",
-      "smoke",
-      "-r",
-      "--env",
-      "qa",
-      "--sandbox",
-      "safe",
-      "--delay",
-      "500",
-      "--env-var",
-      `baseUrl=${apiUrl}`,
-      "--reporter-json",
-      join(reportDirectory, "bruno-report.json"),
-      "--reporter-html",
-      join(reportDirectory, "bruno-report.html"),
-      "--reporter-junit",
-      join(reportDirectory, "bruno-report.xml"),
-      "--reporter-skip-all-headers",
-      "--reporter-skip-body",
-    ],
+    args,
   };
 }
 
@@ -826,7 +866,7 @@ export async function runBrunoCollection(report, environment, frontendRoot, coll
   }
 
   try {
-    const command = await resolveBrunoCli(frontendRoot, reportDirectory, apiUrl);
+    const command = await resolveBrunoCli(frontendRoot, reportDirectory, apiUrl, environment);
     const managed = startManagedProcess(
       "Bruno smoke API",
       process.execPath,
@@ -951,7 +991,7 @@ async function main(args) {
   const report = {
     schemaVersion: 3,
     runId,
-    scope: "A03 infrastructure smoke; not the A04 product-flow API coverage",
+    scope: "A03 isolated QA infrastructure; A04 Bruno flow is reported separately from Playwright API/E2E",
     mode,
     status: "running",
     startedAt,
@@ -1084,7 +1124,7 @@ async function main(args) {
 
     if (mode !== "e2e") {
       phase = "api-tests";
-      await runStep(report, "Playwright API health/runtime smoke y Bruno cuando exista", async () => {
+      await runStep(report, "Playwright API health/runtime + Bruno, reportados por separado", async () => {
         await runPlaywrightSuite(report, "api", apiTestEnvironment, frontendDirectory, qaDataDirectory);
         await runBrunoCollection(
           report,

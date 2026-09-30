@@ -1,0 +1,24 @@
+meta {
+  name: Confirm quiz completed the session
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/sessions/{{sessionId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq "COMPLETED"
+  res.body.completed_at: isDefined
+}
+
+tests {
+  test("the submitted quiz changed the same session to COMPLETED", function() {
+    expect(res.body.id).to.equal(bru.getVar("sessionId"));
+    expect(res.body.plan_id).to.equal(bru.getVar("planId"));
+    expect(res.body.status).to.equal("COMPLETED");
+    expect(res.body.completed_at).to.be.a("string").and.not.empty;
+  });
+}

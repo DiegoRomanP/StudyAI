@@ -1,0 +1,20 @@
+meta {
+  name: Health check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/health
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq "ok"
+}
+
+tests {
+  test("health reports an operational backend", function() {
+    expect(res.body).to.have.property("status", "ok");
+  });
+}

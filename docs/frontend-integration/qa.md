@@ -1,7 +1,7 @@
 # QA aislado de frontend y API
 
-Esta guía documenta el entorno A03. Las pruebas de Playwright y Bruno están
-versionadas en `frontend/package-lock.json`; no dependen de los paquetes de
+Esta guía documenta el entorno aislado A03 y el smoke HTTP A04. Playwright Test
+y Bruno CLI están fijados en `frontend/package-lock.json`; no dependen de los paquetes de
 `/home`, de servidores de desarrollo ya iniciados ni de `backend/.env`.
 
 ## Requisitos e instalación desde un checkout limpio
@@ -52,49 +52,82 @@ instala paquetes ni descarga modelos automáticamente.
 ```bash
 npm --prefix frontend run test:qa:types   # TypeScript de config, helpers y E2E
 npm --prefix frontend run test:qa:runner  # runner: puertos, aislamiento, reportes y cleanup
-npm --prefix frontend run test:api        # API aislada; Bruno se añade cuando A04 cree su colección
+npm --prefix frontend run test:api        # API aislada: readiness Playwright + flujo HTTP A04 de Bruno
 npm --prefix frontend run test:e2e        # build de producción + smoke de UI
-npm --prefix frontend run test:qa         # API + UI en una única ejecución y base aislada
+npm --prefix frontend run test:qa         # API/Bruno + UI en una única ejecución y base aislada
 ```
 
-`test:qa` es el smoke de infraestructura A03, **no** la cobertura funcional de
-A04. En este checkout todavía no existe `frontend/bruno/`, por lo que
-`test:api` comprueba explícitamente solo `GET /health` y
-`GET /llm-settings/runtime` (`source="MOCK"`). El reporte deja Bruno como
-`not-run`, con conteos cero, e informa
-`apiCoverage=provisional-health-runtime-only-a04-pending`; no presenta esto como
-flujo de documentos/meta/plan/quiz ni afirma que Bruno se haya ejecutado.
+`test:api` ejecuta primero los checks Playwright A03 (`GET /health` y runtime
+`MOCK`) y luego la colección HTTP A04 contra **el mismo backend, base SQLite y
+almacenamiento temporal de esa corrida**. `test:qa` ejecuta lo mismo y añade el
+smoke Playwright de la interfaz de producción; no sustituye las suites de UI
+posteriores A15–A17.
 
-Cuando A04 agregue el manifiesto `frontend/bruno/bruno.json` (o
-`opencollection.yml`), el entorno `frontend/bruno/environments/qa.bru` y requests
-`.bru` dentro de `frontend/bruno/smoke/`, el runner ejecutará `bru run smoke -r
---env qa` desde `frontend/bruno/`, pasará `baseUrl` al API QA y pedirá a Bruno
-`--reporter-json`. Una colección con un request HTTP ejecutable puede llegar al
-CLI aunque no tenga aserciones: esto es intencional para que el gate obligatorio
-posterior a la ejecución evalúe el reporte real, no solo una inspección textual
-de los archivos. La salida `0` del CLI no basta. El runner exige un JSON legible
-y válido en el formato 4.2.0 (array de iteraciones con `summary` y `results`), al
-menos una request ejecutada, al menos una aserción ejecutada, cero fallos,
-requests saltadas y paths esperados omitidos. Compara además los paths `.bru`
-descubiertos bajo `smoke/` con `results[].path` del reporte; Bruno quita la
-extensión `.bru` en ese campo. El parser verifica los campos de Bruno 4.2.0:
-`summary.totalRequests`, `passedRequests`, `failedRequests`, `errorRequests`,
-`skippedRequests`, `totalAssertions`, `passedAssertions` y `failedAssertions`,
-además de tests de scripts; contrasta con `results[].assertionResults[]`,
-`results[].skipped`/`status` y `results[].path`. La ausencia, el JSON malformado,
-conteos inconsistentes o la falta de aserciones fallan la corrida sin fallback
-silencioso.
-Si una carpeta Bruno está presente pero falla el gate de readiness, el runner
-conserva ese error y aun intenta el CLI; después exige y valida el reporte, sin
-convertir la falla inicial en un “no aplica” exitoso.
+La colección A04 está versionada bajo `frontend/bruno/`: `bruno.json`, el
+entorno `environments/qa.bru` sin secretos y 21 requests ordenadas dentro de
+`smoke/`. Cada request tiene una aserción nativa `assert {}` para estado HTTP y
+validación de contenido, además de tests cuando hace falta comprobar relaciones
+o datos dinámicos. El flujo sube el fixture compartido
+`frontend/qa/fixtures/studyai-a04-smoke.md`, crea y encadena IDs de ejecución,
+espera `INDEXED`/`READY` mediante polling GET acotado, examina cada sesión del
+plan, obtiene el quiz usando `sessionId`, envía respuestas una sola vez usando
+el `quizId` devuelto, comprueba sesión/dashboard y borra plan, meta y documento
+con consultas posteriores de ausencia. La primera flashcard usa calidad `0` y
+las demás `5`; las respuestas MC usan una opción incluida en el DTO.
 
-La prueba local de contrato está aislada bajo `frontend/scripts/`: usa Bruno CLI
-4.2.0 real contra un HTTP local sintético, verifica `res.status: eq 200`, prueba
-que una colección sin aserciones puede salir con código `0` y comprueba que el
-runner la rechaza usando el reporte. Los casos del parser también cubren fallos,
-requests omitidas/saltadas y reportes ausentes o malformados. Estos fixtures de
-test no constituyen una colección versionada A04 ni se invocan como parte del
-`test:api` provisional.
+El fixture Markdown es la única fuente de datos sintéticos: Bruno lo lee con la
+ruta relativa `../qa/fixtures/studyai-a04-smoke.md`. El test
+`frontend/e2e/api/a04-shared-fixture.spec.ts` consume el mismo archivo mediante
+`fileURLToPath(new URL("../../qa/fixtures/studyai-a04-smoke.md", import.meta.url))`.
+Ese test solo lee el archivo: no escribe en la base, así que no altera la
+comprobación A03 de una base recién creada y vacía. No se debe copiar el
+contenido a otro fixture.
+
+El entorno de Bruno permite configurar `pollIntervalMs`,
+`documentPollMaxAttempts`, `documentPollTimeoutMs`, `planPollMaxAttempts`,
+`planPollTimeoutMs` y `requestTimeoutMs`; ambos polls terminan con error y
+detienen la colección si reciben `FAILED` o agotan sus intentos/tiempo total.
+Los GET iniciales de los dos polls también aplican `requestTimeoutMs`; los GET
+internos usan el menor entre ese límite y el tiempo restante del deadline. El
+CLI queda fijado en `4.2.0`; en esta versión el modo del request multipart se
+declara `body: multipartForm`, mientras los campos usan
+`body:multipart-form { ... }`.
+
+El runner permite ajustar esos parámetros sin editar la colección mediante
+`STUDYAI_BRUNO_DELAY_MS`, `STUDYAI_BRUNO_POLL_INTERVAL_MS`,
+`STUDYAI_BRUNO_DOCUMENT_POLL_MAX_ATTEMPTS`,
+`STUDYAI_BRUNO_DOCUMENT_POLL_TIMEOUT_MS`,
+`STUDYAI_BRUNO_PLAN_POLL_MAX_ATTEMPTS`, `STUDYAI_BRUNO_PLAN_POLL_TIMEOUT_MS`
+y `STUDYAI_BRUNO_REQUEST_TIMEOUT_MS`. Los límites cortos se usan en las pruebas
+controladas; para `test:api`/`test:qa` contra FastAPI conserva los valores de
+`environments/qa.bru` para no convertir latencia normal de indexación en un
+falso fallo.
+
+El runner ejecuta `bru run smoke -r --env qa` desde `frontend/bruno/`, pasa
+`baseUrl` al backend QA y solicita JSON, HTML y JUnit con cabeceras/cuerpos
+omitidos. Ejecuta en sandbox `safe`, con `--bail` para parar en el primer fallo
+y `--noproxy` para no enviar el tráfico local a un proxy configurado. La salida
+`0` del CLI no basta: el gate posterior comprueba el JSON real de Bruno 4.2.0,
+pide al menos una request y una aserción ejecutadas, y rechaza fallos, saltos,
+paths omitidos/inesperados, reportes ausentes/malformados o conteos
+inconsistentes. Compara los `.bru` esperados con `results[].path` (Bruno quita
+la extensión) y valida `summary` y resultados de aserciones/tests. Si readiness
+falla, el runner conserva el error y aun inspecciona la ejecución; no convierte
+una colección inválida ni sin aserciones en un “no aplica” exitoso.
+
+`npm run test:qa:runner` incluye pruebas de contrato A03 y
+`frontend/scripts/bruno-smoke.test.mjs`. Este último ejecuta Bruno CLI **4.2.0
+real** con los `.bru` versionados de `frontend/bruno/smoke/` contra un servidor
+HTTP local controlado, no contra FastAPI: cubre varias respuestas
+`PENDING`/`PROCESSING` que resuelven, `FAILED` inmediato, timeout por intentos y
+deadline, timeout del GET inicial, el cese de requests posteriores y el conteo
+de POST únicos. El runner A03 inspecciona el mismo reporte y rechaza cualquier
+fallo u omisión. Los parámetros de estas pruebas se acortan mediante las
+variables QA documentadas arriba; la colección real no se copia ni se modifica.
+Estos negativos controlados no sustituyen `npm run test:api`, que conserva el
+smoke HTTP positivo contra el FastAPI aislado real. La cobertura API combina
+readiness Playwright A03, consumo de fixture solo-lectura Playwright y el flujo
+Bruno A04; no se presenta como la suite de UI de A15–A17.
 
 ## Aislamiento y secuencia
 
@@ -180,7 +213,8 @@ cabeceras y cuerpos de requests/responses; `run-report.json` no copia esos
 artefactos y solo persiste conteos, estado/código y métricas derivadas de comparar
 los paths esperados con los observados.
 
-El smoke A03 solo demuestra backend sano, runtime demo y carga real de la página
-actual. No sube documentos, crea metas/planes, ejecuta quizzes, ni sustituye la
-colección/flujo A04 o los recorridos posteriores A15–A17. Las decisiones de la
-sección 8 del plan continúan pendientes y no se resuelven en esta actividad.
+La suite Playwright API comprueba readiness y runtime demo; la suite Bruno A04
+cubre el flujo HTTP real de documento/meta/plan/sesiones/quiz/dashboard/limpieza.
+La suite E2E actual sigue limitada a disponibilidad básica de la página y no
+sustituye los recorridos UI posteriores A15–A17. Las decisiones de la sección 8
+del plan continúan pendientes y no se resuelven en esta actividad.
