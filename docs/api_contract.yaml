@@ -136,6 +136,19 @@ paths:
   /plans/generate:
     post:
       summary: Inicia la generación asíncrona de un plan
+      description: >-
+        Acepta una cabecera Idempotency-Key opcional (1–255 caracteres). Para
+        el mismo usuario, la misma clave y el mismo goal_id/document_ids
+        canónicos (document_ids se compara como un conjunto ordenado), devuelve
+        el mismo plan y no registra otra tarea. Reutilizar la clave con otro
+        payload devuelve 409. Sin clave, conserva el comportamiento anterior y
+        crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
+        actual; no es una cola durable ni garantiza recuperación tras un cierre.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 255 }
       requestBody:
         required: true
         content:
@@ -150,10 +163,20 @@ paths:
                   items: { type: integer }
       responses:
         "202":
-          description: Aceptado (status PROCESSING)
+          description: Aceptado; una repetición devuelve el estado actual del mismo plan
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanStatus" }
+        "409":
+          description: La clave de idempotencia ya se utilizó con una solicitud diferente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: IDEMPOTENCY_KEY_REUSED }
 
   /plans/{plan_id}/status:
     get:

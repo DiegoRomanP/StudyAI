@@ -7,7 +7,7 @@ the schema stabilises and you want versioned migrations.
 
 from __future__ import annotations
 
-from sqlalchemy import inspect, text
+from sqlalchemy import Index, inspect, text
 
 from app.api.deps import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
 from app.core.logging import get_logger
@@ -15,6 +15,7 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName
+from app.models.plan import Plan
 from app.models.user import User
 
 logger = get_logger(__name__)
@@ -25,6 +26,7 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_document_error_message_column()
     _ensure_plan_error_message_column()
+    _ensure_plan_idempotency_columns()
     _ensure_llm_verification_columns()
     _seed_default_user()
 
@@ -49,6 +51,39 @@ def _ensure_plan_error_message_column() -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE plans ADD COLUMN error_message VARCHAR(1024) DEFAULT ''"))
         logger.info("Migrated plans table: added error_message column")
+
+
+def _ensure_plan_idempotency_columns() -> None:
+    """Add the idempotency fields and uniqueness boundary to existing plans."""
+    columns = {column["name"] for column in inspect(engine).get_columns("plans")}
+    additions = {
+        "idempotency_key": "VARCHAR(255)",
+        "idempotency_request_hash": "VARCHAR(64)",
+    }
+    with engine.begin() as conn:
+        for name, definition in additions.items():
+            if name not in columns:
+                conn.execute(text(f"ALTER TABLE plans ADD COLUMN {name} {definition}"))
+                logger.info("Migrated plans table: added %s column", name)
+
+    expected_columns = {"user_id", "idempotency_key"}
+    inspector = inspect(engine)
+    has_unique_boundary = any(
+        set(constraint.get("column_names") or []) == expected_columns
+        for constraint in inspector.get_unique_constraints("plans")
+    ) or any(
+        index.get("unique")
+        and set(index.get("column_names") or []) == expected_columns
+        for index in inspector.get_indexes("plans")
+    )
+    if not has_unique_boundary:
+        Index(
+            "uq_plans_user_idempotency_key",
+            Plan.user_id,
+            Plan.idempotency_key,
+            unique=True,
+        ).create(bind=engine, checkfirst=True)
+        logger.info("Migrated plans table: added idempotency unique index")
 
 
 def _ensure_llm_verification_columns() -> None:

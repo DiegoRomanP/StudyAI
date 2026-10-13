@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -24,6 +24,9 @@ class PlanStatus(str, enum.Enum):
 
 class Plan(TimestampMixin, Base):
     __tablename__ = "plans"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_plans_user_idempotency_key"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -36,6 +39,8 @@ class Plan(TimestampMixin, Base):
     # MVP schema simple without an extra association table.
     document_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
     error_message: Mapped[str] = mapped_column(String(1024), default="")
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    idempotency_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     goal = relationship("Goal")
     topics = relationship(

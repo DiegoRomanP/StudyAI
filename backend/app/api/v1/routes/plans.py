@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -22,16 +22,45 @@ router = APIRouter(prefix="/plans", tags=["plans"])
     "/generate",
     response_model=PlanStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        409: {
+            "description": "La clave de idempotencia ya se utilizó con una solicitud diferente.",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["detail", "code"],
+                        "properties": {
+                            "detail": {"type": "string"},
+                            "code": {
+                                "type": "string",
+                                "example": "IDEMPOTENCY_KEY_REUSED",
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
 )
 def generate_plan(
     payload: PlanGenerateRequest,
     background_tasks: BackgroundTasks,
+    idempotency_key: str | None = Header(
+        default=None, alias="Idempotency-Key", min_length=1, max_length=255
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PlanStatusResponse:
     service = PlanService(db)
-    plan = service.create_plan(user.id, payload.goal_id, payload.document_ids)
-    background_tasks.add_task(generate_plan_task, plan.id)
+    plan, created = service.create_plan(
+        user.id,
+        payload.goal_id,
+        payload.document_ids,
+        idempotency_key=idempotency_key,
+    )
+    if created:
+        background_tasks.add_task(generate_plan_task, plan.id)
     return PlanStatusResponse.model_validate(plan)
 
 
