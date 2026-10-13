@@ -110,7 +110,14 @@ async function expectVisibleKeyboardFocus(
   expect(focusStyle.focusVisible).toBe(true);
   expect(focusStyle.outlineStyle).not.toBe("none");
   expect(Number.parseFloat(focusStyle.outlineWidth)).toBeGreaterThanOrEqual(3);
-  expect(focusStyle.outlineColor).toBe("rgb(18, 108, 99)");
+  const expectedFocusColor = await page.evaluate(() => {
+    const channels = getComputedStyle(document.documentElement)
+      .getPropertyValue("--color-focus")
+      .trim()
+      .split(/\s+/);
+    return `rgb(${channels.join(", ")})`;
+  });
+  expect(focusStyle.outlineColor).toBe(expectedFocusColor);
   return focusStyle;
 }
 

@@ -32,30 +32,67 @@ describe("AppShell", () => {
     expect(screen.getByRole("main")).toHaveAttribute("tabindex", "-1");
   });
 
-  it("includes Inicio and marks only the current route, including plan details", () => {
-    const { unmount } = renderShell("/");
+  it("keeps all six destinations in the desktop sidebar and five primary mobile links", () => {
+    renderShell();
 
-    expect(screen.getByRole("link", { name: "Inicio" })).toHaveAttribute(
+    const desktopNavigation = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(desktopNavigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Inicio",
+      "Documentos",
+      "Metas",
+      "Plan",
+      "Dashboard",
+      "Configuración",
+    ]);
+    expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
     );
-    expect(screen.getByRole("link", { name: "Plan" })).not.toHaveAttribute(
-      "aria-current",
-    );
-    expect(
-      screen.getAllByRole("link", { name: "StudyAI" }).map((link) => link.getAttribute("href")),
-    ).toEqual(["/", "/"]);
 
-    unmount();
+    const bottomNavigation = screen.getByRole("navigation", { name: "Navegación inferior" });
+    expect(within(bottomNavigation).getAllByRole("link").map((link) => link.textContent?.trim())).toEqual([
+      "Inicio",
+      "Documentos",
+      "Metas",
+      "Plan",
+      "Dashboard",
+    ]);
+    expect(within(bottomNavigation).queryByRole("link", { name: "Configuración" })).not.toBeInTheDocument();
+    expect(within(bottomNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(bottomNavigation.parentElement).toHaveClass(
+      "fixed",
+      "inset-x-0",
+      "bottom-0",
+      "z-40",
+      "md:hidden",
+    );
+    expect(bottomNavigation).toHaveClass("pb-[env(safe-area-inset-bottom)]");
+    expect(screen.getByRole("main").firstElementChild).toHaveClass(
+      "pb-[calc(6rem+env(safe-area-inset-bottom))]",
+    );
+  });
+
+  it("marks direct plan routes active in both desktop and bottom navigation", () => {
     renderShell("/plan/27");
 
-    expect(screen.getByRole("link", { name: "Plan" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByRole("link", { name: "Inicio" })).not.toHaveAttribute(
-      "aria-current",
-    );
+    expect(
+      within(screen.getByRole("navigation", { name: "Navegación principal" })).getByRole("link", {
+        name: "Plan",
+      }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      within(screen.getByRole("navigation", { name: "Navegación inferior" })).getByRole("link", {
+        name: "Plan",
+      }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      within(screen.getByRole("navigation", { name: "Navegación inferior" })).getByRole("link", {
+        name: "Inicio",
+      }),
+    ).not.toHaveAttribute("aria-current");
   });
 
   it("uses the provided flowing SVG mark as decorative imagery in both brand links", () => {
@@ -77,26 +114,30 @@ describe("AppShell", () => {
     renderShell("/plan/27/extra");
 
     await waitFor(() => expect(document.title).toBe("Página no encontrada | StudyAI"));
-    expect(screen.getByRole("link", { name: "Plan" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "Inicio" })).not.toHaveAttribute("aria-current");
+    const desktopNavigation = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(desktopNavigation).getByRole("link", { name: "Plan" })).not.toHaveAttribute(
+      "aria-current",
+    );
+    expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).not.toHaveAttribute(
+      "aria-current",
+    );
   });
 
-  it("opens and closes a non-modal mobile navigation with Escape and restores focus", () => {
+  it("opens a non-modal overflow disclosure and restores focus on Escape", () => {
     const backgroundAction = vi.fn();
     renderShell("/", backgroundAction);
-    const menuButton = screen.getByRole("button", { name: "Menú" });
+    const moreButton = screen.getByRole("button", { name: "Más" });
 
-    expect(menuButton).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(menuButton);
+    expect(moreButton).toHaveAttribute("aria-expanded", "false");
+    expect(moreButton).toHaveAttribute("aria-controls", "mobile-overflow-navigation");
+    fireEvent.click(moreButton);
 
-    const mobileNavigation = screen.getByRole("navigation", { name: "Navegación móvil" });
-    expect(menuButton).toHaveAttribute("aria-expanded", "true");
-    expect(menuButton).toHaveAttribute("aria-controls", "mobile-navigation");
-    expect(mobileNavigation).toBeInTheDocument();
-    expect(mobileNavigation).not.toHaveAttribute("aria-modal", "true");
-    expect(
-      within(mobileNavigation).getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/", "/documents", "/goals", "/plan", "/dashboard", "/settings"]);
+    const overflowNavigation = screen.getByRole("navigation", { name: "Más destinos" });
+    expect(moreButton).toHaveAttribute("aria-expanded", "true");
+    expect(overflowNavigation).toBeInTheDocument();
+    expect(within(overflowNavigation).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/settings",
+    ]);
     expect(screen.getByRole("main")).not.toHaveAttribute("inert");
     expect(screen.getByRole("main")).not.toHaveAttribute("aria-hidden", "true");
 
@@ -105,28 +146,39 @@ describe("AppShell", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(screen.queryByRole("navigation", { name: "Navegación móvil" })).not.toBeInTheDocument();
-    expect(menuButton).toHaveAttribute("aria-expanded", "false");
-    expect(menuButton).toHaveFocus();
+    expect(screen.queryByRole("navigation", { name: "Más destinos" })).not.toBeInTheDocument();
+    expect(moreButton).toHaveAttribute("aria-expanded", "false");
+    expect(moreButton).toHaveFocus();
 
-    fireEvent.click(menuButton);
-    expect(menuButton).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(menuButton);
-    expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(moreButton);
+    expect(moreButton).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(moreButton);
+    expect(moreButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("returns focus to the menu button when the current route is selected", () => {
-    renderShell("/documents");
-    const menuButton = screen.getByRole("button", { name: "Menú" });
-    fireEvent.click(menuButton);
+  it("keeps the Más destinations landmark separate from the bottom navigation landmark", () => {
+    renderShell();
+    fireEvent.click(screen.getByRole("button", { name: "Más" }));
+
+    const bottomNavigation = screen.getByRole("navigation", { name: "Navegación inferior" });
+    const overflowNavigation = screen.getByRole("navigation", { name: "Más destinos" });
+    expect(bottomNavigation).not.toContainElement(overflowNavigation);
+  });
+
+  it("marks Configuración on the Más trigger and restores focus when its current route is chosen", () => {
+    renderShell("/settings");
+    const moreButton = screen.getByRole("button", { name: /Más/ });
+    expect(moreButton).toHaveAttribute("aria-current", "page");
+    fireEvent.click(moreButton);
 
     const currentLink = within(
-      screen.getByRole("navigation", { name: "Navegación móvil" }),
-    ).getByRole("link", { name: "Documentos" });
+      screen.getByRole("navigation", { name: "Más destinos" }),
+    ).getByRole("link", { name: "Configuración" });
+    expect(currentLink).toHaveAttribute("aria-current", "page");
     currentLink.focus();
     fireEvent.click(currentLink);
 
-    expect(screen.queryByRole("navigation", { name: "Navegación móvil" })).not.toBeInTheDocument();
-    expect(menuButton).toHaveFocus();
+    expect(screen.queryByRole("navigation", { name: "Más destinos" })).not.toBeInTheDocument();
+    expect(moreButton).toHaveFocus();
   });
 });

@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 import type {
   DashboardDTO,
@@ -170,6 +170,7 @@ type MeasuredControl = ControlDescription & { left: number; right: number };
 type MobileLayoutEvidence = {
   label: string;
   width: number;
+  bottomNavigationTop: number;
   readinessEvidence: string[];
   expectedControls: ExpectedControl[];
   controls: MeasuredControl[];
@@ -183,26 +184,37 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   });
 }
 
-async function openMobileNavigation(page: Page) {
-  const menuButton = page.getByRole("button", { name: "Menú" });
-  await menuButton.focus();
+async function openMobileOverflow(page: Page) {
+  const moreButton = page.getByRole("button", { name: /^Más/ });
+  await moreButton.focus();
   await page.keyboard.press("Enter");
-  await expect(menuButton).toHaveAttribute("aria-expanded", "true");
-  const navigation = page.getByRole("navigation", { name: "Navegación móvil" });
+  await expect(moreButton).toHaveAttribute("aria-expanded", "true");
+  const navigation = page.getByRole("navigation", { name: "Más destinos" });
   await expect(navigation).toBeVisible();
-  return { menuButton, navigation };
+  return { moreButton, navigation };
 }
 
 async function navigateByKeyboard(
   page: Page,
   destination: { label: string; path: string; index: number },
 ) {
-  const { menuButton, navigation } = await openMobileNavigation(page);
-  const link = navigation.getByRole("link", { name: destination.label, exact: true });
+  const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
+  const moreButton = page.getByRole("button", { name: /^Más/ });
+  const isOverflowDestination = destination.label === "Configuración";
+  let link: Locator;
 
-  for (let tab = 0; tab <= destination.index; tab += 1) {
+  if (isOverflowDestination) {
+    const overflow = await openMobileOverflow(page);
+    link = overflow.navigation.getByRole("link", { name: destination.label, exact: true });
     await page.keyboard.press("Tab");
+  } else {
+    link = bottomNavigation.getByRole("link", { name: destination.label, exact: true });
+    await bottomNavigation.getByRole("link", { name: "Inicio", exact: true }).focus();
+    for (let tab = 0; tab < destination.index; tab += 1) {
+      await page.keyboard.press("Tab");
+    }
   }
+
   await expect(link).toBeFocused();
   const bounds = await link.boundingBox();
   expect(bounds).not.toBeNull();
@@ -212,14 +224,20 @@ async function navigateByKeyboard(
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`${destination.path.replace(/\//g, "\\/")}$`));
   await expect(page.locator("#main-content")).toBeFocused();
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(moreButton).toHaveAttribute("aria-expanded", "false");
 
-  const activeNavigation = await openMobileNavigation(page);
-  await expect(
-    activeNavigation.navigation.getByRole("link", { name: destination.label, exact: true }),
-  ).toHaveAttribute("aria-current", "page");
-  await page.keyboard.press("Escape");
-  await expect(activeNavigation.menuButton).toBeFocused();
+  if (isOverflowDestination) {
+    const activeOverflow = await openMobileOverflow(page);
+    await expect(
+      activeOverflow.navigation.getByRole("link", { name: destination.label, exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await page.keyboard.press("Escape");
+    await expect(activeOverflow.moreButton).toBeFocused();
+  } else {
+    await expect(
+      bottomNavigation.getByRole("link", { name: destination.label, exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+  }
 }
 
 async function assertMobileLayout(
@@ -237,6 +255,11 @@ async function assertMobileLayout(
   const layout = await page.evaluate(() => {
     const main = document.querySelector<HTMLElement>("#main-content");
     if (!main) throw new Error("No se encontró #main-content.");
+    const bottomNavigation = document.querySelector<HTMLElement>(
+      'nav[aria-label="Navegación inferior"]',
+    );
+    if (!bottomNavigation) throw new Error("No se encontró la navegación inferior móvil.");
+    const bottomNavigationTop = bottomNavigation.getBoundingClientRect().top;
 
     const describe = (element: Element): ControlDescription => ({
       tag: element.tagName.toLowerCase(),
@@ -284,6 +307,7 @@ async function assertMobileLayout(
     return {
       width,
       documentWidth: document.documentElement.scrollWidth,
+      bottomNavigationTop,
       measuredControls,
       focusables: focusables.map(describe),
       overflowingControls,
@@ -293,6 +317,7 @@ async function assertMobileLayout(
 
   expect(layout.width, `${label}: viewport width`).toBe(320);
   expect(layout.documentWidth, `${label}: document horizontal overflow`).toBe(320);
+  expect(layout.bottomNavigationTop, `${label}: visible bottom navigation`).toBeGreaterThan(0);
   expect(layout.overflowingControls, `${label}: controls outside the viewport`).toEqual([]);
   expect(layout.overflowingContent, `${label}: content clipped by an ancestor`).toEqual([]);
   for (const expected of expectedControls) {
@@ -317,7 +342,14 @@ async function assertMobileLayout(
   if (layout.focusables.length === 0) {
     expect(label, "only the read-only Dashboard has no in-page keyboard actions").toBe("Dashboard");
     await expect(page.locator("#main-content")).toBeVisible();
-    return { label, width: layout.width, readinessEvidence, expectedControls, controls: layout.measuredControls };
+    return {
+      label,
+      width: layout.width,
+      bottomNavigationTop: layout.bottomNavigationTop,
+      readinessEvidence,
+      expectedControls,
+      controls: layout.measuredControls,
+    };
   }
 
   let maxScrollY = 0;
@@ -355,6 +387,10 @@ async function assertMobileLayout(
     expect(activeControl!.bottom, `${label}: focused control is scrolled into view`).toBeLessThanOrEqual(
       activeControl!.viewportHeight + 0.5,
     );
+    expect(
+      activeControl!.bottom,
+      `${label}: focused control clears the fixed bottom navigation`,
+    ).toBeLessThanOrEqual(layout.bottomNavigationTop + 0.5);
     maxScrollY = Math.max(maxScrollY, activeControl!.scrollY);
   }
 
@@ -362,7 +398,14 @@ async function assertMobileLayout(
     expect(maxScrollY, `${label}: keyboard navigation causes real vertical scrolling`).toBeGreaterThan(0);
   }
 
-  return { label, width: layout.width, readinessEvidence, expectedControls, controls: layout.measuredControls };
+  return {
+    label,
+    width: layout.width,
+    bottomNavigationTop: layout.bottomNavigationTop,
+    readinessEvidence,
+    expectedControls,
+    controls: layout.measuredControls,
+  };
 }
 
 test("responsive navigation, deep links, keyboard flow and recovery work at 320px", async ({ page }, testInfo) => {
@@ -421,24 +464,36 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
     ], ["Home link /documents", "Home link /goals"]),
   );
 
-  const { menuButton, navigation } = await openMobileNavigation(page);
-  const menuLabels = ["Inicio", "Documentos", "Metas", "Plan", "Dashboard", "Configuración"];
+  const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
+  const menuLabels = ["Inicio", "Documentos", "Metas", "Plan", "Dashboard"];
+  expect(await bottomNavigation.getByRole("link").allTextContents()).toEqual(menuLabels);
+  await expect(bottomNavigation.getByRole("link", { name: "Configuración" })).toHaveCount(0);
+
   const menuBounds = [];
   for (const label of menuLabels) {
-    await page.keyboard.press("Tab");
-    const link = navigation.getByRole("link", { name: label, exact: true });
+    const link = bottomNavigation.getByRole("link", { name: label, exact: true });
+    await link.focus();
     await expect(link).toBeFocused();
     const bounds = await link.boundingBox();
-    expect(bounds, `${label} menu link bounds`).not.toBeNull();
+    expect(bounds, `${label} bottom-navigation link bounds`).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
     menuBounds.push({ label, x: bounds!.x, right: bounds!.x + bounds!.width });
   }
-  await page.screenshot({ path: testInfo.outputPath("a06-mobile-menu-320.png") });
-  expect(menuBounds).toHaveLength(6);
+  expect(menuBounds).toHaveLength(5);
+
+  const { moreButton, navigation } = await openMobileOverflow(page);
+  const settingsLink = navigation.getByRole("link", { name: "Configuración", exact: true });
+  await page.keyboard.press("Tab");
+  await expect(settingsLink).toBeFocused();
+  const settingsBounds = await settingsLink.boundingBox();
+  expect(settingsBounds).not.toBeNull();
+  expect(settingsBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(settingsBounds!.x + settingsBounds!.width).toBeLessThanOrEqual(320);
+  await page.screenshot({ path: testInfo.outputPath("a06-mobile-navigation-320.png") });
   await page.keyboard.press("Escape");
-  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
-  await expect(menuButton).toBeFocused();
+  await expect(moreButton).toHaveAttribute("aria-expanded", "false");
+  await expect(moreButton).toBeFocused();
 
   const destinations = [
     {
@@ -516,7 +571,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       path: "/settings",
       heading: "Configuración",
       title: "Configuración | StudyAI",
-      index: 5,
+      index: 0,
       expectedControls: [
         { tag: "input", label: "sk-openai-test" },
         { tag: "button", label: "Guardar clave" },
@@ -620,11 +675,19 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await page.goto("/plan/27/extra");
   await expect(page.getByRole("heading", { name: /No encontramos esa página/ })).toBeVisible();
   await expect(page).toHaveTitle("Página no encontrada | StudyAI");
-  const unknownRouteNavigation = await openMobileNavigation(page);
+  const unknownRouteBottomNavigation = page.getByRole("navigation", {
+    name: "Navegación inferior",
+  });
   await expect(
-    unknownRouteNavigation.navigation.getByRole("link", { name: "Plan", exact: true }),
+    unknownRouteBottomNavigation.getByRole("link", { name: "Plan", exact: true }),
+  ).not.toHaveAttribute("aria-current", "page");
+  const unknownRouteOverflow = await openMobileOverflow(page);
+  await expect(unknownRouteOverflow.moreButton).not.toHaveAttribute("aria-current", "page");
+  await expect(
+    unknownRouteOverflow.navigation.getByRole("link", { name: "Configuración", exact: true }),
   ).not.toHaveAttribute("aria-current", "page");
   await page.keyboard.press("Escape");
+  await expect(unknownRouteOverflow.moreButton).toBeFocused();
 
   await page.goto("/plan/404");
   await expect(page.getByRole("heading", { name: "No se pudo abrir el plan" })).toBeVisible();
@@ -632,6 +695,10 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("heading", { name: "Plan recuperado tras 404" })).toBeVisible();
   expect(missingPlanAttempts).toBe(3);
+  expect(
+    apiRequests.filter(({ method }) => method !== "GET"),
+    "navigation and recovery should not mutate server state",
+  ).toEqual([]);
   expect(delayedGetPaths).toEqual(
     expect.arrayContaining([
       "/documents",

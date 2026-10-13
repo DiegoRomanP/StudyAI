@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   getPlan: vi.fn(),
   getSession: vi.fn(),
+  listProviderCatalog: vi.fn(),
+  listLlmCredentials: vi.fn(),
+  getLlmRuntime: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
@@ -58,6 +61,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getPlan.mockResolvedValue(plan);
   api.getSession.mockResolvedValue(session);
+  api.listProviderCatalog.mockResolvedValue([]);
+  api.listLlmCredentials.mockResolvedValue([]);
+  api.getLlmRuntime.mockResolvedValue({
+    source: "MOCK",
+    provider: null,
+    models: { topic_analysis: "simulado", session_plan: "simulado", session_content: "simulado" },
+    fallback_reason: null,
+  });
 });
 
 describe("App routes", () => {
@@ -112,12 +123,16 @@ describe("App routes", () => {
     expect(api.getSession).not.toHaveBeenCalled();
   });
 
-  it("loads a directly opened plan with a positive safe decimal ID", async () => {
+  it("loads a directly opened plan with a positive safe decimal ID and keeps its navigation active", async () => {
     renderApp("/plan/27");
 
     expect(await screen.findByRole("heading", { name: "Plan de enlace directo" })).toBeInTheDocument();
     expect(api.getPlan).toHaveBeenCalledOnce();
     expect(api.getPlan).toHaveBeenCalledWith(27);
+    expect(screen.getAllByRole("link", { name: "Plan" })).toHaveLength(2);
+    for (const planLink of screen.getAllByRole("link", { name: "Plan" })) {
+      expect(planLink).toHaveAttribute("aria-current", "page");
+    }
   });
 
   it("accepts the largest positive safe integer for a direct plan link", async () => {
@@ -168,6 +183,19 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo actualizar la sesión/i);
     expect(screen.getByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
+  });
+
+  it("opens Configuración from Más and focuses the deep-linked page after navigation", async () => {
+    renderApp("/");
+
+    fireEvent.click(screen.getByRole("button", { name: "Más" }));
+    const overflowNavigation = screen.getByRole("navigation", { name: "Más destinos" });
+    fireEvent.click(within(overflowNavigation).getByRole("link", { name: "Configuración" }));
+
+    expect(await screen.findByRole("heading", { name: "Configuración" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Configuración | StudyAI"));
+    expect(screen.getByRole("main")).toHaveFocus();
+    expect(screen.queryByRole("navigation", { name: "Más destinos" })).not.toBeInTheDocument();
   });
 
   it("updates the page title and moves focus to main after an in-app route change", async () => {

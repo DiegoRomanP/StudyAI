@@ -113,6 +113,14 @@ describe("StudyAI dark design tokens", () => {
     expect(globalStyles).toContain("@media (prefers-reduced-motion: reduce)");
   });
 
+  it("reserves mobile root scroll space for the fixed navigation and device safe area", () => {
+    expect(globalStyles).toContain("scroll-padding-bottom: 0;");
+    expect(globalStyles).toContain("@media (max-width: 767px)");
+    expect(globalStyles).toContain(
+      "scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));",
+    );
+  });
+
   it("locks font fallback stacks and legacy Tailwind aliases", () => {
     expect(tokenSource).toContain('--font-display: "Manrope", "Segoe UI", sans-serif;');
     expect(tokenSource).toContain('--font-ui: "Inter", "Segoe UI", sans-serif;');

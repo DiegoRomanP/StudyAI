@@ -10,6 +10,9 @@ const NAVIGATION = [
   { to: "/settings", label: "Configuración" },
 ];
 
+const PRIMARY_NAVIGATION = NAVIGATION.slice(0, 5);
+const OVERFLOW_NAVIGATION = NAVIGATION.slice(5);
+
 function matchesRoute(path: string, pathname: string) {
   return matchPath({ path, end: true }, pathname) !== null;
 }
@@ -50,13 +53,15 @@ function BrandLink({ className }: { className: string }) {
 function NavigationLinks({
   pathname,
   onNavigate,
+  items = NAVIGATION,
 }: {
   pathname: string;
   onNavigate?: (to: string) => void;
+  items?: typeof NAVIGATION;
 }) {
   return (
     <>
-      {NAVIGATION.map((item) => {
+      {items.map((item) => {
         const isActive = isNavigationItemActive(item.to, pathname);
         return (
           <Link
@@ -76,12 +81,61 @@ function NavigationLinks({
   );
 }
 
+function NavigationIcon({ to }: { to: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className="h-[1.125rem] w-[1.125rem] shrink-0"
+    >
+      {to === "/" ? (
+        <>
+          <path d="m3.5 10 8.5-7 8.5 7" />
+          <path d="M5.5 9v11h13V9M9.5 20v-6h5v6" />
+        </>
+      ) : to === "/documents" ? (
+        <>
+          <path d="M6 3.5h8l4 4v13H6zM14 3.5v4h4M9 12h6M9 16h6" />
+        </>
+      ) : to === "/goals" ? (
+        <>
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="4" />
+          <circle cx="12" cy="12" r="1" />
+        </>
+      ) : to === "/plan" ? (
+        <>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3.5v3M16 3.5v3M4 9h16M8 13h3M8 16h7" />
+        </>
+      ) : to === "/dashboard" ? (
+        <path d="M4 20V12h4v8M10 20V5h4v15M16 20V9h4v11" />
+      ) : (
+        <>
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const previousPathname = useRef(pathname);
+  const isOverflowRouteActive = OVERFLOW_NAVIGATION.some((item) =>
+    isNavigationItemActive(item.to, pathname),
+  );
 
   useEffect(() => {
     document.title = pageTitle(pathname);
@@ -103,7 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (event.key !== "Escape") return;
       event.preventDefault();
       setMobileMenuOpen(false);
-      menuButtonRef.current?.focus();
+      moreButtonRef.current?.focus();
     }
 
     document.addEventListener("keydown", closeOnEscape);
@@ -129,47 +183,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-line bg-surface-paper px-4 py-2 md:hidden">
-          <div className="flex min-h-11 items-center justify-between gap-3">
-            <BrandLink className="flex items-center gap-2 rounded-control py-2 text-lg font-bold text-text-primary" />
-            <button
-              ref={menuButtonRef}
-              type="button"
-              aria-expanded={mobileMenuOpen}
-              aria-controls="mobile-navigation"
-              onClick={() => setMobileMenuOpen((open) => !open)}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-control border border-control bg-surface-paper px-3 text-sm font-semibold text-text-primary hover:bg-surface-subtle"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-                className="h-5 w-5"
-              >
-                {mobileMenuOpen ? (
-                  <path d="m6 6 12 12M18 6 6 18" />
-                ) : (
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-              <span>Menú</span>
-            </button>
-          </div>
-          <nav
-            id="mobile-navigation"
-            aria-label="Navegación móvil"
-            hidden={!mobileMenuOpen}
-            className={`mt-2 gap-1 border-t border-line pt-2 ${mobileMenuOpen ? "grid" : "hidden"}`}
-          >
-            <NavigationLinks
-              pathname={pathname}
-              onNavigate={(to) => {
-                setMobileMenuOpen(false);
-                if (pathname === to) menuButtonRef.current?.focus();
-              }}
-            />
-          </nav>
+          <BrandLink className="flex items-center gap-2 rounded-control py-2 text-lg font-bold text-text-primary" />
         </header>
 
         <main
@@ -178,8 +192,74 @@ export function AppShell({ children }: { children: ReactNode }) {
           tabIndex={-1}
           className="min-w-0 flex-1 overflow-x-hidden"
         >
-          <div className="mx-auto max-w-5xl px-4 py-8 md:px-8">{children}</div>
+          <div className="mx-auto max-w-5xl px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-8">
+            {children}
+          </div>
         </main>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 md:hidden">
+        <nav
+          aria-label="Navegación inferior"
+          className="grid grid-cols-[repeat(5,minmax(0,1fr))_3rem] border-t border-line bg-surface-paper pt-1 pb-[env(safe-area-inset-bottom)]"
+        >
+          {PRIMARY_NAVIGATION.map((item) => {
+            const isActive = isNavigationItemActive(item.to, pathname);
+            const labelSize =
+              item.to === "/documents"
+                ? "text-[0.5625rem] tracking-[-0.035em] min-[375px]:text-[0.625rem]"
+                : "text-[0.625rem] tracking-[-0.025em]";
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                aria-current={isActive ? "page" : undefined}
+                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-control px-0.5 font-medium leading-3 transition-colors motion-reduce:transition-none ${labelSize} ${
+                  isActive ? "bg-action-subtle text-action" : "text-text-muted hover:bg-surface-subtle hover:text-text-primary"
+                }`}
+              >
+                <NavigationIcon to={item.to} />
+                <span className="max-w-full truncate whitespace-nowrap text-center">{item.label}</span>
+              </Link>
+            );
+          })}
+          <div className="min-w-0">
+            <button
+              ref={moreButtonRef}
+              type="button"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-overflow-navigation"
+              aria-current={isOverflowRouteActive ? "page" : undefined}
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              className={`flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-control px-0.5 text-[0.625rem] font-medium leading-3 tracking-[-0.025em] transition-colors motion-reduce:transition-none ${
+                isOverflowRouteActive
+                  ? "bg-action-subtle text-action"
+                  : "text-text-muted hover:bg-surface-subtle hover:text-text-primary"
+              }`}
+            >
+              <NavigationIcon to="/more" />
+              <span>Más</span>
+              {isOverflowRouteActive && <span className="sr-only">, Configuración actual</span>}
+            </button>
+          </div>
+        </nav>
+        <nav
+          id="mobile-overflow-navigation"
+          aria-label="Más destinos"
+          hidden={!mobileMenuOpen}
+          className={`absolute bottom-full right-1 mb-2 w-56 gap-1 rounded-surface border border-line bg-surface-elevated p-2 shadow-lg ${
+            mobileMenuOpen ? "grid" : "hidden"
+          }`}
+        >
+          <NavigationLinks
+            pathname={pathname}
+            items={OVERFLOW_NAVIGATION}
+            onNavigate={(to) => {
+              setMobileMenuOpen(false);
+              if (pathname === to) moreButtonRef.current?.focus();
+            }}
+          />
+        </nav>
       </div>
     </div>
   );

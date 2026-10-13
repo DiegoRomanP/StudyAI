@@ -6,6 +6,13 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
 }
 
 body {
