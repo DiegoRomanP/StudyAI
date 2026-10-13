@@ -133,7 +133,8 @@ export type LLMProviderKey =
   | "OPENROUTER"
   | "NVIDIA"
   | "HUGGINGFACE"
-  | "OLLAMA";
+  | "OLLAMA"
+  | "GEMINI";
 
 export interface ModelOption {
   id: string;

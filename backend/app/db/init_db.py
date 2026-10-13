@@ -21,9 +21,38 @@ from app.models.user import User
 logger = get_logger(__name__)
 
 
+def _ensure_gemini_provider_enum_value() -> None:
+    """Add Gemini to existing PostgreSQL provider enums after table creation.
+
+    SQLAlchemy creates a missing native enum type but does not alter an existing
+    type when the Python enum grows. Keep this additive backfill PostgreSQL-only;
+    SQLite stores provider names as strings and needs no schema change.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+
+    provider_enum = LLMCredential.__table__.c.provider.type
+    if not provider_enum.name:
+        raise RuntimeError("The LLM provider enum must have a database type name.")
+
+    preparer = engine.dialect.identifier_preparer
+    type_name = preparer.quote(provider_enum.name)
+    if provider_enum.schema:
+        type_name = f"{preparer.quote_schema(provider_enum.schema)}.{type_name}"
+    enum_value = LLMProviderName.GEMINI.value.replace("'", "''")
+    statement = f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{enum_value}'"
+    with engine.begin() as conn:
+        conn.exec_driver_sql(statement)
+    logger.info(
+        "Migrated llm_credentials provider enum: ensured %s label",
+        LLMProviderName.GEMINI.value,
+    )
+
+
 def init_db() -> None:
     """Create all tables and seed the default (demo) user."""
     Base.metadata.create_all(bind=engine)
+    _ensure_gemini_provider_enum_value()
     _ensure_document_error_message_column()
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()

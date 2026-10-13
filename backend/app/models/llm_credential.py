@@ -25,6 +25,7 @@ class LLMProviderName(str, enum.Enum):
     NVIDIA = "NVIDIA"
     HUGGINGFACE = "HUGGINGFACE"
     OLLAMA = "OLLAMA"
+    GEMINI = "GEMINI"
 
 
 class LLMCredential(TimestampMixin, Base):
