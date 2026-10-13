@@ -10,10 +10,17 @@ html {
 
 body {
   @apply bg-canvas font-ui text-body leading-ui text-text-primary antialiased;
+  background-image:
+    radial-gradient(ellipse 42rem 30rem at 8% 0%, rgb(81 120 255 / 8%), transparent 72%),
+    radial-gradient(ellipse 38rem 34rem at 96% 100%, rgb(97 217 242 / 6%), transparent 72%);
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
 }
 
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 3px solid rgb(var(--color-action-primary));
+  outline: 3px solid rgb(var(--color-focus));
   outline-offset: 2px;
 }
 

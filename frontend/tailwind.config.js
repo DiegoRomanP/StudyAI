@@ -9,6 +9,7 @@ export default {
         canvas: tokenColor("--color-canvas"),
         surface: {
           paper: tokenColor("--color-surface-paper"),
+          elevated: tokenColor("--color-surface-elevated"),
           muted: tokenColor("--color-surface-muted"),
           subtle: tokenColor("--color-surface-subtle"),
           "action-subtle": tokenColor("--color-surface-action-subtle"),
@@ -19,7 +20,8 @@ export default {
           "on-action": tokenColor("--color-text-on-action"),
         },
         action: {
-          DEFAULT: tokenColor("--color-action-primary"),
+          DEFAULT: tokenColor("--color-action-text"),
+          fill: tokenColor("--color-action-primary"),
           hover: tokenColor("--color-action-hover"),
         },
         line: tokenColor("--color-line"),
@@ -32,16 +34,16 @@ export default {
         "state-warning-subtle": tokenColor("--color-surface-warning"),
         "state-error": tokenColor("--color-state-error"),
         "state-error-subtle": tokenColor("--color-surface-error"),
-        white: tokenColor("--color-surface-paper"),
+        white: tokenColor("--color-text-primary"),
 
         // Legacy utility aliases keep existing pages on the semantic palette during extraction.
         brand: {
           50: tokenColor("--color-surface-action-subtle"),
           100: tokenColor("--color-surface-muted"),
           300: tokenColor("--color-surface-muted"),
-          400: tokenColor("--color-action-primary"),
-          500: tokenColor("--color-action-primary"),
-          600: tokenColor("--color-action-primary"),
+          400: tokenColor("--color-action-text"),
+          500: tokenColor("--color-action-text"),
+          600: tokenColor("--color-action-text"),
           700: tokenColor("--color-action-hover"),
         },
         slate: {
@@ -76,6 +78,7 @@ export default {
       },
       fontFamily: {
         sans: ["var(--font-ui)"],
+        display: ["var(--font-display)"],
         ui: ["var(--font-ui)"],
         reading: ["var(--font-reading)"],
       },

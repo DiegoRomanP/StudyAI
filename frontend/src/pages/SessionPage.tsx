@@ -336,7 +336,7 @@ function FlashCard({
                 onClick={() => onRate(q)}
                 className={`h-10 w-10 rounded-full text-sm font-semibold transition ${
                   rated === q
-                    ? "bg-brand-600 text-white"
+                    ? "bg-brand-600 text-text-on-action"
                     : "bg-slate-100 text-slate-600 hover:bg-brand-100"
                 }`}
               >

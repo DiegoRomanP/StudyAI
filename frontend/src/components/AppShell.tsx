@@ -33,6 +33,20 @@ function isNavigationItemActive(to: string, pathname: string) {
   return matchesRoute(to, pathname);
 }
 
+function BrandLink({ className }: { className: string }) {
+  return (
+    <Link to="/" className={className}>
+      <img
+        src="/favicon.svg"
+        alt=""
+        aria-hidden="true"
+        className="h-10 w-10 shrink-0 rounded-control border border-line bg-surface-action-subtle p-1"
+      />
+      <span>StudyAI</span>
+    </Link>
+  );
+}
+
 function NavigationLinks({
   pathname,
   onNavigate,
@@ -100,15 +114,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen">
       <a
         href="#main-content"
-        className="absolute left-4 top-2 z-50 -translate-y-20 rounded-control bg-action px-4 py-3 font-medium text-text-on-action focus:translate-y-0"
+        className="absolute left-4 top-2 z-50 -translate-y-20 rounded-control bg-action-fill px-4 py-3 font-medium text-text-on-action focus:translate-y-0"
       >
         Saltar al contenido
       </a>
 
       <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface-paper p-4 md:flex">
-        <Link to="/" className="mb-6 rounded-control px-2 py-3 text-lg font-bold text-text-primary">
-          StudyAI
-        </Link>
+        <BrandLink className="mb-6 flex items-center gap-3 rounded-control px-2 py-3 text-lg font-bold text-text-primary" />
         <nav aria-label="Navegación principal" className="flex flex-col gap-1">
           <NavigationLinks pathname={pathname} />
         </nav>
@@ -118,9 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-b border-line bg-surface-paper px-4 py-2 md:hidden">
           <div className="flex min-h-11 items-center justify-between gap-3">
-            <Link to="/" className="rounded-control py-2 text-lg font-bold text-text-primary">
-              StudyAI
-            </Link>
+            <BrandLink className="flex items-center gap-2 rounded-control py-2 text-lg font-bold text-text-primary" />
             <button
               ref={menuButtonRef}
               type="button"

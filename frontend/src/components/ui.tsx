@@ -12,10 +12,10 @@ import type { LinkProps } from "react-router-dom";
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON_BASE =
-  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-control px-4 py-3 text-sm font-semibold leading-5 transition-colors disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:text-text-muted motion-reduce:transition-none";
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-control px-4 py-3 text-sm font-semibold leading-5 transition-[color,background-color,border-color,transform] duration-[var(--motion-micro)] active:scale-[0.985] disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:text-text-muted motion-reduce:transition-none motion-reduce:active:scale-100";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "border border-transparent bg-action text-text-on-action hover:bg-action-hover",
+  primary: "border border-transparent bg-action-fill text-text-on-action hover:bg-action-hover",
   secondary: "border border-control bg-surface-paper text-text-primary hover:bg-surface-subtle",
   ghost: "border border-transparent bg-transparent text-text-muted hover:bg-surface-subtle hover:text-text-primary",
   danger: "border border-transparent bg-state-error text-text-on-action hover:brightness-95",
@@ -157,7 +157,7 @@ export function ProgressBar({ value, label = "Progreso" }: { value: number; labe
       aria-valuenow={boundedValue}
     >
       <div
-        className="h-full rounded-full bg-action transition-[width] motion-reduce:transition-none"
+        className="h-full rounded-full bg-action-fill transition-[width] motion-reduce:transition-none"
         style={{ width: `${boundedValue}%` }}
       />
     </div>

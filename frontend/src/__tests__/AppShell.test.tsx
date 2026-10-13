@@ -58,6 +58,21 @@ describe("AppShell", () => {
     );
   });
 
+  it("uses the provided flowing SVG mark as decorative imagery in both brand links", () => {
+    renderShell();
+
+    const brandLinks = screen.getAllByRole("link", { name: "StudyAI" });
+    expect(brandLinks).toHaveLength(2);
+
+    for (const link of brandLinks) {
+      const mark = link.querySelector("img");
+      expect(mark).not.toBeNull();
+      expect(mark?.getAttribute("src")).toBe("/favicon.svg");
+      expect(mark?.getAttribute("alt")).toBe("");
+      expect(mark?.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
   it("treats an unmatched nested plan path as not found without an active navigation item", async () => {
     renderShell("/plan/27/extra");
 

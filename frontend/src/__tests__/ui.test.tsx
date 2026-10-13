@@ -50,6 +50,17 @@ describe("UI primitives", () => {
     expect(screen.queryByRole("button", { name: "Ver documentos" })).not.toBeInTheDocument();
   });
 
+  it("animates button press feedback while respecting reduced-motion preferences", () => {
+    render(<Button>Continuar</Button>);
+
+    const button = screen.getByRole("button", { name: "Continuar" });
+    expect(button).toHaveClass("active:scale-[0.985]");
+    expect(button).toHaveClass(
+      "transition-[color,background-color,border-color,transform]",
+      "motion-reduce:transition-none",
+    );
+  });
+
   it("navigates from the completed-session view through named links only", () => {
     const renderDoneView = () =>
       render(

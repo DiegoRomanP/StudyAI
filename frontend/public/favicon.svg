@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="studyai-flow" x1="12" y1="39" x2="54" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#61D9F2" />
+      <stop offset="100%" stop-color="#A991FF" />
+    </linearGradient>
+  </defs>
+  <path d="M12 39 C21 16 31 15 37 28 S48 48 54 22" stroke="url(#studyai-flow)" stroke-width="5" stroke-linecap="round" />
+  <circle cx="37" cy="28" r="4" fill="#A991FF" />
+</svg>
