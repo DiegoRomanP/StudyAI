@@ -31,6 +31,14 @@ body {
   outline-offset: 2px;
 }
 
+/* Gradient text for short display phrases only (never body copy). */
+.text-flow {
+  background-image: var(--gradient-flow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 /* Basic typography for LLM-rendered markdown study material. */
 .prose-study h1 { @apply text-2xl font-bold mt-4 mb-2; }
 .prose-study h2 { @apply text-xl font-semibold mt-4 mb-2; }
@@ -41,6 +49,9 @@ body {
 .prose-study li { @apply my-1; }
 .prose-study blockquote { @apply border-l-4 border-action pl-4 italic text-text-muted my-3; }
 .prose-study code { @apply rounded-control bg-surface-muted px-1 text-sm text-text-primary; }
+.prose-study pre { @apply my-3 overflow-x-auto rounded-control border border-line bg-canvas p-4 text-sm leading-6; }
+.prose-study pre code { @apply bg-transparent p-0; }
+.prose-study a { @apply text-action underline underline-offset-2; }
 .prose-study strong { @apply font-semibold text-text-primary; }
 
 @media (prefers-reduced-motion: reduce) {

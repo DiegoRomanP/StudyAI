@@ -5,18 +5,22 @@ import type {
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from "react";
+import { useId } from "react";
+import { Check, ChevronRight, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { LinkProps } from "react-router-dom";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON_BASE =
-  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-control px-4 py-3 text-sm font-semibold leading-5 transition-[color,background-color,border-color,transform] duration-[var(--motion-micro)] active:scale-[0.985] disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:text-text-muted motion-reduce:transition-none motion-reduce:active:scale-100";
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold leading-5 transition-[color,background-color,border-color,transform,filter] duration-[var(--motion-micro)] active:scale-[0.985] disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:bg-none disabled:text-text-muted disabled:shadow-none motion-reduce:transition-none motion-reduce:active:scale-100";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: "border border-transparent bg-action-fill text-text-on-action hover:bg-action-hover",
-  secondary: "border border-control bg-surface-paper text-text-primary hover:bg-surface-subtle",
+  // Dark text on the flow gradient keeps ≥ 4.5:1 on every stop (see design-tokens test).
+  primary: "border border-transparent bg-flow text-text-on-action shadow-glow hover:brightness-110",
+  secondary: "border border-control bg-surface-paper/70 text-text-primary hover:border-action-hover hover:bg-surface-subtle",
   ghost: "border border-transparent bg-transparent text-text-muted hover:bg-surface-subtle hover:text-text-primary",
   danger: "border border-transparent bg-state-error text-text-on-action hover:brightness-95",
 };
@@ -51,15 +55,23 @@ export function ButtonLink({
   );
 }
 
+export type CardVariant = "paper" | "elevated" | "glass";
+
+const CARD_VARIANTS: Record<CardVariant, string> = {
+  paper: "border-line bg-surface-paper",
+  elevated: "border-line-strong/60 bg-surface-elevated shadow-flow",
+  // Translucent surface without backdrop blur (S10: no stacked blur layers).
+  glass: "border-glass-line bg-glass shadow-flow",
+};
+
 export function Card({
   children,
   className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+  variant = "paper",
+  ...props
+}: HTMLAttributes<HTMLDivElement> & { variant?: CardVariant }) {
   return (
-    <div className={`rounded-surface border border-line bg-surface-paper p-5 ${className}`}>
+    <div className={`rounded-surface border p-5 ${CARD_VARIANTS[variant]} ${className}`} {...props}>
       {children}
     </div>
   );
@@ -157,7 +169,7 @@ export function ProgressBar({ value, label = "Progreso" }: { value: number; labe
       aria-valuenow={boundedValue}
     >
       <div
-        className="h-full rounded-full bg-action-fill transition-[width] motion-reduce:transition-none"
+        className="h-full rounded-full bg-flow transition-[width] duration-[var(--motion-card)] ease-flow motion-reduce:transition-none"
         style={{ width: `${boundedValue}%` }}
       />
     </div>
@@ -287,5 +299,286 @@ export function Alert({
       {title && <p className="font-semibold">{title}</p>}
       {children}
     </div>
+  );
+}
+
+type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  id: string;
+  label: ReactNode;
+  hint?: ReactNode;
+  error?: ReactNode;
+};
+
+export function Textarea({
+  id,
+  label,
+  hint,
+  error,
+  className = "",
+  "aria-describedby": existingDescription,
+  "aria-invalid": existingInvalid,
+  ...props
+}: TextareaProps) {
+  const describedBy = fieldDescriptionIds(id, hint, error, existingDescription);
+
+  return (
+    <FieldShell id={id} label={label} hint={hint} error={error}>
+      <textarea
+        {...props}
+        id={id}
+        className={`${FIELD_CONTROL} ${error ? "border-state-error" : "border-control"} ${className}`.trim()}
+        aria-describedby={describedBy}
+        aria-invalid={error ? true : existingInvalid}
+      />
+    </FieldShell>
+  );
+}
+
+export type IconTone = "flow" | "muted" | "success" | "warning" | "error";
+
+const ICON_TONES: Record<IconTone, string> = {
+  flow: "bg-flow-soft text-action-hover ring-1 ring-inset ring-glass-line",
+  muted: "bg-surface-muted text-text-muted",
+  success: "bg-state-success-subtle text-state-success",
+  warning: "bg-state-warning-subtle text-state-warning",
+  error: "bg-state-error-subtle text-state-error",
+};
+
+/** Decorative icon in a soft tile; the surrounding text carries the meaning. */
+export function IconTile({
+  icon: Icon,
+  tone = "flow",
+  className = "h-10 w-10",
+}: {
+  icon: LucideIcon;
+  tone?: IconTone;
+  className?: string;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex shrink-0 items-center justify-center rounded-control ${ICON_TONES[tone]} ${className}`}
+    >
+      <Icon className="h-5 w-5" strokeWidth={1.8} />
+    </span>
+  );
+}
+
+/** Circular progress with a gradient stroke and an accessible text equivalent. */
+export function ProgressRing({
+  value,
+  label,
+  caption,
+  size = 132,
+}: {
+  value: number;
+  label: string;
+  caption?: ReactNode;
+  size?: number;
+}) {
+  const gradientId = `ring-${useId().replace(/:/g, "")}`;
+  const bounded = Math.round(Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0)));
+  const stroke = 10;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <figure className="flex flex-col items-center gap-2" aria-label={`${label}: ${bounded}%`} role="img">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id={gradientId} x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#A991FF" />
+              <stop offset="55%" stopColor="#5178FF" />
+              <stop offset="100%" stopColor="#61D9F2" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="rgb(var(--color-surface-muted))"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={`url(#${gradientId})`}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - bounded / 100)}
+            className="transition-[stroke-dashoffset] duration-[var(--motion-page)] ease-flow motion-reduce:transition-none"
+          />
+        </svg>
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center font-display text-3xl font-bold text-text-primary"
+        >
+          {bounded}%
+        </span>
+      </div>
+      {caption && <figcaption className="text-center text-sm text-text-muted">{caption}</figcaption>}
+    </figure>
+  );
+}
+
+export function StatTile({
+  label,
+  value,
+  hint,
+  icon,
+  tone = "flow",
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
+  icon?: LucideIcon;
+  tone?: IconTone;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-surface border border-line bg-surface-subtle/70 p-4">
+      {icon && <IconTile icon={icon} tone={tone} className="h-9 w-9" />}
+      <div className="min-w-0">
+        <p className="text-sm text-text-muted">{label}</p>
+        <p className="mt-0.5 font-display text-2xl font-bold text-text-primary">{value}</p>
+        {hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}
+      </div>
+    </div>
+  );
+}
+
+export interface SegmentOption<T extends string> {
+  value: T;
+  label: ReactNode;
+}
+
+/**
+ * A group of toggle buttons where exactly one is pressed (7d/30d/Todo, Semana/Lista…).
+ * `appearance="chips"` renders the lighter filter-chip style.
+ */
+export function SegmentedControl<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  appearance = "segmented",
+  className = "",
+}: {
+  label: string;
+  options: SegmentOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  appearance?: "segmented" | "chips";
+  className?: string;
+}) {
+  const chips = appearance === "chips";
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={`${
+        chips ? "flex flex-wrap gap-2" : "inline-flex rounded-full border border-line bg-surface-subtle p-1"
+      } ${className}`.trim()}
+    >
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(option.value)}
+            className={`min-h-11 rounded-full px-4 text-sm font-medium transition-colors duration-[var(--motion-micro)] motion-reduce:transition-none ${
+              selected
+                ? chips
+                  ? "bg-action-fill text-text-on-action"
+                  : "bg-flow text-text-on-action shadow-glow"
+                : chips
+                  ? "border border-line bg-surface-paper text-text-muted hover:border-action-hover hover:text-text-primary"
+                  : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A large selectable option (goal template, provider…) with icon, description and check. */
+export function OptionCard({
+  title,
+  description,
+  icon,
+  selected,
+  onSelect,
+  disabled,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  icon?: LucideIcon;
+  selected: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      disabled={disabled}
+      className={`flex min-h-16 w-full items-center gap-3 rounded-surface border p-3 text-left transition-colors duration-[var(--motion-micro)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${
+        selected
+          ? "border-action-hover bg-action-subtle"
+          : "border-line bg-surface-paper hover:border-line-strong hover:bg-surface-subtle"
+      }`}
+    >
+      {icon && <IconTile icon={icon} tone={selected ? "flow" : "muted"} />}
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium text-text-primary">{title}</span>
+        {description && <span className="mt-0.5 block text-sm text-text-muted">{description}</span>}
+      </span>
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+          selected ? "border-transparent bg-flow text-text-on-action" : "border-control text-transparent"
+        }`}
+      >
+        <Check className="h-4 w-4" strokeWidth={2.5} />
+      </span>
+    </button>
+  );
+}
+
+export interface ChainStep {
+  label: ReactNode;
+  detail?: ReactNode;
+  icon?: LucideIcon;
+}
+
+/** An ordered sequence of steps, e.g. Estudio → Receso → Quiz → Resultado. */
+export function StepChain({ label, steps }: { label: string; steps: ChainStep[] }) {
+  return (
+    <ol aria-label={label} className="flex flex-wrap items-center gap-2">
+      {steps.map((step, index) => (
+        <li key={index} className="flex items-center gap-2">
+          <span className="inline-flex min-h-11 items-center gap-2 rounded-control border border-line bg-surface-subtle/70 px-3 py-2">
+            {step.icon && <step.icon aria-hidden="true" className="h-4 w-4 text-action-hover" strokeWidth={1.8} />}
+            <span className="flex flex-col leading-tight">
+              <span className="text-sm font-medium text-text-primary">{step.label}</span>
+              {step.detail && <span className="text-xs text-text-muted">{step.detail}</span>}
+            </span>
+          </span>
+          {index < steps.length - 1 && (
+            <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-text-muted" />
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }

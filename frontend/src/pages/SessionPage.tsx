@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { ArrowLeft } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import type { QuizResultDTO, SessionDetailDTO } from "../api/types";
@@ -85,8 +86,12 @@ function SessionFlow({
     <div className="space-y-6">
       {updateError}
       <div>
-        <Link to={`/plan/${session.plan_id}`} className="text-sm text-action hover:underline">
-          ← Volver al plan
+        <Link
+          to={`/plan/${session.plan_id}`}
+          className="inline-flex min-h-11 items-center gap-1.5 text-sm text-action hover:underline"
+        >
+          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+          Volver al plan
         </Link>
         <h1 className="mt-1 text-2xl font-bold">{session.topic_name}</h1>
         <PhaseIndicator phase={phase} />

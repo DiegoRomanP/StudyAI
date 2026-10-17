@@ -53,6 +53,8 @@
   --border-glass: rgb(255 255 255 / 12%);
   --shadow-flow: 0 24px 80px rgb(0 0 0 / 32%);
   --gradient-flow: linear-gradient(135deg, #A991FF 0%, #5178FF 55%, #61D9F2 100%);
+  --gradient-flow-soft: linear-gradient(135deg, rgb(169 145 255 / 16%) 0%, rgb(81 120 255 / 14%) 55%, rgb(97 217 242 / 12%) 100%);
+  --shadow-glow: 0 8px 28px rgb(81 120 255 / 28%);
 
   --motion-micro: 180ms;
   --motion-card: 320ms;

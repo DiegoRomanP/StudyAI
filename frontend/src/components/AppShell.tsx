@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
 
+import { PageTransition } from "./motion/PageTransition";
+
 const NAVIGATION = [
   { to: "/", label: "Inicio" },
   { to: "/documents", label: "Documentos" },
@@ -193,7 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="min-w-0 flex-1 overflow-x-hidden"
         >
           <div className="mx-auto max-w-5xl px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-8">
-            {children}
+            <PageTransition routeKey={pathname}>{children}</PageTransition>
           </div>
         </main>
       </div>

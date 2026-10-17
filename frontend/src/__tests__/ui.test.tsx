@@ -3,7 +3,21 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { AsyncState } from "../components/AsyncState";
-import { ActivityIndicator, Button, ButtonLink, Input, Select, Skeleton } from "../components/ui";
+import { Target } from "lucide-react";
+
+import {
+  ActivityIndicator,
+  Button,
+  ButtonLink,
+  Input,
+  OptionCard,
+  ProgressRing,
+  SegmentedControl,
+  Select,
+  Skeleton,
+  StepChain,
+  Textarea,
+} from "../components/ui";
 import { SessionResult } from "../components/session/SessionResult";
 
 describe("UI primitives", () => {
@@ -56,7 +70,7 @@ describe("UI primitives", () => {
     const button = screen.getByRole("button", { name: "Continuar" });
     expect(button).toHaveClass("active:scale-[0.985]");
     expect(button).toHaveClass(
-      "transition-[color,background-color,border-color,transform]",
+      "transition-[color,background-color,border-color,transform,filter]",
       "motion-reduce:transition-none",
     );
   });
@@ -216,5 +230,74 @@ describe("AsyncState", () => {
     );
 
     expect(screen.getByText("No hay documentos. Sube el primero.")).toBeInTheDocument();
+  });
+
+  it("gives the progress ring a text equivalent and clamps invalid values", () => {
+    const { rerender } = render(<ProgressRing value={67.6} label="Sesiones completadas" />);
+    expect(screen.getByRole("img", { name: "Sesiones completadas: 68%" })).toBeInTheDocument();
+
+    rerender(<ProgressRing value={Number.NaN} label="Sesiones completadas" />);
+    expect(screen.getByRole("img", { name: "Sesiones completadas: 0%" })).toBeInTheDocument();
+  });
+
+  it("exposes exactly one pressed option in a segmented control", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Periodo"
+        value="7d"
+        onChange={onChange}
+        options={[
+          { value: "7d", label: "7 días" },
+          { value: "30d", label: "30 días" },
+        ]}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Periodo" });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "7 días" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "30 días" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "30 días" }));
+    expect(onChange).toHaveBeenCalledWith("30d");
+  });
+
+  it("renders option cards as toggle buttons with their description", () => {
+    const onSelect = vi.fn();
+    render(
+      <OptionCard
+        title="Universidad"
+        description="Cursos y exámenes"
+        icon={Target}
+        selected
+        onSelect={onSelect}
+      />,
+    );
+
+    const option = screen.getByRole("button", { name: /Universidad/ });
+    expect(option).toHaveAttribute("aria-pressed", "true");
+    expect(option).toHaveTextContent("Cursos y exámenes");
+    fireEvent.click(option);
+    expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it("lists chain steps in order and labels the textarea", () => {
+    render(
+      <>
+        <StepChain
+          label="Pasos de la sesión"
+          steps={[{ label: "Estudio", detail: "25 min" }, { label: "Receso" }, { label: "Quiz" }]}
+        />
+        <Textarea id="notes" label="Descripción" hint="Opcional" />
+      </>,
+    );
+
+    const steps = screen.getByRole("list", { name: "Pasos de la sesión" });
+    expect(steps.querySelectorAll("li")).toHaveLength(3);
+    expect(steps).toHaveTextContent(/Estudio.*25 min.*Receso.*Quiz/);
+    expect(screen.getByRole("textbox", { name: "Descripción" })).toHaveAttribute(
+      "aria-describedby",
+      "notes-hint",
+    );
   });
 });

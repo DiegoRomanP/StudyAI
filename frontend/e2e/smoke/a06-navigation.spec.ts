@@ -635,7 +635,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await expect(page.getByRole("button", { name: /Saltar al receso/ })).toBeVisible();
   mobileLayoutEvidence.push(
     await assertMobileLayout(page, "Sesión de estudio", true, [
-      { tag: "button", label: "Saltar al receso →" },
+      { tag: "button", label: "Saltar al receso" },
     ], ["session heading and material: Material de estudio A06", "study action: Saltar al receso"]),
   );
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -651,7 +651,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       page,
       "Receso",
       false,
-      [{ tag: "button", label: "Ir al test →" }],
+      [{ tag: "button", label: "Ir al test" }],
       ["break state heading: Receso activo (5 min)", "break action: Ir al test"],
     ),
   );

@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import { ArrowRight } from "lucide-react";
 
 import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
@@ -135,7 +136,8 @@ export function QuizPhase({
 
       <div className="flex justify-end">
         <Button type="button" onClick={next} disabled={!currentAnswered || submit.isPending}>
-          {submit.isPending ? "Enviando…" : isLast ? "Finalizar" : "Siguiente →"}
+          {submit.isPending ? "Enviando…" : isLast ? "Finalizar" : "Siguiente"}
+          {!submit.isPending && !isLast && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
         </Button>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { ArrowLeft } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { isNotFoundError } from "../api/errors";
@@ -75,9 +76,7 @@ export function PlanDetailPage() {
     return (
       <div className="space-y-4">
         {updateError}
-        <Link to="/plan" className="text-sm text-brand-600 hover:underline">
-          ← Volver
-        </Link>
+        <BackToPlans />
         <Card className="space-y-4 text-center">
           <h2 className="text-lg font-semibold">Generando tu plan…</h2>
           <div className="flex justify-center">
@@ -97,9 +96,7 @@ export function PlanDetailPage() {
     return (
       <div className="space-y-4">
         {updateError}
-        <Link to="/plan" className="text-sm text-brand-600 hover:underline">
-          ← Volver
-        </Link>
+        <BackToPlans />
         <Card className="space-y-3">
           <p className="font-medium text-red-600">La generación falló.</p>
           {plan.error_message && (
@@ -130,9 +127,7 @@ export function PlanDetailPage() {
     <div className="space-y-6">
       {updateError}
       <div>
-        <Link to="/plan" className="text-sm text-brand-600 hover:underline">
-          ← Volver
-        </Link>
+        <BackToPlans />
         <h1 className="mt-1 text-2xl font-bold">{plan.title}</h1>
         <Badge color="green">Listo · {plan.sessions.length} sesiones</Badge>
       </div>
@@ -187,6 +182,15 @@ function SessionCard({ session }: { session: SessionSummaryDTO }) {
         </div>
         {done ? <Badge color="green">Completada</Badge> : <Badge>Pendiente</Badge>}
       </Card>
+    </Link>
+  );
+}
+
+function BackToPlans() {
+  return (
+    <Link to="/plan" className="inline-flex min-h-11 items-center gap-1.5 text-sm text-action hover:underline">
+      <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+      Volver a los planes
     </Link>
   );
 }

@@ -36,6 +36,8 @@ export default {
         "state-error": tokenColor("--color-state-error"),
         "state-error-subtle": tokenColor("--color-surface-error"),
         white: tokenColor("--color-text-primary"),
+        glass: "var(--surface-glass)",
+        "glass-line": "var(--border-glass)",
 
         // Legacy utility aliases keep existing pages on the semantic palette during extraction.
         brand: {
@@ -106,6 +108,18 @@ export default {
       borderRadius: {
         control: "var(--radius-control)",
         surface: "var(--radius-surface)",
+        feature: "var(--radius-feature)",
+      },
+      backgroundImage: {
+        flow: "var(--gradient-flow)",
+        "flow-soft": "var(--gradient-flow-soft)",
+      },
+      boxShadow: {
+        flow: "var(--shadow-flow)",
+        glow: "var(--shadow-glow)",
+      },
+      transitionTimingFunction: {
+        flow: "var(--motion-easing)",
       },
     },
   },

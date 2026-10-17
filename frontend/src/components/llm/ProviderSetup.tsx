@@ -1,3 +1,5 @@
+import { ChevronDown } from "lucide-react";
+
 import { getApiErrorMessage } from "../../api/errors";
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../../api/types";
 import { Badge, Button, Card, Input, Select } from "../ui";
@@ -167,7 +169,12 @@ export function ProviderSetup({
               onClick={() => setup.setShowAdvanced((visible) => !visible)}
               className="inline-flex min-h-11 items-center gap-2 rounded-control px-2 text-sm font-medium text-text-muted hover:text-text-primary"
             >
-              <span aria-hidden="true">{setup.showAdvanced ? "−" : "+"}</span>
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-4 w-4 transition-transform duration-[var(--motion-micro)] motion-reduce:transition-none ${
+                  setup.showAdvanced ? "rotate-180" : ""
+                }`}
+              />
               Configuración avanzada
             </button>
             <div
