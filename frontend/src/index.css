@@ -1,23 +1,80 @@
+@import "./styles/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light;
+html {
+  scroll-behavior: smooth;
+  scroll-padding-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
 }
 
 body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+  @apply bg-canvas font-ui text-body leading-ui text-text-primary antialiased;
+  background-image:
+    radial-gradient(ellipse 42rem 30rem at 8% 0%, rgb(81 120 255 / 8%), transparent 72%),
+    radial-gradient(ellipse 38rem 34rem at 96% 100%, rgb(97 217 242 / 6%), transparent 72%);
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid rgb(var(--color-focus));
+  outline-offset: 2px;
+}
+
+/* Gradient text for short display phrases only (never body copy). */
+.text-flow {
+  background-image: var(--gradient-flow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Ambient highlight drifting along the landing river (CSS, not JS; S10). */
+@keyframes flow-drift {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -350; }
+}
+
+.flow-drift {
+  animation: flow-drift 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-drift { animation: none; }
 }
 
 /* Basic typography for LLM-rendered markdown study material. */
 .prose-study h1 { @apply text-2xl font-bold mt-4 mb-2; }
 .prose-study h2 { @apply text-xl font-semibold mt-4 mb-2; }
 .prose-study h3 { @apply text-lg font-semibold mt-3 mb-1; }
-.prose-study p { @apply my-2 leading-relaxed; }
+.prose-study p { @apply my-2 leading-reading; }
 .prose-study ul { @apply list-disc pl-6 my-2; }
 .prose-study ol { @apply list-decimal pl-6 my-2; }
 .prose-study li { @apply my-1; }
-.prose-study blockquote { @apply border-l-4 border-brand-500 pl-4 italic text-slate-500 my-3; }
-.prose-study code { @apply bg-slate-100 px-1 rounded text-sm; }
-.prose-study strong { @apply font-semibold text-slate-900; }
+.prose-study blockquote { @apply border-l-4 border-action pl-4 italic text-text-muted my-3; }
+.prose-study code { @apply rounded-control bg-surface-muted px-1 text-sm text-text-primary; }
+.prose-study pre { @apply my-3 overflow-x-auto rounded-control border border-line bg-canvas p-4 text-sm leading-6; }
+.prose-study pre code { @apply bg-transparent p-0; }
+.prose-study a { @apply text-action underline underline-offset-2; }
+.prose-study strong { @apply font-semibold text-text-primary; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

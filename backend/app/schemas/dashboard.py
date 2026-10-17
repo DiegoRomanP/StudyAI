@@ -10,6 +10,9 @@ from pydantic import BaseModel
 class ScorePoint(BaseModel):
     """
     modelo de puntajes para mejorar
+
+    Un punto por envío de quiz con preguntas de opción múltiple; ``completed_at``
+    es el momento de ese envío. Los envíos solo de flashcards no tienen puntaje.
     """
 
     session_id: int
@@ -33,6 +36,9 @@ class UpcomingReview(BaseModel):
 
 
 class DashboardResponse(BaseModel):
+    """``sessions_completed`` cuenta sesiones distintas en estado COMPLETED;
+    ``average_score`` promedia ``scores``."""
+
     scores: list[ScorePoint]
     weak_topics: list[WeakTopic]
     upcoming_reviews: list[UpcomingReview]

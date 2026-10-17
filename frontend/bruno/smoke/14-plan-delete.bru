@@ -1,0 +1,20 @@
+meta {
+  name: Delete the created plan
+  type: http
+  seq: 14
+}
+
+delete {
+  url: {{baseUrl}}/plans/{{planId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+tests {
+  test("plan cleanup returns 204 with no response content", function() {
+    expect(res.status).to.equal(204);
+    expect(res.body === undefined || res.body === null || res.body === "").to.equal(true);
+  });
+}

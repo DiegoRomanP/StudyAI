@@ -1,0 +1,58 @@
+meta {
+  name: Confirm plan deletion removed its session and quiz
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/sessions/{{sessionId}}
+}
+
+assert {
+  res.status: eq 404
+  res.body.detail: isDefined
+}
+
+tests {
+  test("deleted session and its quiz both return not found", async function() {
+    expect(res.status).to.equal(404);
+    expect(res.body.detail).to.be.a("string").and.not.empty;
+
+    const sessionIds = bru.getVar("sessionIds");
+    const firstSessionId = bru.getVar("sessionId");
+    expect(sessionIds).to.be.an("array").that.is.not.empty;
+    expect(sessionIds[0]).to.equal(firstSessionId);
+
+    const baseUrl = bru.getEnvVar("baseUrl");
+    const timeoutMs = Number(bru.getEnvVar("requestTimeoutMs"));
+    for (const sessionId of sessionIds.slice(1)) {
+      let sessionError;
+      try {
+        await bru.sendRequest({
+          method: "GET",
+          url: `${baseUrl}/sessions/${sessionId}`,
+          timeout: timeoutMs,
+        });
+      } catch (error) {
+        sessionError = error;
+      }
+      expect(sessionError).to.be.an("object");
+      expect(sessionError.status).to.equal(404);
+      expect(sessionError.message).to.contain("404");
+    }
+
+    let quizError;
+    try {
+      await bru.sendRequest({
+        method: "GET",
+        url: `${baseUrl}/quizzes/${bru.getVar("sessionId")}`,
+        timeout: timeoutMs,
+      });
+    } catch (error) {
+      quizError = error;
+    }
+    expect(quizError).to.be.an("object");
+    expect(quizError.status).to.equal(404);
+    expect(quizError.message).to.contain("404");
+  });
+}

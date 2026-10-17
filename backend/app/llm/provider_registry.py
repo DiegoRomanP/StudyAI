@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.llm.providers.anthropic import definition as anthropic
 from app.llm.providers.base import ProviderDefinition, ProviderMeta
 from app.llm.providers.glm import definition as glm
+from app.llm.providers.gemini import definition as gemini
 from app.llm.providers.huggingface import definition as huggingface
 from app.llm.providers.nvidia import definition as nvidia
 from app.llm.providers.openai import definition as openai
@@ -19,7 +20,16 @@ def get_provider_definition(provider: LLMProviderName) -> ProviderDefinition:
 
 PROVIDER_REGISTRY: dict[LLMProviderName, ProviderDefinition] = {
     definition.meta.provider: definition
-    for definition in (anthropic, openai, glm, openrouter, nvidia, huggingface, ollama)
+    for definition in (
+        anthropic,
+        openai,
+        glm,
+        openrouter,
+        nvidia,
+        huggingface,
+        ollama,
+        gemini,
+    )
 }
 
 

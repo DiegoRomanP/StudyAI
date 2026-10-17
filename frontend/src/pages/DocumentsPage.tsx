@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import type { DocumentDTO } from "../api/types";
+import { getApiErrorMessage } from "../api/errors";
 import { Badge, Button, Card, Spinner } from "../components/ui";
+import { DocumentUpload } from "../components/documents/DocumentUpload";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
 
@@ -12,79 +14,57 @@ const STATUS_COLORS = {
 } as const;
 
 export function DocumentsPage() {
-  const { data: documents, isLoading } = useDocuments();
+  const {
+    data: documents,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useDocuments();
   const upload = useUploadDocument();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(documents);
-
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setError(null);
-    for (const file of Array.from(files)) {
-      try {
-        await upload.mutateAsync(file);
-      } catch (e: any) {
-        setError(e?.response?.data?.detail ?? "Error al subir el archivo.");
-      }
-    }
-  }
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Documentos</h1>
-        <p className="text-slate-500">
-          Sube tus apuntes en PDF o Markdown. Se indexan automáticamente para el RAG.
+        <h1 className="text-2xl font-bold">Recursos</h1>
+        <p className="text-text-muted">
+          Sube tus apuntes en PDF o Markdown. Se indexan automáticamente para que la IA pueda
+          usarlos al crear tus planes.
         </p>
       </header>
 
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          handleFiles(e.dataTransfer.files);
-        }}
-        onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition ${
-          dragging ? "border-brand-500 bg-brand-50" : "border-slate-300 bg-white hover:bg-slate-50"
-        }`}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.md,.markdown"
-          multiple
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <div className="text-4xl">⬆️</div>
-        <p className="mt-2 font-medium text-slate-700">
-          Arrastra archivos aquí o haz clic para seleccionar
-        </p>
-        <p className="text-sm text-slate-400">PDF o Markdown, hasta 25 MB</p>
-        {upload.isPending && (
-          <div className="mt-4 flex justify-center">
-            <Spinner label="Subiendo..." />
-          </div>
-        )}
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <DocumentUpload
+        onUpload={(file) => upload.mutateAsync(file)}
+        documents={documents ?? []}
+        documentsError={isError}
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus documentos</h2>
-        {isLoading ? (
+        {isError && (
+          <div role="alert" className="space-y-2 rounded-surface border border-state-error bg-state-error-subtle p-4 text-sm text-state-error">
+            <p>
+              {documents === undefined
+                ? "No se pudieron cargar los documentos."
+                : "No se pudo actualizar la lista; se conservan los últimos datos visibles, que pueden ser parciales hasta confirmar una nueva respuesta."}
+            </p>
+            <p>{getApiErrorMessage(error, "Comprueba la conexión e inténtalo de nuevo.")}</p>
+            <Button
+              variant="secondary"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
+            </Button>
+          </div>
+        )}
+        {isLoading && documents === undefined ? (
           <Spinner label="Cargando..." />
         ) : documents && documents.length > 0 ? (
           <>
-            <div className="grid gap-3">
+            <div className="grid min-w-0 grid-cols-1 gap-3">
               {visible.map((doc) => (
                 <DocumentRow key={doc.id} doc={doc} />
               ))}
@@ -100,9 +80,9 @@ export function DocumentsPage() {
               </Button>
             )}
           </>
-        ) : (
-          <p className="text-sm text-slate-400">Aún no has subido documentos.</p>
-        )}
+        ) : !isError ? (
+          <p className="text-sm text-text-muted">Aún no has subido documentos.</p>
+        ) : null}
       </section>
     </div>
   );
@@ -120,22 +100,22 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
     setError(null);
     try {
       await deleteDocument.mutateAsync(doc.id);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al eliminar el documento.");
+    } catch (caught: unknown) {
+      setError(getApiErrorMessage(caught, "Error al eliminar el documento."));
     }
   }
 
   return (
     <Card className="flex items-center justify-between">
       <div className="min-w-0">
-        <p className="truncate font-medium text-slate-800">{doc.filename}</p>
-        <p className="text-xs text-slate-400">
+        <p className="truncate font-medium text-text-primary">{doc.filename}</p>
+        <p className="text-xs text-text-muted">
           {(doc.file_size / 1024).toFixed(1)} KB · .{doc.file_type}
         </p>
         {doc.status === "FAILED" && doc.error_message && (
-          <p className="mt-1 text-xs text-red-600">{doc.error_message}</p>
+          <p className="mt-1 text-xs text-state-error">{doc.error_message}</p>
         )}
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-state-error">{error}</p>}
       </div>
       <div className="flex items-center gap-3">
         {doc.status === "PENDING" && <Spinner />}

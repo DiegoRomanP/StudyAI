@@ -1,128 +1,154 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import type { GoalDTO, GoalType } from "../api/types";
-import { Badge, Button, Card, Spinner } from "../components/ui";
+import { getApiErrorMessage } from "../api/errors";
+import { GoalTemplatePicker } from "../components/goals/GoalTemplatePicker";
+import { AsyncState } from "../components/AsyncState";
+import { Badge, Button, Card, Input, Select, Skeleton, Textarea } from "../components/ui";
 import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
+import { GOAL_TEMPLATES, GOAL_TYPE_LABELS as TYPE_LABELS, type GoalTemplate } from "../lib/goalTemplates";
 import { useShowMore } from "../hooks/useShowMore";
 
-const TEMPLATES: { type: GoalType; label: string; title: string; emoji: string }[] = [
-  { type: "EXAM", label: "Sacar buena nota", title: "Aprobar el examen", emoji: "🏆" },
-  { type: "LEARNING", label: "Solo quiero aprender", title: "Aprender el tema", emoji: "💡" },
-  { type: "MEMORIZATION", label: "Necesito memorizar", title: "Memorizar el material", emoji: "🧩" },
-];
-
-const TYPE_LABELS: Record<GoalType, string> = {
-  EXAM: "Examen",
-  LEARNING: "Aprender",
-  MEMORIZATION: "Memorizar",
-};
-
 export function GoalsPage() {
-  const { data: goals, isLoading } = useGoals();
+  const goalsQuery = useGoals();
+  const goals = goalsQuery.data;
   const createGoal = useCreateGoal();
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(goals);
 
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  function applyTemplate(t: (typeof TEMPLATES)[number]) {
-    setGoalType(t.type);
-    setTitle(t.title);
+  function applyTemplate(template: GoalTemplate) {
+    setGoalType(template.type);
+    setSelectedTemplateId(template.id);
+    setTitle(template.title);
     setSaved(false);
+    setCreateError(null);
   }
 
   async function save() {
-    if (!title.trim()) return;
-    await createGoal.mutateAsync({ goal_type: goalType, title, description });
-    setSaved(true);
-    setTitle("");
-    setDescription("");
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) return;
+
+    setCreateError(null);
+    try {
+      await createGoal.mutateAsync({
+        goal_type: goalType,
+        title: normalizedTitle,
+        description,
+      });
+      setSaved(true);
+      setSelectedTemplateId(null);
+      setTitle("");
+      setDescription("");
+    } catch (error) {
+      setCreateError(getApiErrorMessage(error, "No se pudo guardar la meta."));
+    }
   }
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold">Metas</h1>
-        <p className="text-slate-500">
+        <p className="text-text-muted">
           Elige una plantilla y describe tu objetivo. La meta ajusta cómo se genera el plan.
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {TEMPLATES.map((t) => (
-          <button
-            key={t.type}
-            onClick={() => applyTemplate(t)}
-            className={`rounded-xl border p-4 text-left transition ${
-              goalType === t.type
-                ? "border-brand-500 bg-brand-50"
-                : "border-slate-200 bg-white hover:bg-slate-50"
-            }`}
-          >
-            <div className="text-2xl">{t.emoji}</div>
-            <div className="mt-1 font-medium text-slate-800">{t.label}</div>
-          </button>
-        ))}
-      </div>
+      <GoalTemplatePicker selectedTemplateId={selectedTemplateId} onSelect={applyTemplate} />
 
       <Card className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Título</label>
-          <input
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              setSaved(false);
-            }}
-            placeholder="Ej. Aprobar el parcial de Cálculo"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripción</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Detalles: temas a cubrir, fecha, énfasis..."
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          />
-        </div>
+        <Input
+          id="new-goal-title"
+          label="Título"
+          hint="El título no puede quedar vacío."
+          value={title}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            // "Otro" has no preset title, so typing keeps it selected.
+            const preset = GOAL_TEMPLATES.find((item) => item.id === selectedTemplateId)?.title;
+            if (preset && preset !== event.target.value) setSelectedTemplateId(null);
+            setSaved(false);
+            setCreateError(null);
+          }}
+          placeholder="Ej. Aprobar el parcial de Cálculo"
+          maxLength={255}
+        />
+        <Select
+          id="new-goal-type"
+          label="Tipo de estudio"
+          hint="Define la estrategia del plan: duración de sesiones y mezcla de preguntas."
+          value={goalType}
+          onChange={(event) => {
+            setGoalType(event.target.value as GoalType);
+            setSaved(false);
+          }}
+        >
+          {(Object.keys(TYPE_LABELS) as GoalType[]).map((type) => (
+            <option key={type} value={type}>
+              {TYPE_LABELS[type]}
+            </option>
+          ))}
+        </Select>
+        <Textarea
+          id="new-goal-description"
+          label="Descripción"
+          value={description}
+          onChange={(event) => {
+            setDescription(event.target.value);
+            setSaved(false);
+          }}
+          placeholder="Detalles: temas a cubrir, fecha, énfasis..."
+          rows={3}
+        />
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={!title.trim() || createGoal.isPending}>
             {createGoal.isPending ? "Guardando..." : "Guardar meta"}
           </Button>
-          {saved && <span className="text-sm text-green-600">✓ Meta guardada</span>}
+          {saved && <span role="status" className="text-sm text-state-success">Meta guardada.</span>}
         </div>
+        {createError && <p role="alert" className="text-sm text-state-error">{createError}</p>}
       </Card>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus metas</h2>
-        {isLoading ? (
-          <Spinner />
-        ) : goals && goals.length > 0 ? (
-          <>
-            <div className="grid gap-3">
-              {visible.map((g) => (
-                <GoalRow key={g.id} goal={g} />
-              ))}
-            </div>
-            {hiddenCount > 0 && (
-              <Button variant="secondary" onClick={showMore}>
-                Mostrar {hiddenCount} más
-              </Button>
-            )}
-            {expanded && goals.length > 6 && (
-              <Button variant="ghost" onClick={showLess}>
-                Mostrar menos
-              </Button>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-slate-400">Aún no tienes metas.</p>
-        )}
+        <AsyncState
+          data={goals}
+          isLoading={goalsQuery.isPending}
+          isError={goalsQuery.isError}
+          isFetching={goalsQuery.isFetching}
+          isEmpty={(items) => items.length === 0}
+          loading={<Skeleton height={72} />}
+          loadingLabel="Cargando metas"
+          empty={<p className="text-sm text-text-muted">Aún no tienes metas.</p>}
+          onRetry={() => void goalsQuery.refetch()}
+          initialErrorMessage="No se pudieron cargar tus metas."
+          updateErrorMessage="No se pudieron actualizar tus metas. Se muestran las últimas cargadas."
+        >
+          {(items) => (
+            <>
+              <div className="grid gap-3">
+                {visible.map((g) => (
+                  <GoalRow key={g.id} goal={g} />
+                ))}
+              </div>
+              {hiddenCount > 0 && (
+                <Button variant="secondary" onClick={showMore}>
+                  Mostrar {hiddenCount} más
+                </Button>
+              )}
+              {expanded && items.length > 6 && (
+                <Button variant="ghost" onClick={showLess}>
+                  Mostrar menos
+                </Button>
+              )}
+            </>
+          )}
+        </AsyncState>
       </section>
     </div>
   );
@@ -131,6 +157,10 @@ export function GoalsPage() {
 function GoalRow({ goal }: { goal: GoalDTO }) {
   const updateGoal = useUpdateGoal();
   const deleteGoal = useDeleteGoal();
+  const fieldPrefix = useId();
+  const typeId = `${fieldPrefix}-type`;
+  const titleId = `${fieldPrefix}-title`;
+  const descriptionId = `${fieldPrefix}-description`;
 
   const [editing, setEditing] = useState(false);
   const [goalType, setGoalType] = useState<GoalType>(goal.goal_type);
@@ -158,8 +188,8 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
         payload: { goal_type: goalType, title: title.trim(), description },
       });
       setEditing(false);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al guardar los cambios.");
+    } catch (caught: unknown) {
+      setError(getApiErrorMessage(caught, "Error al guardar los cambios."));
     }
   }
 
@@ -174,8 +204,8 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
     setError(null);
     try {
       await deleteGoal.mutateAsync(goal.id);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al eliminar la meta.");
+    } catch (caught: unknown) {
+      setError(getApiErrorMessage(caught, "Error al eliminar la meta."));
     }
   }
 
@@ -183,11 +213,14 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
     return (
       <Card className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
+          <label htmlFor={typeId} className="mb-1 block text-sm font-medium text-text-primary">
+            Tipo
+          </label>
           <select
+            id={typeId}
             value={goalType}
             onChange={(e) => setGoalType(e.target.value as GoalType)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           >
             {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
               <option key={t} value={t}>
@@ -197,23 +230,33 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Título</label>
+          <label htmlFor={titleId} className="mb-1 block text-sm font-medium text-text-primary">
+            Título
+          </label>
           <input
+            id={titleId}
             value={title}
+            maxLength={255}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripción</label>
+          <label
+            htmlFor={descriptionId}
+            className="mb-1 block text-sm font-medium text-text-primary"
+          >
+            Descripción
+          </label>
           <textarea
+            id={descriptionId}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-state-error">{error}</p>}
         <div className="flex items-center gap-2">
           <Button onClick={handleSave} disabled={updateGoal.isPending}>
             {updateGoal.isPending ? "Guardando..." : "Guardar cambios"}
@@ -227,13 +270,13 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
   }
 
   return (
-    <Card className="flex items-start justify-between gap-3">
+    <Card className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
-        <p className="font-medium text-slate-800">{goal.title}</p>
-        {goal.description && <p className="mt-1 text-sm text-slate-500">{goal.description}</p>}
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        <p className="font-medium text-text-primary">{goal.title}</p>
+        {goal.description && <p className="mt-1 text-sm text-text-muted">{goal.description}</p>}
+        {error && <p role="alert" className="mt-1 text-xs text-state-error">{error}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
         <Badge color="brand">{TYPE_LABELS[goal.goal_type]}</Badge>
         <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={startEdit}>
           Editar

@@ -1,7 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
+import { isNotFoundError } from "../api/errors";
 import type {
+  DocumentDTO,
   LLMCredentialDTO,
   GoalCreate,
   GoalUpdate,
@@ -9,6 +17,7 @@ import type {
   LLMCredentialUpsert,
   LLMConnectionTest,
   LLMProviderKey,
+  PlanDTO,
   QuizAnswer,
 } from "../api/types";
 
@@ -39,20 +48,70 @@ function invalidateLlmCredentialsOnConflict(
   error: unknown,
 ) {
   const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
-  if (response?.status === 409 || response?.data?.code === "LLM_AUTHENTICATION_FAILED") {
+  // 409: concurrent change; 404: another tab deleted the configuration.
+  if (
+    response?.status === 409 ||
+    response?.status === 404 ||
+    response?.data?.code === "LLM_AUTHENTICATION_FAILED"
+  ) {
     qc.invalidateQueries({ queryKey: ["llm-credentials"] });
     invalidateLlmRuntime(qc);
   }
 }
 
 // --- Documents -------------------------------------------------------------
+export const DOCUMENTS_QUERY_KEY = ["documents"] as const;
+
+export interface DocumentListCache {
+  documents: DocumentDTO[];
+  source: "GET" | "POST";
+  revision: number;
+}
+
+export function getDocumentsListSnapshot(queryClient: QueryClient) {
+  const query = queryClient.getQueryState<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+  const cachedList = query?.data;
+
+  return {
+    documents: cachedList?.documents,
+    isConfirmedByGet: query?.status === "success" && cachedList?.source === "GET",
+  };
+}
+
+function mergeDocumentLists(
+  fetchedDocuments: DocumentDTO[],
+  newerDocuments: DocumentDTO[],
+) {
+  const documentsById = new Map(fetchedDocuments.map((document) => [document.id, document]));
+  for (const document of newerDocuments) {
+    documentsById.set(document.id, document);
+  }
+  return [...documentsById.values()];
+}
+
 export function useDocuments() {
   return useQuery({
-    queryKey: ["documents"],
-    queryFn: api.listDocuments,
+    queryKey: DOCUMENTS_QUERY_KEY,
+    queryFn: async ({ client }) => {
+      const revisionAtFetchStart =
+        client.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY)?.revision ?? 0;
+      const documents = await api.listDocuments();
+      const latestCache = client.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+
+      // Keep useful rows from a stale GET, but do not let it confirm the newer POST seed.
+      if (latestCache && latestCache.revision !== revisionAtFetchStart) {
+        return {
+          ...latestCache,
+          documents: mergeDocumentLists(documents, latestCache.documents),
+        };
+      }
+
+      return { documents, source: "GET" as const, revision: revisionAtFetchStart };
+    },
+    select: (snapshot) => snapshot.documents,
     // While anything is still indexing, keep refreshing so the UI updates.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((d) => d.status === "PENDING") ? 2000 : false,
+      (query.state.data?.documents ?? []).some((d) => d.status === "PENDING") ? 2000 : false,
   });
 }
 
@@ -60,7 +119,26 @@ export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (file: File) => api.uploadDocument(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: (uploadedDocument) => {
+      const cachedList = qc.getQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY);
+      const documents = cachedList?.documents ?? [];
+      const existingIndex = documents.findIndex(
+        (document) => document.id === uploadedDocument.id,
+      );
+      const nextDocuments =
+        existingIndex === -1
+          ? [...documents, uploadedDocument]
+          : documents.map((document) =>
+              document.id === uploadedDocument.id ? uploadedDocument : document,
+            );
+
+      qc.setQueryData<DocumentListCache>(DOCUMENTS_QUERY_KEY, {
+        documents: nextDocuments,
+        source: "POST",
+        revision: (cachedList?.revision ?? 0) + 1,
+      });
+      return qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY });
+    },
   });
 }
 
@@ -68,7 +146,7 @@ export function useDeleteDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteDocument(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY }),
   });
 }
 
@@ -100,8 +178,10 @@ export function useDeleteGoal() {
     mutationFn: (id: number) => api.deleteGoal(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["goals"] });
-      // Deleting a goal cascades to its plans on the backend.
+      // Deleting a goal cascades to its plans (and their results/reviews) on the backend.
       qc.invalidateQueries({ queryKey: ["plans"] });
+      qc.invalidateQueries({ queryKey: ["plan"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -114,8 +194,16 @@ export function usePlans() {
 export function useGeneratePlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ goalId, documentIds }: { goalId: number; documentIds: number[] }) =>
-      api.generatePlan(goalId, documentIds),
+    mutationFn: ({
+      goalId,
+      documentIds,
+      idempotencyKey,
+    }: {
+      goalId: number;
+      documentIds: number[];
+      /** Reuse the same key when retrying the same logical request. */
+      idempotencyKey?: string;
+    }) => api.generatePlan(goalId, documentIds, idempotencyKey),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
   });
 }
@@ -124,7 +212,21 @@ export function useDeletePlan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deletePlan(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+    onSuccess: (_, id) => {
+      // Its sessions and quizzes no longer exist either: never reopen them from cache.
+      const cachedSessions = [
+        ...(qc.getQueryData<PlanDTO>(["plan", id])?.sessions ?? []),
+        ...(qc.getQueryData<PlanDTO[]>(["plans"])?.find((plan) => plan.id === id)?.sessions ?? []),
+      ];
+      for (const session of cachedSessions) {
+        qc.removeQueries({ queryKey: ["session", session.id] });
+        qc.removeQueries({ queryKey: ["quiz", session.id] });
+      }
+      qc.removeQueries({ queryKey: ["plan", id] });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      // The plan's quiz results and flashcard reviews are deleted with it.
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
@@ -135,7 +237,7 @@ export function usePlan(planId: number | null) {
     queryFn: () => api.getPlan(planId as number),
     enabled: planId != null,
     refetchInterval: (query) =>
-      query.state.data?.status === "PROCESSING" ? 3000 : false,
+      query.state.data?.status === "PROCESSING" && !isNotFoundError(query.state.error) ? 3000 : false,
   });
 }
 
@@ -156,14 +258,32 @@ export function useQuiz(sessionId: number | null) {
   });
 }
 
+/** Read-only quizzes for several sessions (Práctica); shares the `["quiz", id]` cache. */
+export function useSessionQuizzes(sessionIds: number[]) {
+  return useQueries({
+    queries: sessionIds.map((sessionId) => ({
+      queryKey: ["quiz", sessionId],
+      queryFn: () => api.getQuiz(sessionId),
+    })),
+  });
+}
+
 export function useSubmitQuiz() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ quizId, answers }: { quizId: number; answers: QuizAnswer[] }) =>
-      api.submitQuiz(quizId, answers),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    mutationFn: ({
+      quizId,
+      answers,
+    }: {
+      quizId: number;
+      sessionId: number;
+      answers: QuizAnswer[];
+    }) => api.submitQuiz(quizId, answers),
+    onSuccess: (_, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      qc.invalidateQueries({ queryKey: ["plans"] });
       qc.invalidateQueries({ queryKey: ["plan"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -191,6 +311,8 @@ export function useSaveLlmCredential() {
   return useMutation({
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMCredentialUpsert }) =>
       api.saveLlmCredential(provider, payload),
+    // The variables carry the plaintext key: never keep a finished save in the mutation cache.
+    gcTime: 0,
     onSuccess: (credential) => {
       replaceCachedLlmCredential(qc, credential);
       invalidateLlmRuntime(qc);
@@ -238,6 +360,7 @@ export function useDeactivateAllLlmCredentials() {
       qc.invalidateQueries({ queryKey: ["llm-credentials"] });
       invalidateLlmRuntime(qc);
     },
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -249,6 +372,7 @@ export function useDeleteLlmCredential() {
       qc.invalidateQueries({ queryKey: ["llm-credentials"] });
       invalidateLlmRuntime(qc);
     },
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -265,10 +389,11 @@ export function useTestLlmCredential() {
   });
 }
 
-export function useOllamaModels(enabled: boolean) {
+/** Installed models for a provider whose catalog entry supports model discovery. */
+export function useProviderModels(provider: LLMProviderKey, enabled: boolean) {
   return useQuery({
-    queryKey: ["ollama-models"],
-    queryFn: api.listOllamaModels,
+    queryKey: ["llm-provider-models", provider],
+    queryFn: () => api.listProviderModels(provider),
     enabled,
     retry: false,
   });

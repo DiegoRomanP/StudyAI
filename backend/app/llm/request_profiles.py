@@ -16,7 +16,7 @@ class RequestProfile:
 
     identifier: str
     version: str
-    token_limit_parameter: Literal["max_tokens", "max_completion_tokens"]
+    token_limit_parameter: Literal["max_tokens", "max_completion_tokens", "maxOutputTokens"]
     test_max_tokens: int
     requires_usage: bool = True
     json_response_kinds: frozenset[str] = field(default_factory=frozenset)

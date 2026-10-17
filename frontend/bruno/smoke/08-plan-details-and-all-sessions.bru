@@ -1,0 +1,48 @@
+meta {
+  name: Verify plan and every owned session
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/plans/{{planId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq "READY"
+  res.body.sessions: isNotEmpty
+}
+
+tests {
+  test("plan references the created goal and document and every session belongs to this plan", async function() {
+    const plan = res.body;
+    const goalId = bru.getVar("goalId");
+    const documentId = bru.getVar("documentId");
+    const baseUrl = bru.getEnvVar("baseUrl");
+    const timeoutMs = Number(bru.getEnvVar("requestTimeoutMs"));
+    const sessionIds = plan.sessions.map((session) => session.id);
+
+    expect(plan.id).to.equal(bru.getVar("planId"));
+    expect(plan.goal_id).to.equal(goalId);
+    expect(plan.document_ids).to.include(documentId);
+    expect(plan.sessions).to.be.an("array").that.is.not.empty;
+    expect(new Set(sessionIds).size).to.equal(sessionIds.length);
+
+    for (const summary of plan.sessions) {
+      const response = await bru.sendRequest({
+        method: "GET",
+        url: `${baseUrl}/sessions/${summary.id}`,
+        timeout: timeoutMs,
+      });
+      expect(response.status).to.equal(200);
+      expect(response.data.id).to.equal(summary.id);
+      expect(response.data.plan_id).to.equal(plan.id);
+      expect(response.data.material).to.be.an("object");
+      expect(response.data.material.content_markdown.trim()).not.to.equal("");
+    }
+
+    bru.setVar("sessionIds", sessionIds);
+    bru.setVar("sessionId", sessionIds[0]);
+  });
+}

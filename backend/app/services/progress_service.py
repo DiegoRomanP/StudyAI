@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.algorithms.sm2 import calculate_next_review
@@ -19,6 +19,7 @@ from app.models.flashcard import FlashcardReview
 from app.models.plan import Plan
 from app.models.quiz import QuizResult
 from app.models.session import Session as StudySession
+from app.models.session import SessionStatus
 from app.repositories.quiz_repository import FlashcardReviewRepository
 from app.schemas.dashboard import (
     DashboardResponse,
@@ -78,15 +79,23 @@ class ProgressService:
             key=lambda w: w.score,
         )[:5]
         upcoming = self._upcoming_reviews(user_id)
-        completed = len(scores)
-        avg = round(sum(s.score for s in scores) / completed, 1) if completed else 0.0
+        avg = round(sum(s.score for s in scores) / len(scores), 1) if scores else 0.0
         return DashboardResponse(
             scores=scores,
             weak_topics=weak,
             upcoming_reviews=upcoming,
-            sessions_completed=completed,
+            sessions_completed=self._completed_session_count(user_id),
             average_score=avg,
         )
+
+    def _completed_session_count(self, user_id: int) -> int:
+        """Distinct completed sessions — a re-submitted quiz is still one session."""
+        stmt = (
+            select(func.count(StudySession.id))
+            .join(Plan, StudySession.plan_id == Plan.id)
+            .where(Plan.user_id == user_id, StudySession.status == SessionStatus.COMPLETED)
+        )
+        return int(self.db.execute(stmt).scalar_one())
 
     def _score_history(self, user_id: int) -> list[ScorePoint]:
         stmt = (
@@ -102,9 +111,11 @@ class ProgressService:
                 session_id=session.id,
                 topic_name=session.topic_name,
                 score=result.score,
-                completed_at=session.completed_at,
+                # The result's own timestamp: a later re-submission must not move earlier points.
+                completed_at=result.created_at or session.completed_at,
             )
             for result, session in rows
+            if _has_multiple_choice(result)
         ]
 
     def _upcoming_reviews(self, user_id: int) -> list[UpcomingReview]:
@@ -115,6 +126,15 @@ class ProgressService:
             UpcomingReview(next_review_date=day, count=count)
             for day, count in sorted(by_date.items())
         ][:14]
+
+
+def _has_multiple_choice(result: QuizResult) -> bool:
+    """Only multiple-choice answers are graded; flashcard ratings feed SM-2, not the score."""
+    detail = result.detail or {}
+    return any(
+        isinstance(entry, dict) and entry.get("type") == "multiple_choice"
+        for entry in detail.values()
+    )
 
 
 # Utility used by the seed / demo flows.

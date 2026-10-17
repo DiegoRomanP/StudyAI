@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import logging
 import pytest
 import httpx
 import respx
@@ -81,7 +82,7 @@ def _verify(client: TestClient, provider: str, revision: int) -> dict:
     return response.json()["credential"]
 
 
-def test_catalog_lists_all_seven_providers(client: TestClient):
+def test_catalog_lists_all_eight_providers(client: TestClient):
     response = client.get("/llm-settings/catalog")
     assert response.status_code == 200
     assert {entry["provider"] for entry in response.json()} == {
@@ -92,6 +93,7 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "NVIDIA",
         "HUGGINGFACE",
         "OLLAMA",
+        "GEMINI",
     }
     capabilities = {entry["provider"]: entry["supports_custom_base_url"] for entry in response.json()}
     assert capabilities == {
@@ -102,9 +104,121 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "NVIDIA": False,
         "HUGGINGFACE": True,
         "OLLAMA": False,
+        "GEMINI": False,
     }
     custom_models = {entry["provider"]: entry["allows_custom_model"] for entry in response.json()}
     assert custom_models["NVIDIA"] is False
+    assert custom_models["GEMINI"] is True
+
+    gemini = next(entry for entry in response.json() if entry["provider"] == "GEMINI")
+    assert gemini["default_model"] == "gemini-3.8-flash"
+    assert gemini["common_models"] == [{"id": "gemini-3.8-flash", "free": False}]
+    assert gemini["supports_model_discovery"] is False
+
+
+def test_gemini_rejects_path_traversal_model_without_changing_credential(client: TestClient):
+    credential = _save_key(client, "GEMINI")
+    try:
+        rejected = client.patch(
+            "/llm-settings/GEMINI/model",
+            json={
+                "model": "gemini-3.8-flash/../../../models/other",
+                "expected_revision": credential["config_revision"],
+            },
+        )
+        assert rejected.status_code == 400
+        assert rejected.json() == {
+            "detail": "El identificador del modelo Gemini no es válido."
+        }
+
+        stored = next(
+            item for item in client.get("/llm-settings").json()
+            if item["provider"] == "GEMINI"
+        )
+        assert stored["model"] == credential["model"] == ""
+        assert stored["config_revision"] == credential["config_revision"]
+        assert stored["is_verified"] is False
+        assert stored["is_active"] is False
+        assert stored["masked_api_key"] == credential["masked_api_key"]
+    finally:
+        client.delete("/llm-settings/GEMINI")
+
+
+@respx.mock
+def test_gemini_credential_flow_keeps_key_private_and_revokes_structured_invalid_key(
+    client: TestClient, monkeypatch, caplog
+):
+    caplog.set_level(logging.INFO)
+    secret = "AIza-test-key-not-a-real-credential"
+    saved_response = client.put("/llm-settings/GEMINI", json={"api_key": secret})
+    assert saved_response.status_code == 200
+    saved = saved_response.json()
+    assert secret not in saved_response.text
+    assert saved["masked_api_key"]
+    draft = _save_draft(client, "GEMINI", saved["config_revision"], "gemini-3.8-flash")
+
+    monkeypatch.setattr(
+        "app.llm.factory.build_provider_from_credential",
+        real_build_provider_from_credential,
+    )
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
+    ).mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "candidates": [
+                        {
+                            "content": {"parts": [{"text": "ok"}]},
+                            "finishReason": "STOP",
+                        }
+                    ]
+                },
+            ),
+            httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "code": 400,
+                        "status": "INVALID_ARGUMENT",
+                        "message": f"API key not valid: {secret}",
+                        "details": [
+                            {
+                                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                                "reason": "API_KEY_INVALID",
+                                "domain": "googleapis.com",
+                            }
+                        ],
+                    }
+                },
+            ),
+        ]
+    )
+
+    verified = _verify(client, "GEMINI", draft["config_revision"])
+    assert verified["is_verified"] is True
+    activated = client.post(
+        "/llm-settings/GEMINI/activate",
+        json={"expected_revision": verified["config_revision"]},
+    )
+    assert activated.status_code == 200
+    assert activated.json()["is_active"] is True
+
+    failed = client.post(
+        "/llm-settings/GEMINI/test",
+        json={"expected_revision": verified["config_revision"]},
+    )
+    assert failed.status_code == 502
+    assert failed.json()["code"] == "LLM_AUTHENTICATION_FAILED"
+    assert failed.json()["upstream_status"] == 400
+    assert secret not in failed.text
+    stored = next(item for item in client.get("/llm-settings").json() if item["provider"] == "GEMINI")
+    assert stored["is_verified"] is False
+    assert stored["is_active"] is False
+    assert secret not in repr(stored)
+    assert secret not in caplog.text
+    assert route.call_count == 2
 
 
 def test_saving_a_key_keeps_the_model_selector_available(client: TestClient):

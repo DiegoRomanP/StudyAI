@@ -18,13 +18,16 @@ plan) and ``generate_plan_task`` (the background worker that fills it in).
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import LLMError, NotFoundError
+from app.core.exceptions import ConflictError, LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.pareto import select_top_by_relevance
@@ -51,18 +54,72 @@ class PlanService:
         self.db = db
         self.repo = PlanRepository(db)
 
-    def create_plan(self, user_id: int, goal_id: int, document_ids: list[int]) -> Plan:
+    def create_plan(
+        self,
+        user_id: int,
+        goal_id: int,
+        document_ids: list[int],
+        idempotency_key: str | None = None,
+    ) -> tuple[Plan, bool]:
         goal = self.db.get(Goal, goal_id)
         if goal is None or goal.user_id != user_id:
             raise NotFoundError("Meta no encontrada.")
+
+        request_hash = self._idempotency_request_hash(goal_id, document_ids)
+        if idempotency_key is not None:
+            existing = self._find_idempotent_plan(user_id, idempotency_key)
+            if existing is not None:
+                return self._check_idempotency_payload(existing, request_hash), False
+
         plan = Plan(
             user_id=user_id,
             goal_id=goal_id,
             title=f"Plan: {goal.title}",
             status=PlanStatus.PROCESSING,
             document_ids=list(document_ids),
+            idempotency_key=idempotency_key,
+            idempotency_request_hash=request_hash if idempotency_key is not None else None,
         )
-        return self.repo.save(plan)
+        if idempotency_key is None:
+            return self.repo.save(plan), True
+
+        self.db.add(plan)
+        try:
+            self.db.commit()
+            self.db.refresh(plan)
+            return plan, True
+        except IntegrityError:
+            self.db.rollback()
+            winner = self._find_idempotent_plan(user_id, idempotency_key)
+            if winner is None:
+                raise
+            return self._check_idempotency_payload(winner, request_hash), False
+
+    @staticmethod
+    def _idempotency_request_hash(goal_id: int, document_ids: list[int]) -> str:
+        canonical_payload = {
+            "goal_id": goal_id,
+            "document_ids": sorted(set(document_ids)),
+        }
+        encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":")).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    def _find_idempotent_plan(self, user_id: int, idempotency_key: str) -> Plan | None:
+        return self.db.execute(
+            select(Plan).where(
+                Plan.user_id == user_id,
+                Plan.idempotency_key == idempotency_key,
+            )
+        ).scalar_one_or_none()
+
+    @staticmethod
+    def _check_idempotency_payload(plan: Plan, request_hash: str) -> Plan:
+        if plan.idempotency_request_hash != request_hash:
+            raise ConflictError(
+                "La clave de idempotencia ya se utilizó con una solicitud diferente.",
+                "IDEMPOTENCY_KEY_REUSED",
+            )
+        return plan
 
     def get_plan(self, user_id: int, plan_id: int) -> Plan:
         plan = self.repo.find_by_id(plan_id)

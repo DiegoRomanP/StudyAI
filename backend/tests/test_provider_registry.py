@@ -20,6 +20,8 @@ def test_catalog_is_derived_from_provider_owned_metadata():
 
     assert catalog[LLMProviderName.NVIDIA].allows_custom_model is False
     assert catalog[LLMProviderName.OLLAMA].supports_model_discovery is True
+    # Ollama models must be picked from the discovered installed list, never typed freely.
+    assert catalog[LLMProviderName.OLLAMA].allows_custom_model is False
     assert catalog[LLMProviderName.OPENAI].supports_custom_base_url is True
 
 
@@ -68,3 +70,52 @@ def test_fixed_endpoint_provider_never_derives_its_runtime_url_from_a_draft():
 def test_vendor_adapters_compose_instead_of_inheriting_generic_transport():
     assert not issubclass(NvidiaNimProvider, OpenAICompatibleProvider)
     assert not issubclass(OpenRouterProvider, OpenAICompatibleProvider)
+
+
+def test_gemini_owns_a_native_fixed_endpoint_contract():
+    provider = getattr(LLMProviderName, "GEMINI", None)
+    assert provider is not None
+    definition = get_provider_definition(provider)
+    meta = definition.meta
+
+    assert meta.default_base_url == "https://generativelanguage.googleapis.com/v1beta"
+    assert meta.default_model == "gemini-3.8-flash"
+    assert [model.id for model in meta.common_models] == ["gemini-3.8-flash"]
+    assert meta.requires_api_key is True
+    assert meta.supports_custom_base_url is False
+    assert meta.supports_model_discovery is False
+    assert meta.allows_custom_model is True
+
+    profile = definition.request_profile(meta.default_model)
+    assert profile.identifier == "gemini-generate-content"
+    assert profile.token_limit_parameter == "maxOutputTokens"
+    assert profile.requires_usage is False
+    assert profile.json_response_kinds == frozenset(
+        {"topic_analysis", "session_plan", "session_content"}
+    )
+    assert profile.payload_parameters("topic_analysis", 80) == {
+        "maxOutputTokens": 80,
+        "response_format": {"type": "json_object"},
+    }
+    definition.validate_model("tunedModels/biology-v2")
+
+    credential = LLMCredential(
+        user_id=1,
+        provider=provider,
+        encrypted_api_key="encrypted-test-key",
+        model=meta.default_model,
+        base_url="https://attacker.example/v1",
+    )
+    assert definition.effective_base_url(credential) == meta.default_base_url
+    with pytest.raises(ValidationError):
+        definition.validate_base_url("https://attacker.example/v1")
+
+
+def test_existing_openai_profile_payload_shapes_remain_unchanged():
+    definition = get_provider_definition(LLMProviderName.OPENAI)
+
+    standard = definition.request_profile("gpt-4o-mini")
+    assert standard.payload_parameters("quiz", 91) == {"max_tokens": 91}
+
+    reasoning = definition.request_profile("o4-mini")
+    assert reasoning.payload_parameters("quiz", 91) == {"max_completion_tokens": 91}

@@ -44,13 +44,15 @@ export interface PlanTopicDTO {
   selected: boolean;
 }
 
+export type SessionStatus = "PENDING" | "COMPLETED";
+
 export interface SessionSummaryDTO {
   id: number;
   order_index: number;
   topic_name: string;
   duration_minutes: number;
   review_offset_days: number;
-  status: string;
+  status: SessionStatus;
 }
 
 export interface PlanStatusDTO {
@@ -83,7 +85,7 @@ export interface SessionDetailDTO {
   topic_name: string;
   duration_minutes: number;
   review_offset_days: number;
-  status: string;
+  status: SessionStatus;
   completed_at: string | null;
   material: SessionMaterialDTO | null;
 }
@@ -109,11 +111,17 @@ export interface QuizAnswer {
   quality?: number | null;
 }
 
+export type QuizResultDetail =
+  | { type: "multiple_choice"; correct: boolean; selected: string | null; expected: string }
+  | { type: "flashcard"; quality: number };
+
 export interface QuizResultDTO {
+  /** Percentage of correct multiple-choice answers; meaningless when `total` is 0. */
   score: number;
   correct: number;
+  /** Multiple-choice questions answered; flashcards are rated for SM-2, not graded. */
   total: number;
-  detail: Record<string, unknown>;
+  detail: Record<string, QuizResultDetail>;
 }
 
 export interface DashboardDTO {
@@ -133,7 +141,8 @@ export type LLMProviderKey =
   | "OPENROUTER"
   | "NVIDIA"
   | "HUGGINGFACE"
-  | "OLLAMA";
+  | "OLLAMA"
+  | "GEMINI";
 
 export interface ModelOption {
   id: string;

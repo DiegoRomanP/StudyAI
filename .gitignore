@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+backend/.venv-qa/
 .env
 **.venv/
 .serena/
@@ -20,6 +21,7 @@ backend/storage/chroma/*
 node_modules/
 dist/
 .vite/
+frontend/qa-results/
 
 # Editors / OS
 .DS_Store

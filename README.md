@@ -54,12 +54,97 @@ studyai/
 - **Frontend:** React 18, TypeScript, Vite, TailwindCSS, TanStack Query, React
   Router, Axios, Recharts, react-markdown, Vitest y Testing Library.
 
+### Base visual del frontend
+
+El frontend incluye tokens CSS semánticos y utilidades Tailwind, controles
+nativos reutilizables y una primitiva `AsyncState` que conserva los datos
+previos ante un error de actualización cuando las páginas la integran. La tabla
+de valores observados/candidatos, ratios de contraste calculados y límites del
+handoff Penpot están en
+[`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md).
+La documentación no declara paridad visual ni certificación WCAG; los aliases
+`brand-*` y de paletas antiguas solo mantienen compatibilidad para las vistas
+que aún no se han extraído.
+
+### Navegación y rutas (A06)
+
+`/` explica el propósito de StudyAI y enlaza a sus secciones. La navegación de
+escritorio y el menú móvil permiten volver a Inicio o visitar Documentos, Metas,
+Plan, Dashboard y Configuración; los enlaces a planes y sesiones existentes
+siguen funcionando directamente. Las rutas desconocidas tienen una página 404
+con regreso al inicio. El menú móvil es una divulgación no modal que no bloquea
+el contenido: Escape lo cierra y devuelve el foco al botón. Los IDs de plan y
+sesión se validan antes de consultar la API.
+
+Dev-Reviewer aprobó técnicamente A06 tras dos ciclos de corrección y una tercera
+revisión. La evidencia registrada incluye 75 pruebas Vitest, dos ejecuciones del
+runner QA con 33/33 casos cada una y `test:qa` con 78/78 checks (API 3, E2E 3 y
+Bruno 72); runtime `MOCK` y E2E a 320 px con retraso controlado de 500 ms en los
+GET del backend. A06 está committed en
+`58e3a97861993122f41a712310bc9b5d5d5dc2ca`. La ubicación persistente de Inicio
+en la navegación móvil (PEN-03/A01) sigue sin decisión; esta entrega no añade
+una barra inferior ni declara paridad visual con Penpot. Véase
+[`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md).
+
+### Subida y plantillas reutilizables (A07)
+
+`DocumentsPage` usa `DocumentUpload`, que conserva el selector nativo y ofrece
+arrastre, validación temprana por extensión/tamaño (máximo actual
+`25 × 1024 × 1024` bytes) y resultado separado por archivo. La respuesta del
+servidor decide la aceptación. `PENDING` se muestra como aceptación con
+indexación en curso mientras se confirma; si falla el GET de documentos, la UI
+indica que el estado actual no está confirmado y permite reintentar. En un error
+de lectura conserva los datos disponibles, que pueden ser parciales, y muestra
+un aviso sin convertir el fallo en lista vacía. El polling existente de
+`useDocuments` cada 2 s mientras la caché contiene un DTO `PENDING` sigue intacto.
+`PlanPage` usa `DocumentPicker`, que solo permite
+elegir documentos `INDEXED`, elimina IDs seleccionados cuando dejan de ser
+válidos y vuelve a filtrarlos justo antes de `api.generatePlan`. Los errores HTTP
+por archivo siguen visibles y el control nativo se restablece para permitir
+repetir el mismo nombre.
+
+Para generar un plan debe existir una lista fiable y al menos un documento
+`INDEXED` seleccionado. Si la lectura inicial o una actualización falla, el CTA
+explica el bloqueo, ofrece reintentar y no envía una selección vacía al backend.
+Al generar, `PlanPage` vuelve a validar sincrónicamente contra la caché más
+reciente de TanStack Query y conserva solo los IDs todavía indexados.
+
+Después de que la API acepta un documento como `PENDING`, `useUploadDocument`
+incorpora el DTO a `['documents']` por ID, preserva los documentos conocidos y
+actualiza una entrada existente sin duplicarla; luego invalida/refresca la lista.
+Así el polling de 2 s continúa aunque falle la lectura inicial o la revalidación.
+Una lista visible durante ese fallo puede ser parcial; la UI mantiene el estado
+de indexación como no confirmado y el reintento manual hasta que un GET confirme
+`INDEXED` o `FAILED`.
+
+Las tres plantillas actuales tienen una sola definición en
+`frontend/src/lib/goalTemplates.ts`; `GoalTemplatePicker` es controlado, no
+presenta una plantilla como aplicada al inicio y solo rellena los campos tras una
+elección explícita. La edición manual del título quita ese estado visual; el tipo
+`LEARNING` se mantiene como valor por defecto para creación manual. En `GoalsPage`
+la meta se crea tras pulsar Guardar, con título recortado y respuesta/error
+confirmados. Las mutaciones continúan en los hooks
+TanStack Query; no hay cambios de backend, endpoints ni URL. Las piezas reciben
+callbacks y datos, listas para la composición posterior de Inicio en A10; la
+Home actual no se adelantó en A07. Dev-Reviewer aún debe revisar y aceptar esta
+implementación. A01, PEN-03 y las dos decisiones de §8 siguen abiertas.
+
+La suite completa frontend terminó con 100/100 pruebas Vitest. La corrida
+integrada de QA aislado terminó con 78/78 checks (API 3, E2E 3, Bruno 72), cero
+fallos/omisiones, runtime `MOCK` y limpieza de procesos/datos; no se usó un
+proveedor LLM real. Build conserva la advertencia ya conocida de chunk >500 kB
+(824.30 kB minificado, 244.37 kB gzip). Dev-Reviewer solicitó cambios en sus
+dos revisiones; el segundo y último ciclo técnico queda pendiente de
+re-revisión/aceptación independiente. No se declara aceptado. El reporte QA, el
+detalle A07, la secuencia TDD y las limitaciones de evidencia están en
+[`docs/frontend-integration/a07-shared-upload-and-goal-templates.md`](docs/frontend-integration/a07-shared-upload-and-goal-templates.md).
+
 ---
 
 ## Requisitos
 
 - **Python** ≥ 3.11 (probado en 3.14)
-- **Node.js** ≥ 18 (probado en 26) y npm
+- **Node.js** ≥ 22 y npm (lockfile frontend verificado con 24.19.0)
 
 ---
 
@@ -98,6 +183,28 @@ npm run dev                            # http://localhost:5173
 ```
 
 Para validar el cliente ejecuta `npm run lint`, `npm test` y `npm run build`.
+
+### QA aislado
+
+Las pruebas de API y navegador con Playwright/Bruno usan dependencias npm
+fijadas, Chromium instalado por `npm --prefix frontend exec -- playwright install chromium`
+y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core. Sigue
+[`docs/frontend-integration/qa.md`](docs/frontend-integration/qa.md) para
+prepararlo y ejecutar `npm --prefix frontend run test:qa`. `test:api` ejecuta
+readiness Playwright y el flujo HTTP A04 completo de Bruno; `test:qa` añade el
+smoke de la UI de producción, incluido foco A05 y navegación A06 a 320 px (no es
+el recorrido completo de estudio A15–A17). La colección versionada
+`frontend/bruno/smoke/` comparte el Markdown canónico
+`frontend/qa/fixtures/studyai-a04-smoke.md` con el consumidor de solo-lectura
+`frontend/e2e/api/a04-shared-fixture.spec.ts`; este no escribe en la base QA
+nueva y vacía. El runner conserva reportes JSON/HTML/JUnit sin cabeceras ni
+cuerpos y valida el reporte Bruno 4.2.0: salida `0` sola no cuenta como
+cobertura; exige requests y aserciones ejecutadas y rechaza fallos, saltos u
+omisiones. `test:qa:runner` también ejecuta casos Bruno negativos contra
+respuestas HTTP locales controladas; son distintos del smoke positivo FastAPI
+real que corre `test:api`. El runner Node ejecuta las pruebas en serie y acota el
+polling con contadores de GET/deadlines configurados, no con un umbral frágil de
+tiempo total del host; no cambia los límites reales ni el gate de Bruno.
 
 ---
 
@@ -334,6 +441,8 @@ en `/docs`.
 ## Documentación de mantenimiento
 
 - [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
+- [`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md): tokens implementados, componentes base, contraste calculado y límites/gaps A01 de la entrega A05.
+- [`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md): rutas, navegación móvil/teclado, guardas de IDs, evidencias y decisiones abiertas de A06.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
@@ -367,8 +476,10 @@ npm run lint     # tsc --noEmit
 npm run build
 ```
 
-La cobertura actual incluye pruebas de errores API y de `SettingsPage`, incluida
-la sincronización de revisiones y las restricciones de NVIDIA.
+La cobertura actual incluye pruebas de errores API, `SettingsPage` (sincronización
+de revisiones y restricciones de NVIDIA), navegación/shell/rutas A06 y enlaces
+profundos de plan/sesión. Playwright verifica el flujo de navegación con teclado
+a 320 px y el acceso directo a recursos en el build de producción.
 
 ---
 

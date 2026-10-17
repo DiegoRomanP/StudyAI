@@ -136,6 +136,19 @@ paths:
   /plans/generate:
     post:
       summary: Inicia la generación asíncrona de un plan
+      description: >-
+        Acepta una cabecera Idempotency-Key opcional (1–255 caracteres). Para
+        el mismo usuario, la misma clave y el mismo goal_id/document_ids
+        canónicos (document_ids se compara como un conjunto ordenado), devuelve
+        el mismo plan y no registra otra tarea. Reutilizar la clave con otro
+        payload devuelve 409. Sin clave, conserva el comportamiento anterior y
+        crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
+        actual; no es una cola durable ni garantiza recuperación tras un cierre.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 255 }
       requestBody:
         required: true
         content:
@@ -150,10 +163,20 @@ paths:
                   items: { type: integer }
       responses:
         "202":
-          description: Aceptado (status PROCESSING)
+          description: Aceptado; una repetición devuelve el estado actual del mismo plan
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanStatus" }
+        "409":
+          description: La clave de idempotencia ya se utilizó con una solicitud diferente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: IDEMPOTENCY_KEY_REUSED }
 
   /plans/{plan_id}/status:
     get:
@@ -283,7 +306,7 @@ paths:
         queda disponible de inmediato, pero el modelo/URL se guarda como
         borrador con PATCH y se prueba después contra esa misma revisión.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -292,7 +315,7 @@ paths:
               type: object
               properties:
                 api_key: { type: string, nullable: true, description: "Obligatoria salvo para OLLAMA" }
-                base_url: { type: string, description: "Override opcional para proveedores compatibles; Anthropic, NVIDIA y Ollama no lo admiten" }
+                base_url: { type: string, description: "Override opcional para proveedores compatibles; Anthropic, Google Gemini, NVIDIA y Ollama no lo admiten" }
       responses:
         "200":
           description: OK
@@ -303,7 +326,7 @@ paths:
     delete:
       summary: Elimina la clave guardada de un proveedor
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
       responses:
         "204": { description: Eliminada }
         "404": { description: No hay clave configurada para ese proveedor }
@@ -316,7 +339,7 @@ paths:
         un cambio real. Omitir base_url conserva la anterior; "" restaura la URL
         predeterminada.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -326,8 +349,16 @@ paths:
               additionalProperties: false
               required: [model, expected_revision]
               properties:
-                model: { type: string }
-                base_url: { type: string, nullable: true, description: "Omitida o null conserva la URL anterior; cadena vacía restaura la predeterminada; Anthropic, NVIDIA y Ollama no admiten overrides" }
+                model:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: >-
+                    ID del modelo. Gemini admite nombres de recurso separados por "/";
+                    cada segmento debe comenzar con una letra ASCII o dígito y continuar
+                    solo con letras ASCII, dígitos, punto, guion o guion bajo. No se
+                    permiten segmentos vacíos, "." ni "..".
+                base_url: { type: string, nullable: true, description: "Omitida o null conserva la URL anterior; cadena vacía restaura la predeterminada; Anthropic, Google Gemini, NVIDIA y Ollama no admiten overrides" }
                 expected_revision: { type: integer, minimum: 1 }
       responses:
         "200":
@@ -335,7 +366,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LLMCredential" }
-        "400": { description: Modelo vacío o URL base inválida/SSRF }
+        "400": { description: Modelo vacío o no admitido por el proveedor, o URL base inválida/SSRF }
         "404": { description: No hay clave configurada para ese proveedor }
         "409": { description: La revisión esperada ya no es la configuración vigente }
 
@@ -346,7 +377,7 @@ paths:
         modelo no es evidencia: la prueba debe coincidir con la revisión y URL
         efectivas.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -370,7 +401,7 @@ paths:
     post:
       summary: Prueba con una llamada mínima el modelo y URL del borrador guardado
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -476,7 +507,7 @@ components:
     ProviderCatalogEntry:
       type: object
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] }
         label: { type: string }
         requires_model_selection: { type: boolean }
         default_model: { type: string }
@@ -496,7 +527,7 @@ components:
         supports_model_discovery: { type: boolean }
         supports_custom_base_url:
           type: boolean
-          description: Si admite un override de URL base; Anthropic, NVIDIA y Ollama no lo admiten.
+          description: Si admite un override de URL base; Anthropic, Google Gemini, NVIDIA y Ollama no lo admiten.
         allows_custom_model:
           type: boolean
           description: Si admite IDs de modelo no presentes en el catálogo. NVIDIA solo permite sus modelos con contrato StudyAI validado.
@@ -504,7 +535,7 @@ components:
       type: object
       description: La clave real nunca se expone; solo un fragmento enmascarado.
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] }
         label: { type: string }
         masked_api_key: { type: string, example: "sk-a••••••9f2k" }
         model:
@@ -531,7 +562,7 @@ components:
         source: { type: string, enum: [USER, ENV, MOCK] }
         provider:
           type: string
-          enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA]
+          enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI]
           nullable: true
           description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC.
         models:

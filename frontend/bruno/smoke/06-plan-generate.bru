@@ -1,0 +1,40 @@
+meta {
+  name: Request plan generation once
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/plans/generate
+  body: json
+}
+
+script:pre-request {
+  const goalId = bru.getVar("goalId");
+  const documentId = bru.getVar("documentId");
+  if (!Number.isSafeInteger(goalId) || !Number.isSafeInteger(documentId)) {
+    bru.runner.stopExecution();
+    throw new Error("Plan generation requires the goal and document IDs returned by prior requests.");
+  }
+  req.setBody({ goal_id: goalId, document_ids: [documentId] });
+}
+
+body:json {
+  {}
+}
+
+assert {
+  res.status: eq 202
+  res.body.status: eq "PROCESSING"
+  res.body.id: isDefined
+}
+
+tests {
+  test("plan generation is accepted once with a runtime ID", function() {
+    const plan = res.body;
+    expect(Number.isSafeInteger(plan.id)).to.equal(true);
+    expect(plan.status).to.equal("PROCESSING");
+    expect(plan.error_message).to.equal("");
+    bru.setVar("planId", plan.id);
+  });
+}

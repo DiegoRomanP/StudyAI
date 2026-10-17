@@ -30,6 +30,8 @@ class OllamaDefinition(ProviderDefinition):
         requires_api_key=False,
         supports_model_discovery=True,
         supports_custom_base_url=False,
+        # The UI offers only installed models from discovery (no free-text model IDs).
+        allows_custom_model=False,
         key_placeholder="No requiere clave",
     )
 

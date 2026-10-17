@@ -1,0 +1,63 @@
+:root {
+  color-scheme: dark;
+
+  /* StudyAI's night-water palette, expressed as RGB channels for Tailwind opacity utilities. */
+  --color-canvas: 8 13 28;
+  --color-surface-paper: 16 26 48;
+  --color-surface-elevated: 23 36 64;
+  --color-surface-muted: 29 43 68;
+  --color-surface-subtle: 18 30 54;
+  --color-surface-action-subtle: 28 45 78;
+  --color-surface-success: 18 46 57;
+  --color-surface-warning: 54 44 24;
+  --color-surface-error: 56 29 43;
+
+  --color-text-primary: 246 248 255;
+  --color-text-muted: 158 173 201;
+  --color-text-on-action: 8 13 28;
+
+  --color-action-primary: 81 120 255;
+  --color-action-text: 169 145 255;
+  --color-action-hover: 97 217 242;
+  --color-focus: 97 217 242;
+  --color-line: 48 65 94;
+  --color-line-strong: 73 94 128;
+  --color-control-border: 108 131 171;
+
+  --color-state-success: 97 217 242;
+  --color-state-warning: 232 185 101;
+  --color-state-error: 255 139 154;
+
+  --font-display: "Manrope", "Segoe UI", sans-serif;
+  --font-ui: "Inter", "Segoe UI", sans-serif;
+  --font-reading: "Inter", "Segoe UI", sans-serif;
+  --font-size-body: 1rem;
+  --font-size-small: 0.875rem;
+  --font-size-caption: 0.75rem;
+  --line-height-ui: 1.5;
+  --line-height-reading: 1.65;
+  --measure-reading: 70ch;
+
+  --space-study-1: 0.5rem;
+  --space-study-2: 0.75rem;
+  --space-study-3: 1rem;
+  --space-study-4: 1.5rem;
+  --space-study-5: 2rem;
+  --space-study-6: 3rem;
+
+  --radius-control: 0.75rem;
+  --radius-surface: 1.25rem;
+  --radius-feature: 1.75rem;
+
+  --surface-glass: rgb(23 36 64 / 82%);
+  --border-glass: rgb(255 255 255 / 12%);
+  --shadow-flow: 0 24px 80px rgb(0 0 0 / 32%);
+  --gradient-flow: linear-gradient(135deg, #A991FF 0%, #5178FF 55%, #61D9F2 100%);
+  --gradient-flow-soft: linear-gradient(135deg, rgb(169 145 255 / 16%) 0%, rgb(81 120 255 / 14%) 55%, rgb(97 217 242 / 12%) 100%);
+  --shadow-glow: 0 8px 28px rgb(81 120 255 / 28%);
+
+  --motion-micro: 180ms;
+  --motion-card: 320ms;
+  --motion-page: 420ms;
+  --motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Runtime uses the deterministic mock
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/llm-settings/runtime
+}
+
+assert {
+  res.status: eq 200
+  res.body.source: eq "MOCK"
+  res.body.provider: isNull
+}
+
+tests {
+  test("runtime is MOCK without exposing credentials", function() {
+    expect(res.body.source).to.equal("MOCK");
+    expect(res.body.models).to.have.all.keys("topic_analysis", "session_plan", "session_content");
+    expect(Object.values(res.body.models)).to.deep.equal(["simulado", "simulado", "simulado"]);
+    expect(res.body).not.to.have.property("api_key");
+  });
+}

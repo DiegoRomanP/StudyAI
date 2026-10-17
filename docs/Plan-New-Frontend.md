@@ -4,15 +4,15 @@
 
 **Arquitectura:** integración incremental sobre React 18 + TypeScript + Vite + Tailwind 3. Las páginas compondrán componentes reutilizables; la coordinación de operaciones estará en hooks; las llamadas al servidor seguirán pasando por TanStack Query y el cliente Axios tipado.
 
-**Estado:** plan propuesto. La implementación y las pruebas descritas a continuación son actividades futuras.
+**Estado (2026-10-17):** A08–A13 implementadas y verificadas mediante el plan ODD `odd/tasks/studyai-fluid-learning.md` (commits `e207aba`…`57e536a`; detalle en cada actividad). La landing pública, la demo simulada y la navegación del mockup se añadieron por decisión del usuario (T09, T15). A14–A18 se cubren en parte con el E2E del recorrido completo (`e2e/smoke/study-flow.spec.ts`) y la revisión responsive de T10; la paridad con Penpot, A01, `PEN-03` y las decisiones de la sección 8 siguen sin aprobación formal. Historial anterior: integración incremental. A01 tiene hallazgos Dev-Reviewer `CAMBIOS REQUERIDOS`; A02–A04 están implementadas y aprobadas técnicamente; A05 está aprobada técnicamente, con diseño/Penpot pendiente; A06 está aprobada técnicamente y committed en `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. El follow-up A07 fue aprobado técnicamente por Dev-Reviewer en su segundo pase (2026-09-30). La base está committed en `5ecad50b7c006b4cc0b99157b66ee1736cc699b1`; la corrección posterior aún no tiene commit. Las verificaciones del árbol corregido posterior a esa base incluyen 107 Vitest, runner 33/33 y QA integrado 78/78 con runtime `MOCK`; no se atribuyen al commit `5ecad50`. La validación cliente de procedencia `GET`/`POST` es provisional y la carrera backend sigue pendiente. La revisión visual/Penpot, A01, `PEN-03` y las dos decisiones de producto de la sección 8 siguen sin aprobación. A08–A18 siguen pendientes y no se adelantan en esta actualización.
 
 ## 1. Hallazgos que condicionan el trabajo
 
-Contrasté la especificación con el código actual y consulté Penpot y la documentación de las herramientas.
+El siguiente apartado conserva el **diagnóstico previo a la implementación de A03–A06**: los hallazgos y consecuencias describen la línea base con la que se redactó el plan, no necesariamente el estado actual del worktree. El avance y el estado vigentes se indican en cada actividad.
 
-| Hallazgo verificado | Consecuencia para el plan |
+| Hallazgo verificado en el diagnóstico previo | Consecuencia registrada entonces |
 |---|---|
-| `/` todavía redirige a `/documents`. | Hay que implementar el inicio unificado y conservar las rutas especializadas. |
+| Antes de A06, `/` redirigía a `/documents`; A06 ya implementó en `/` la página de Inicio (`HomePage`). | En la línea base se identificó implementar Inicio y conservar las rutas especializadas. |
 | Penpot contiene páginas de escritorio, móvil y tablet. En escritorio hay 17 tableros, incluidos inicio de primera visita/regreso y configuración contextual. | El trabajo comienza con un inventario y un mapeo de pantallas, estados y componentes. |
 | La revisión global final del prototipo quedó pendiente en la sesión anterior. | Debe comprobarse antes de aprobar la referencia visual de implementación. |
 | Los documentos se consultan cada 2 segundos mientras hay `PENDING`; el detalle del plan cada 3 segundos mientras está `PROCESSING`. | Las pruebas deben comprobar estados asíncronos y detener la espera por condiciones reales. |
@@ -76,7 +76,7 @@ Para esta aplicación con polling se esperarán elementos, respuestas y estados 
 
 ## 3. Organización de archivos propuesta
 
-Las rutas nuevas de esta sección son propuestas, no archivos existentes.
+**Estado de la tabla tras A06:** no es una lista de archivos inexistentes. Combina archivos ya creados o modificados durante A03–A06 con propuestas aún pendientes (A07+); la columna «Crear o modificar» contempla ambos casos. Los checks y el estado de cada actividad indican qué ya existe y qué queda por implementar.
 
 | Área | Crear o modificar | Responsabilidad |
 |---|---|---|
@@ -135,20 +135,22 @@ Cada actividad funcional seguirá: **test que demuestra el comportamiento → ej
 
 **Criterio de salida:** toda pantalla del recorrido tiene referencia identificada; los estados faltantes tienen una definición funcional antes de implementarse.
 
+> **Estado A01:** los entregables documentales están presentes, pero Dev-Reviewer devolvió `CAMBIOS REQUERIDOS`; A01 no está aprobada. Quedan pendientes la definición del CTA deshabilitado y el tratamiento de contenido largo, la contención visual (solo parcial) y la reproducibilidad de extractos históricos. Penpot no está autenticado en esta sesión y no se afirma una revisión nueva del canvas. Los hallazgos están registrados en [`frontend-integration/design-map.md`](frontend-integration/design-map.md) y [`frontend-integration/acceptance-matrix.md`](frontend-integration/acceptance-matrix.md); no se modifican esos entregables en el ciclo A06.
+
 ## A02. Capturar la línea base técnica y funcional
 
 **Dependencias:** A01 para las comparaciones de diseño; el baseline técnico puede prepararse antes.
 
 **Entregable:** `docs/frontend-integration/baseline.md`
 
-- [ ] Registrar commit, versiones, configuración relevante y cambios locales preexistentes.
-- [ ] Ejecutar la suite actual del frontend y del backend.
-- [ ] Registrar fallos y advertencias existentes sin atribuirlos al rediseño.
-- [ ] Recorrer el flujo actual con datos sintéticos: documento → meta → plan → sesión → quiz → dashboard.
-- [ ] Capturar escritorio y móvil, navegación, errores de consola y acceso a sesiones completadas.
-- [ ] Registrar tamaño de JS/CSS de producción y condiciones de medición.
-- [ ] Añadir en `src/__tests__/queries.test.tsx` una prueba que confirme que `{ goalId, documentIds }` llega a `api.generatePlan(goalId, documentIds)` sin modificar IDs.
-- [ ] Caracterizar los problemas observados de resultado del quiz e invalidación de caché.
+- [x] Registrar commit, versiones, configuración relevante y cambios locales preexistentes.
+- [x] Ejecutar la suite actual del frontend y del backend.
+- [x] Registrar fallos y advertencias existentes sin atribuirlos al rediseño.
+- [x] Recorrer el flujo actual con datos sintéticos: documento → meta → plan → sesión → quiz → dashboard.
+- [x] Capturar escritorio y móvil, navegación, errores de consola y acceso a sesiones completadas.
+- [x] Registrar tamaño de JS/CSS de producción y condiciones de medición.
+- [x] Añadir en `src/__tests__/queries.test.tsx` una prueba que confirme que `{ goalId, documentIds }` llega a `api.generatePlan(goalId, documentIds)` sin modificar IDs.
+- [x] Caracterizar los problemas observados de resultado del quiz e invalidación de caché.
 
 **Comandos desde `frontend/`:**
 ```bash
@@ -164,6 +166,8 @@ python -m pytest -q
 
 **Criterio de salida:** baseline reproducible y lista explícita de problemas previos.
 
+> **Estado A02:** completada y aprobada por Dev-Reviewer en el commit `cc3f115` (`test(frontend): capture A02 integration baseline`). Línea base, suites, advertencias, recorrido, capturas y prueba de contrato están en [`frontend-integration/baseline.md`](frontend-integration/baseline.md); la verificación documentada incluye `npm run lint`, `npm test`, `npm run build` y `python -m pytest -q` desde sus módulos.
+
 ## A03. Crear el entorno aislado de QA
 
 **Dependencias:** A02.
@@ -176,25 +180,27 @@ python -m pytest -q
 `frontend/vite.config.ts`  
 `.gitignore`
 
-- [ ] Incorporar versiones fijadas de Playwright Test y Bruno CLI; fijar inicialmente Bruno a la versión verificada, `4.2.0`.
-- [ ] Crear scripts `test:e2e`, `test:api`, `test:qa` y `test:qa:types`.
-- [ ] Crear un directorio temporal único por ejecución.
-- [ ] Arrancar Uvicorn con base de datos, uploads y vector store exclusivos de esa ejecución.
-- [ ] Forzar `ANTHROPIC_API_KEY=""` y una base nueva sin credenciales activas para el perfil demo.
-- [ ] Utilizar un entorno Python con dependencias core, para evitar descargas de modelos durante el smoke demo.
-- [ ] Usar puertos QA separados: propuesta backend `8002` y frontend `4173`.
-- [ ] Configurar `CORS_ORIGINS` y `VITE_API_URL` de forma coherente; esta última debe estar definida al construir el frontend.
-- [ ] Servir el build de producción para las pruebas finales.
-- [ ] Comprobar `/health` y la disponibilidad del frontend antes de lanzar pruebas.
-- [ ] Fallar si los puertos están ocupados; no reutilizar silenciosamente los servidores de desarrollo.
-- [ ] Cerrar procesos en éxito, fallo o interrupción; conservar reportes y limpiar datos temporales.
-- [ ] Configurar inicialmente `workers: 1` y `retries: 0`, por el usuario demo compartido.
-- [ ] Limitar Vitest a pruebas bajo `src/` para que no recoja los archivos de Playwright.
-- [ ] Añadir typecheck específico para configuración, helpers y tests E2E.
+- [x] Incorporar versiones fijadas de Playwright Test y Bruno CLI; fijar inicialmente Bruno a la versión verificada, `4.2.0`.
+- [x] Crear scripts `test:e2e`, `test:api`, `test:qa` y `test:qa:types`.
+- [x] Crear un directorio temporal único por ejecución.
+- [x] Arrancar Uvicorn con base de datos, uploads y vector store exclusivos de esa ejecución.
+- [x] Forzar `ANTHROPIC_API_KEY=""` y una base nueva sin credenciales activas para el perfil demo.
+- [x] Utilizar un entorno Python con dependencias core, para evitar descargas de modelos durante el smoke demo.
+- [x] Usar puertos QA separados: propuesta backend `8002` y frontend `4173`.
+- [x] Configurar `CORS_ORIGINS` y `VITE_API_URL` de forma coherente; esta última debe estar definida al construir el frontend.
+- [x] Servir el build de producción para las pruebas finales.
+- [x] Comprobar `/health` y la disponibilidad del frontend antes de lanzar pruebas.
+- [x] Fallar si los puertos están ocupados; no reutilizar silenciosamente los servidores de desarrollo.
+- [x] Cerrar procesos en éxito, fallo o interrupción; conservar reportes y limpiar datos temporales.
+- [x] Configurar inicialmente `workers: 1` y `retries: 0`, por el usuario demo compartido.
+- [x] Limitar Vitest a pruebas bajo `src/` para que no recoja los archivos de Playwright.
+- [x] Añadir typecheck específico para configuración, helpers y tests E2E.
 
 **Prueba del propio entorno:** un smoke consulta salud y abre la aplicación; al finalizar, los procesos QA terminan y los datos de desarrollo permanecen intactos.
 
 **Criterio de salida:** otro desarrollador puede ejecutar QA desde un checkout limpio siguiendo instrucciones versionadas.
+
+> **Estado A03:** completada y aprobada por Dev-Reviewer en el commit `46bebfa` (`test(frontend): add isolated A03 QA harness`). La receta reproducible, aislamiento, variables, procesos, reportes y alcance se documentan en [`frontend-integration/qa.md`](frontend-integration/qa.md); incluye `npm run test:qa:types`, `test:api`, `test:e2e`, `test:qa` y `test:qa:runner`.
 
 ## A04. Crear el smoke HTTP de Bruno
 
@@ -202,16 +208,16 @@ python -m pytest -q
 
 **Ubicación:** `frontend/bruno/smoke/`
 
-- [ ] Crear entorno `qa` con `baseUrl` y parámetros de espera sin secretos.
-- [ ] Crear fixture Markdown sintético compartido por Bruno y Playwright.
-- [ ] Implementar requests ordenadas, cada una con assertions de estado HTTP y contenido.
-- [ ] Encadenar IDs mediante variables de ejecución, nunca IDs fijos.
-- [ ] Implementar polling acotado para indexación y generación.
-- [ ] Fallar inmediatamente ante `FAILED`.
-- [ ] Fallar si se agota la espera; terminar una colección no debe confundirse con éxito.
-- [ ] Consultar todas las sesiones del plan y verificar su pertenencia.
-- [ ] Enviar un quiz una sola vez y comprobar su efecto en sesión y dashboard.
-- [ ] Eliminar los recursos creados y verificar el resultado.
+- [x] Crear entorno `qa` con `baseUrl` y parámetros de espera sin secretos.
+- [x] Crear fixture Markdown sintético compartido por Bruno y Playwright.
+- [x] Implementar requests ordenadas, cada una con assertions de estado HTTP y contenido.
+- [x] Encadenar IDs mediante variables de ejecución, nunca IDs fijos.
+- [x] Implementar polling acotado para indexación y generación.
+- [x] Fallar inmediatamente ante `FAILED`.
+- [x] Fallar si se agota la espera; terminar una colección no debe confundirse con éxito.
+- [x] Consultar todas las sesiones del plan y verificar su pertenencia.
+- [x] Enviar un quiz una sola vez y comprobar su efecto en sesión y dashboard.
+- [x] Eliminar los recursos creados y verificar el resultado.
 
 **Secuencia mínima:**
 
@@ -235,27 +241,33 @@ python -m pytest -q
 
 **Criterio de salida:** el flujo backend funciona por HTTP real y produce reporte Bruno con salida `0`.
 
+> **Estado A04:** completada y aprobada por Dev-Reviewer en el commit `0e01e89` (`test(frontend): add A04 Bruno HTTP study smoke`). La colección real de 21 requests, 51 aserciones y 21 tests está en `frontend/bruno/smoke/`; `frontend-integration/qa.md` documenta la respuesta real `202 → READY`, el envío único y la limpieza. El mantenimiento del runner en A06 cambia solo serialización/deadlines de tests; no relaja el polling de A04 ni su gate fail-closed.
+
 ## A05. Implementar tokens y componentes base
 
 **Dependencias:** A01–A03.
 
 **Archivos:** tokens, CSS global, Tailwind, `components/ui.tsx`, `AsyncState.tsx`.
 
-- [ ] Mapear tokens de Penpot a variables CSS semánticas y utilidades Tailwind.
-- [ ] Resolver y documentar cualquier diferencia con los valores candidatos de la especificación.
-- [ ] Definir tipografía, espaciado, bordes, superficies, acciones y estados.
-- [ ] Implementar botón, enlace con aspecto de botón, input, select, avisos y estado de actividad.
-- [ ] Mantener semántica correcta; evitar botones dentro de enlaces.
-- [ ] Incorporar foco visible, áreas táctiles objetivo de 44 × 44 px y movimiento reducido.
-- [ ] Crear estados de carga, vacío y error con acciones contextuales.
-- [ ] Diferenciar error inicial de error al actualizar datos ya disponibles.
-- [ ] Reservar el espacio necesario en skeletons.
+> Estado: aprobada técnicamente en el commit `c703f8f`; validación de diseño/Penpot pendiente. Las casillas `[x]` registran entregables implementados, no aprobación de A01 ni paridad visual.
+
+- [x] Mapear valores observados del handoff Penpot a variables CSS semánticas y utilidades Tailwind.
+- [x] Resolver/documentar las decisiones de implementación y las diferencias/candidatos que siguen pendientes de validación en Penpot.
+- [x] Definir tipografía, espaciado, bordes, superficies, acciones y estados.
+- [x] Implementar botón, enlace con aspecto de botón, input, select, avisos y estado de actividad.
+- [x] Mantener semántica correcta; el enlace con aspecto de botón es un `<a>` y se migraron los dos enlaces con botones anidados del estado completado de `SessionPage`.
+- [x] Incorporar foco visible, áreas táctiles objetivo de 44 × 44 px y movimiento reducido.
+- [x] Crear estados de carga, vacío y error con acciones contextuales.
+- [x] Diferenciar error inicial de error al actualizar datos ya disponibles, conservando el contenido previo.
+- [x] Reservar el espacio necesario en skeletons con dimensiones explícitas.
 
 **Pruebas:** `src/__tests__/ui.test.tsx`
 
-Comprobar nombres accesibles, estado deshabilitado, acción de reintento y que un error de actualización no oculta datos existentes.
+Comprobar etiquetas y estado deshabilitado de `Input`/`Select`, navegación semántica de `ButtonLink`, skeleton, vacío, error inicial/reintento y conservación del contenido al reintentar una actualización. `e2e/smoke/a05-focus.spec.ts` verifica con teclado y estilos computados el foco de controles legacy a 320/390 px, el enlace de navegación en escritorio y el comportamiento con hover/movimiento reducido.
 
 **Criterio de salida:** los componentes base se pueden usar en todas las páginas sin introducir lógica de negocio.
+
+> A05 fue aprobada técnicamente por Dev-Reviewer. La revisión visual y la paridad con Penpot siguen pendientes (Penpot no autenticado; A01 conserva hallazgos `CAMBIOS REQUERIDOS`). No se certifica contraste WCAG ni se cierra A01. Véase [`frontend-integration/a05-tokens-and-components.md`](frontend-integration/a05-tokens-and-components.md).
 
 ## A06. Integrar navegación responsive y rutas
 
@@ -263,46 +275,58 @@ Comprobar nombres accesibles, estado deshabilitado, acción de reintento y que u
 
 **Archivos:** `AppShell.tsx`, `App.tsx`, `NotFoundPage.tsx`.
 
-- [ ] Añadir Inicio a la navegación.
-- [ ] Implementar menú móvil con botón, nombre accesible y `aria-expanded`.
-- [ ] Gestionar apertura, cierre, Escape y devolución del foco.
-- [ ] Si el panel es modal, mantener foco dentro y evitar interacción con el fondo.
-- [ ] Añadir “Saltar al contenido”, `main` y ruta activa mediante `aria-current`.
-- [ ] Conservar todas las rutas existentes.
-- [ ] Añadir 404 útil con vuelta al Inicio.
-- [ ] Validar identificadores de URL antes de consultar; evitar solicitudes con `NaN`.
-- [ ] Gestionar títulos de página y foco al cambiar de ruta.
+- [x] Añadir Inicio a la navegación.
+- [x] Implementar menú móvil con botón, nombre accesible y `aria-expanded`.
+- [x] Gestionar apertura, cierre, Escape y devolución del foco.
+- [x] Usar un panel no modal en el flujo; el fondo sigue interactivo y no requiere trampa de foco ni `inert`.
+- [x] Añadir “Saltar al contenido”, `main` y ruta activa mediante `aria-current`.
+- [x] Conservar todas las rutas existentes.
+- [x] Añadir 404 útil con vuelta al Inicio.
+- [x] Validar identificadores de URL antes de consultar; evitar solicitudes con `NaN`.
+- [x] Gestionar títulos de página y foco al cambiar de ruta.
 
-**Pruebas:** `AppShell.test.tsx`, `AppRoutes.test.tsx`.
+**Pruebas:** `AppShell.test.tsx`, `AppRoutes.test.tsx`, `e2e/smoke/a06-navigation.spec.ts` (rutas, datos sintéticos y navegación a 320 px) y `e2e/smoke/app-load.spec.ts` (GET real de Documentos desde el preview, sin interceptores API).
 
 **Criterio de salida:** todas las secciones son alcanzables con teclado y a 320 px, incluido un enlace directo a plan o sesión.
+
+> **Estado A06:** aprobada técnicamente por Dev-Reviewer tras dos ciclos de corrección y una tercera revisión independiente; commit `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. La evidencia registrada incluye 75 pruebas Vitest; `test:qa:runner`, 33/33 en dos ejecuciones; y `test:qa`, 78/78 checks (API 3 + E2E 3 + Bruno 72), runtime `MOCK` y E2E a 320 px con retrasos controlados de 500 ms en GETs del backend. Las casillas reflejan entregables implementados y esta aprobación es técnica, no visual. `PEN-03` sigue sin decisión: no se aprobó un sexto tab/barra inferior persistente. Las dos decisiones de la sección 8 también siguen sin respuesta; el menú móvil no implica aprobación visual ni paridad con Penpot. Véase [`frontend-integration/a06-responsive-navigation.md`](frontend-integration/a06-responsive-navigation.md).
 
 ## A07. Extraer subida de documentos y plantillas compartidas
 
 **Dependencias:** A05.
 
-**Archivos:** componentes de documentos/metas, `goalTemplates.ts`, `documentValidation.ts`, `DocumentsPage.tsx`, `GoalsPage.tsx`.
+**Archivos:** componentes de documentos/metas, `goalTemplates.ts`, `documentValidation.ts`, `DocumentsPage.tsx`, `GoalsPage.tsx`, `PlanPage.tsx`.
 
-- [ ] Extraer una única definición de las tres plantillas actuales.
-- [ ] Mantener que elegir plantilla rellena datos, pero no crea una meta.
-- [ ] Implementar subida por selector nativo y arrastre.
-- [ ] Validar `.pdf`, `.md`, `.markdown`, archivo vacío y tamaño.
-- [ ] Utilizar el límite documentado de `25 × 1024 × 1024` bytes para el perfil actual y mantener el error del servidor como autoridad final.
-- [ ] Conservar carga múltiple y mostrar resultado individual por archivo.
-- [ ] Permitir volver a seleccionar un archivo cuyo intento haya fallado.
-- [ ] Mostrar claramente subida aceptada frente a indexación terminada.
-- [ ] Deshabilitar selección para generación de documentos `PENDING` o `FAILED`.
-- [ ] Mantener gestión, edición y borrado en las páginas completas.
+- [x] Extraer una única definición de las tres plantillas actuales.
+- [x] Mantener que elegir plantilla rellena datos, pero no crea una meta.
+- [x] Implementar subida por selector nativo y arrastre.
+- [x] Validar `.pdf`, `.md`, `.markdown`, archivo vacío y tamaño.
+- [x] Utilizar el límite documentado de `25 × 1024 × 1024` bytes para el perfil actual y mantener el error del servidor como autoridad final.
+- [x] Conservar carga múltiple y mostrar resultado individual por archivo.
+- [x] Permitir volver a seleccionar un archivo cuyo intento haya fallado.
+- [x] Mostrar claramente subida aceptada frente a indexación terminada.
+- [x] Permitir seleccionar solo documentos `INDEXED`; sincronizar la selección cuando un documento cambia de estado o desaparece, exigir al menos un ID actualmente indexado y volver a validarlos contra el estado de caché más reciente justo antes de generar.
+- [x] Distinguir carga inicial, lista vacía, error de lectura y error de actualización; ofrecer reintento manual, conservar datos disponibles y no presentar una lista fallida como vacía.
+- [x] Deshabilitar generación y explicar junto al CTA cuando no hay documentos seleccionados `INDEXED` o la lista falta/falló; no enviar `document_ids: []` ni usar el fallback del backend de “todos los documentos”.
+- [x] Tras recibir `PENDING` del POST de subida, sembrar/actualizar `['documents']` por ID sin perder ni duplicar los demás DTOs, e invalidar después la consulta para revalidar.
+- [x] Si falla el GET tras una subida aceptada, mantener el DTO `PENDING` conocido para el polling automático cada 2 s y mostrar que los datos visibles pueden ser parciales; solo una respuesta exitosa con `INDEXED`/`FAILED` confirma el estado final. Si la lectura sigue fallando, permanecen el aviso y el reintento manual.
+- [x] Marcar como aplicada una plantilla solo después de elegirla; la edición manual del título no se anuncia como selección de plantilla y el tipo `LEARNING` puede seguir siendo el valor por defecto de creación manual.
+- [x] Mantener gestión, edición y borrado en las páginas completas.
 
 **Pruebas:**
 
 - `DocumentUpload.test.tsx`: carga múltiple, error parcial, archivo vacío, límite exacto y límite + 1 byte.
-- `DocumentPicker.test.tsx`: solo `INDEXED` seleccionable.
-- `GoalsPage.test.tsx`: plantilla no persistida, título vacío y creación confirmada.
+- `DocumentPicker.test.tsx` y `PlanPage.test.tsx`: solo `INDEXED` seleccionable, limpieza tras cambio/borrado, procedencia explícita GET/POST, POST `PENDING` no confirma lista, CTA bloqueado con lista no verificada/refetch fallido, protección ante clic obsoleto y payload con solo los IDs aún válidos.
+- `DocumentsPage.test.tsx`, `DocumentUpload.test.tsx` y `queries.test.tsx`: GET inicial y refetch fallidos sin datos previos, cache seed desde POST sin sobrescribir otros documentos ni duplicar el ID, y polling controlado que sobrevive a GET inicial, invalidado y automático fallidos; el siguiente GET a 2 s puede confirmar `INDEXED` o `FAILED`, sin repetir POST, anunciar un terminal antes de confirmarlo ni ocultar el retry durante errores.
+- `GoalsPage.test.tsx`: ninguna plantilla aplicada al inicio, selección explícita, edición manual, plantilla no persistida hasta guardar y creación confirmada.
 
 **Criterio de salida:** Inicio y páginas completas pueden reutilizar las mismas piezas sin duplicar reglas.
 
+> **Estado A07:** aprobada técnicamente por Dev-Reviewer en el segundo pase del follow-up (2026-09-30). Historial: el primer pase del follow-up, también fechado 2026-09-30, solicitó cambios; el veredicto vigente es la aprobación técnica del segundo pase. La base está committed en `5ecad50b7c006b4cc0b99157b66ee1736cc699b1`; la corrección posterior aprobada sigue sin commit. Las verificaciones de esa corrección local posterior a la base —no del commit `5ecad50`— registraron 107 Vitest; lint/build/typecheck QA exit 0; `test:qa:runner` 33/33; API 3/3 + Bruno 21/21 requests y 51/51 assertions; E2E 3/3; QA integrado 78/78, runtime `MOCK`, cleanup confirmado. La corrección representa cada valor de caché como `{ documents, source: GET | POST, revision }`: `useDocuments` etiqueta respuestas GET confirmadas, `useUploadDocument` conserva/actualiza documentos pero marca el cache como POST provisional, y una petición GET iniciada antes de una subida no puede validar una revisión más nueva. `PlanPage` exige fuente GET y estado Query `success` para el empty state/CTA, y vuelve a validar sincrónicamente que los IDs siguen `INDEXED` antes de generar. Los tests con QueryClient y `DocumentPicker` reales cubren GET inicial fallido → POST `PENDING` → GET fallido → retry GET exitoso vacío; GET `[]` confirmado seguido de refetch fallido; conservación del documento/selección previos tras subir otro PENDING; GET en vuelo anterior al POST sin ocultar otros DTOs; y polling a 2 s y 4 s tras errores. Las casillas `[x]` de A07 describen entregables técnicos de las páginas completas y las piezas compartidas: no incluyen la integración Home de A10 ni validación atómica del backend. Los contratos basados en callbacks quedan disponibles para Home, cuya integración se reserva para A10. La validación cliente de procedencia GET/POST es provisional; el backend guarda los `document_ids` recibidos y valida la meta, pero no revalida atómicamente existencia/propiedad/estado `INDEXED` de cada documento al crear el plan, por lo que permanece la carrera. La integración reutiliza los tokens A05 y no afirma paridad visual con Penpot. A01, `PEN-03` y las dos decisiones de la sección 8 siguen abiertas y sin aprobación visual/de producto. A08–A18 siguen pendientes. Véase [`frontend-integration/a07-shared-upload-and-goal-templates.md`](frontend-integration/a07-shared-upload-and-goal-templates.md).
+
 ## A08. Extraer configuración de proveedor para Inicio y Configuración
+
+> **Estado A08 (2026-10-17):** implementada y verificada de forma independiente; commit `e207aba` (ODD T04). `ProviderSetup` reutilizable (variantes avanzada y compacta) en API Keys e Inicio.
 
 **Dependencias:** A05; mantener verdes las pruebas existentes.
 
@@ -326,6 +350,8 @@ Comprobar nombres accesibles, estado deshabilitado, acción de reintento y que u
 **Criterio de salida:** el mismo flujo seguro puede completarse dentro de Inicio y en Configuración.
 
 ## A09. Implementar la coordinación de «Estudiar»
+
+> **Estado A09 (2026-10-17):** implementada en `b4d2dda` (ODD T05, L52) tras una revisión independiente con cambios corregidos. `useStudyStart`: bloqueo síncrono, meta reutilizada, `Idempotency-Key` estable, etapas inciertas meta/plan, error con reintento si el GET del plan falla y opción de dejar de seguir un plan en proceso.
 
 **Dependencias:** A07–A08.
 
@@ -372,6 +398,8 @@ Cubrir doble clic, StrictMode, meta reutilizada, fallo después de guardar meta,
 
 ## A10. Construir Inicio: primera visita y regreso
 
+> **Estado A10 (2026-10-17):** implementada en `b4d2dda` (ODD T05). Inicio en `/inicio` (landing pública en `/`): sesión de hoy real, progreso, repasos SM-2, enfoque Pareto y la configuración en una sola superficie; sin redirección al llegar a READY.
+
 **Dependencias:** A06–A09.
 
 **Archivo:** `HomePage.tsx`.
@@ -396,6 +424,8 @@ Verificar primera visita, regreso, `MOCK`, `ENV`, `USER`, runtime desconocido y 
 
 ## A11. Integrar páginas profundas y coherencia de caché
 
+> **Estado A11 (2026-10-17):** implementada en `e966140` (ODD T06). Detalle del plan con Calendario/Lista por fecha sugerida y la nueva página `/temas` (Pareto). Caché coherente desde T13 (`74f81cb`).
+
 **Dependencias:** A07 y A10.
 
 **Archivos:** páginas de Documentos, Metas, Plan y Detalle; `hooks/queries.ts`.
@@ -415,6 +445,8 @@ Verificar primera visita, regreso, `MOCK`, `ENV`, `USER`, runtime desconocido y 
 **Criterio de salida:** listas, detalle, Inicio y progreso reflejan la misma realidad del servidor después de cada operación.
 
 ## A12. Integrar sesión, quiz y resultado
+
+> **Estado A12 (2026-10-17):** implementada en `74f81cb` (T13: resultado confirmado, flashcards accesibles, reintento, Markdown seguro) y en `576fc15` (ODD T07: opciones A–D, `/practica` de solo lectura y simulacro con `?fase=test`). Revisión independiente con cambios corregidos.
 
 **Dependencias:** A05 y A11.
 
@@ -441,6 +473,8 @@ Incluir quiz vacío, última pregunta, calidad `0`, fallo de envío, resultado v
 **Criterio de salida:** estudio → receso → quiz → resultado funciona con datos reales y sin confirmaciones prematuras.
 
 ## A13. Integrar Dashboard y completar Configuración
+
+> **Estado A13 (2026-10-17):** implementada en `a096ea0` (ODD T08). Estadísticas con 7 días/30 días/Todo, gráfico de área, tabla equivalente y solo métricas reales. Las métricas sin contrato están en [`t12-contract-gaps.md`](frontend-integration/t12-contract-gaps.md).
 
 **Dependencias:** A08 y A12.
 

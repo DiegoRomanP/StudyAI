@@ -1,0 +1,52 @@
+meta {
+  name: Read the first session quiz and prepare valid answers
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/quizzes/{{sessionId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isDefined
+  res.body.questions: isNotEmpty
+}
+
+tests {
+  test("quiz ID is captured separately from session ID and each question gets a DTO-valid answer", function() {
+    const quiz = res.body;
+    const sessionId = bru.getVar("sessionId");
+    let flashcardCount = 0;
+    let multipleChoiceCount = 0;
+
+    expect(Number.isSafeInteger(quiz.id)).to.equal(true);
+    expect(quiz.session_id).to.equal(sessionId);
+    expect(quiz.questions).to.be.an("array").that.is.not.empty;
+
+    const answers = quiz.questions.map((question) => {
+      expect(Number.isSafeInteger(question.id)).to.equal(true);
+      if (question.question_type === "FLASHCARD") {
+        const quality = flashcardCount === 0 ? 0 : 5;
+        flashcardCount += 1;
+        return { question_id: question.id, quality };
+      }
+
+      if (question.question_type === "MULTIPLE_CHOICE") {
+        multipleChoiceCount += 1;
+        expect(question.options).to.be.an("array").that.is.not.empty;
+        expect(question.options).to.include(question.answer);
+        return { question_id: question.id, selected_option: question.answer };
+      }
+
+      throw new Error(`Unsupported quiz question type: ${question.question_type}`);
+    });
+
+    expect(flashcardCount).to.be.above(0);
+    expect(multipleChoiceCount).to.be.above(0);
+    expect(answers).to.have.lengthOf(quiz.questions.length);
+    bru.setVar("quizId", quiz.id);
+    bru.setVar("quizAnswers", answers);
+  });
+}

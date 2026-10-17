@@ -25,6 +25,28 @@ describe("getApiErrorMessage", () => {
     ).toBe("El proveedor rechazó el acceso.");
   });
 
+  it("renders safe typed Gemini provider errors from the live catalog", () => {
+    expect(
+      getApiErrorMessage(
+        {
+          isAxiosError: true,
+          response: {
+            status: 502,
+            data: {
+              detail: "Google Gemini rechazó la clave.",
+              code: "LLM_AUTHENTICATION_FAILED",
+              provider: "GEMINI",
+              upstream_status: 400,
+              retryable: false,
+              retry_after_seconds: null,
+            },
+          },
+        },
+        "No se pudo verificar la clave.",
+      ),
+    ).toBe("Google Gemini rechazó la clave.");
+  });
+
   it.each(["LLM_OUTPUT_LIMIT", "LLM_REFUSED", "LLM_UNSUPPORTED_CONFIGURATION"])("renders the safe %s detail", (code) => {
     expect(
       getApiErrorMessage(

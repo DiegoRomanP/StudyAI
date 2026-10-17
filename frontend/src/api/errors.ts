@@ -31,6 +31,7 @@ const LLM_PROVIDERS = new Set<LLMProviderKey>([
   "NVIDIA",
   "HUGGINGFACE",
   "OLLAMA",
+  "GEMINI",
 ]);
 
 function isLlmErrorCode(code: unknown): code is LLMProviderErrorCode {
@@ -77,4 +78,9 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   }
   if (!error.response) return "No se pudo conectar con el servidor. Inténtalo de nuevo.";
   return fallback;
+}
+
+/** True when the server answered 404: the resource was deleted or never existed. */
+export function isNotFoundError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 404;
 }

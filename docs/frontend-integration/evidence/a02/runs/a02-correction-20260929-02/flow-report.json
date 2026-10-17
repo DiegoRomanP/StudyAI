@@ -1,0 +1,1141 @@
+{
+  "activity": "A02",
+  "run_id": "a02-correction-20260929-02",
+  "started_at_utc": "2026-09-29T19:13:26.655Z",
+  "finished_at_utc": "2026-09-29T19:13:29.367Z",
+  "baseline_commit": "efea4b867770feb2bf3b9ad39e2339208508ccfa",
+  "environment": {
+    "app_origin": "http://127.0.0.1:5174",
+    "api_origin": "http://127.0.0.1:8011",
+    "browser": "Chromium via installed Playwright",
+    "viewport_css_px": {
+      "desktop": {
+        "width": 1440,
+        "height": 1000
+      },
+      "mobile": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    "device_scale_factor": 1,
+    "fixture": {
+      "path": "docs/frontend-integration/evidence/a02/a02-carbon-cycle-synthetic.md",
+      "filename": "a02-carbon-cycle-synthetic.md",
+      "bytes": 335,
+      "sha256": "b2a7e334a06d936e274e539c233672e9bd7e716346630f3b5410d65f5077fc4d"
+    },
+    "storage": "Run-specific temporary SQLite, uploads and vector store; no development data used.",
+    "browser_version": "151.0.7922.34"
+  },
+  "exact_inputs": {
+    "goal": {
+      "goal_type": "LEARNING",
+      "title": "A02 · Carbono sintético",
+      "description": "Aprender ciclo del carbono, fotosíntesis, respiración y reservorios del material sintético."
+    },
+    "quiz_response_rule": "For every flashcard submit quality 5; for every multiple-choice item click the GET /quizzes/{session_id} option equal to that question's answer. The script persists only the selected option index, never prompt/answer text.",
+    "score_rule": "Multiple-choice only: correct / multiple_choice_total * 100, rounded to one decimal; flashcard ratings are submitted but excluded from score."
+  },
+  "steps": [
+    {
+      "index": 1,
+      "name": "open_app_and_check_demo_runtime",
+      "at_utc": "2026-09-29T19:13:26.755Z"
+    },
+    {
+      "index": 2,
+      "name": "upload_fixture_and_wait_until_indexed",
+      "at_utc": "2026-09-29T19:13:27.410Z"
+    },
+    {
+      "index": 3,
+      "name": "create_goal_with_exact_synthetic_input",
+      "at_utc": "2026-09-29T19:13:27.529Z",
+      "goal_type": "LEARNING",
+      "title": "A02 · Carbono sintético"
+    },
+    {
+      "index": 4,
+      "name": "generate_plan_and_wait_for_ready",
+      "at_utc": "2026-09-29T19:13:27.656Z",
+      "goal_id": 1,
+      "document_ids": [
+        1
+      ]
+    },
+    {
+      "index": 5,
+      "name": "open_ready_session_and_load_quiz",
+      "at_utc": "2026-09-29T19:13:27.838Z",
+      "plan_id": 1,
+      "session_id": 1
+    },
+    {
+      "index": 6,
+      "name": "answer_every_flashcard_and_multiple_choice_question",
+      "at_utc": "2026-09-29T19:13:28.022Z",
+      "session_id": 1,
+      "quiz_id": 1,
+      "question_count": 10
+    },
+    {
+      "index": 7,
+      "name": "open_dashboard_after_submit",
+      "at_utc": "2026-09-29T19:13:28.800Z"
+    },
+    {
+      "index": 8,
+      "name": "verify_completed_status_and_plan_badge_link",
+      "at_utc": "2026-09-29T19:13:29.048Z"
+    },
+    {
+      "index": 9,
+      "name": "click_completed_session_link_and_capture_reopened_session",
+      "at_utc": "2026-09-29T19:13:29.160Z"
+    }
+  ],
+  "id_correlations": {
+    "document_id": 1,
+    "goal_id": 1,
+    "plan_id": 1,
+    "plan_generation_request": {
+      "goal_id": 1,
+      "document_ids": [
+        1
+      ]
+    },
+    "plan_status_after_poll": "READY",
+    "session_ids": [
+      1,
+      2,
+      3
+    ],
+    "selected_session_id": 1,
+    "quiz": {
+      "session_id_used_in_get_path": 1,
+      "quiz_id_returned_by_get": 1,
+      "quiz_response_session_id": 1,
+      "quiz_id_and_session_id_numerically_equal": true,
+      "submit_path_uses_quiz_id": "/quizzes/1/submit"
+    }
+  },
+  "quiz_calculation": {
+    "answers_submitted": [
+      {
+        "question_id": 1,
+        "type": "FLASHCARD",
+        "quality": 5
+      },
+      {
+        "question_id": 2,
+        "type": "FLASHCARD",
+        "quality": 5
+      },
+      {
+        "question_id": 3,
+        "type": "FLASHCARD",
+        "quality": 5
+      },
+      {
+        "question_id": 4,
+        "type": "FLASHCARD",
+        "quality": 5
+      },
+      {
+        "question_id": 5,
+        "type": "FLASHCARD",
+        "quality": 5
+      },
+      {
+        "question_id": 6,
+        "type": "MULTIPLE_CHOICE",
+        "selected_option_index": 0
+      },
+      {
+        "question_id": 7,
+        "type": "MULTIPLE_CHOICE",
+        "selected_option_index": 0
+      },
+      {
+        "question_id": 8,
+        "type": "MULTIPLE_CHOICE",
+        "selected_option_index": 0
+      },
+      {
+        "question_id": 9,
+        "type": "MULTIPLE_CHOICE",
+        "selected_option_index": 0
+      },
+      {
+        "question_id": 10,
+        "type": "MULTIPLE_CHOICE",
+        "selected_option_index": 0
+      }
+    ],
+    "question_count": 10,
+    "flashcards_total": 5,
+    "flashcards_all_submitted": true,
+    "multiple_choice_total": 5,
+    "multiple_choice_correct": 5,
+    "independently_computed_score_percent": 100,
+    "server_score_percent": 100,
+    "calculation": "correct multiple-choice / multiple-choice total * 100, rounded to one decimal; flashcard self-ratings are not in this score"
+  },
+  "post_completion": {
+    "plan_id": 1,
+    "plan_status_after_submit": "READY",
+    "session_id": 1,
+    "get_session_status": "COMPLETED",
+    "get_session_plan_id": 1,
+    "plan_detail_badge_visible": true,
+    "session_link_href": "/session/1",
+    "reopened_phase": "Estudio",
+    "timer_or_quiz_restoration_claimed": false
+  },
+  "runtime_checks": {
+    "health": {
+      "status_code": 200,
+      "body_status": "ok"
+    },
+    "llm_runtime_source": "MOCK"
+  },
+  "network_events": [
+    {
+      "sequence": 1,
+      "kind": "request",
+      "request_sequence": 1,
+      "elapsed_ms": 718,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/documents",
+      "method": "GET"
+    },
+    {
+      "sequence": 2,
+      "kind": "request",
+      "request_sequence": 2,
+      "elapsed_ms": 720,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/health",
+      "method": "GET"
+    },
+    {
+      "sequence": 3,
+      "kind": "request",
+      "request_sequence": 3,
+      "elapsed_ms": 720,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/llm-settings/runtime",
+      "method": "GET"
+    },
+    {
+      "sequence": 4,
+      "kind": "response",
+      "request_sequence": 2,
+      "elapsed_ms": 751,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/health",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    {
+      "sequence": 5,
+      "kind": "response",
+      "request_sequence": 3,
+      "elapsed_ms": 754,
+      "step": "open_app_and_check_demo_runtime",
+      "path": "/llm-settings/runtime",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "source": "MOCK"
+      }
+    },
+    {
+      "sequence": 6,
+      "kind": "response",
+      "request_sequence": 1,
+      "elapsed_ms": 763,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents",
+      "method": "GET",
+      "status_code": 200,
+      "body": []
+    },
+    {
+      "sequence": 7,
+      "kind": "request",
+      "request_sequence": 7,
+      "elapsed_ms": 790,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/upload",
+      "method": "POST"
+    },
+    {
+      "sequence": 8,
+      "kind": "response",
+      "request_sequence": 7,
+      "elapsed_ms": 798,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/upload",
+      "method": "POST",
+      "status_code": 201,
+      "body": {
+        "id": 1,
+        "filename": "a02-carbon-cycle-synthetic.md",
+        "status": "PENDING",
+        "file_type": "md"
+      }
+    },
+    {
+      "sequence": 9,
+      "kind": "request",
+      "request_sequence": 9,
+      "elapsed_ms": 799,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents",
+      "method": "GET"
+    },
+    {
+      "sequence": 10,
+      "kind": "response",
+      "request_sequence": 9,
+      "elapsed_ms": 803,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents",
+      "method": "GET",
+      "status_code": 200,
+      "body": [
+        {
+          "id": 1,
+          "filename": "a02-carbon-cycle-synthetic.md",
+          "status": "INDEXED"
+        }
+      ]
+    },
+    {
+      "sequence": 11,
+      "kind": "request",
+      "request_sequence": 11,
+      "elapsed_ms": 827,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 12,
+      "kind": "response",
+      "request_sequence": 11,
+      "elapsed_ms": 831,
+      "step": "upload_fixture_and_wait_until_indexed",
+      "path": "/documents/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "filename": "a02-carbon-cycle-synthetic.md",
+        "status": "INDEXED",
+        "file_type": "md"
+      }
+    },
+    {
+      "sequence": 13,
+      "kind": "request",
+      "request_sequence": 13,
+      "elapsed_ms": 909,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "GET"
+    },
+    {
+      "sequence": 14,
+      "kind": "response",
+      "request_sequence": 13,
+      "elapsed_ms": 915,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "GET",
+      "status_code": 200
+    },
+    {
+      "sequence": 15,
+      "kind": "request",
+      "request_sequence": 15,
+      "elapsed_ms": 952,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "POST",
+      "body": {
+        "goal_type": "LEARNING",
+        "title": "A02 · Carbono sintético",
+        "description_length": 91
+      }
+    },
+    {
+      "sequence": 16,
+      "kind": "response",
+      "request_sequence": 15,
+      "elapsed_ms": 967,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "POST",
+      "status_code": 201,
+      "body": {
+        "id": 1,
+        "goal_type": "LEARNING",
+        "title": "A02 · Carbono sintético"
+      }
+    },
+    {
+      "sequence": 17,
+      "kind": "request",
+      "request_sequence": 17,
+      "elapsed_ms": 968,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "GET"
+    },
+    {
+      "sequence": 18,
+      "kind": "response",
+      "request_sequence": 17,
+      "elapsed_ms": 971,
+      "step": "create_goal_with_exact_synthetic_input",
+      "path": "/goals",
+      "method": "GET",
+      "status_code": 200
+    },
+    {
+      "sequence": 19,
+      "kind": "request",
+      "request_sequence": 19,
+      "elapsed_ms": 1039,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/goals",
+      "method": "GET"
+    },
+    {
+      "sequence": 20,
+      "kind": "request",
+      "request_sequence": 20,
+      "elapsed_ms": 1039,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/documents",
+      "method": "GET"
+    },
+    {
+      "sequence": 21,
+      "kind": "request",
+      "request_sequence": 21,
+      "elapsed_ms": 1039,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans",
+      "method": "GET"
+    },
+    {
+      "sequence": 22,
+      "kind": "response",
+      "request_sequence": 21,
+      "elapsed_ms": 1049,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans",
+      "method": "GET",
+      "status_code": 200
+    },
+    {
+      "sequence": 23,
+      "kind": "response",
+      "request_sequence": 20,
+      "elapsed_ms": 1050,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/documents",
+      "method": "GET",
+      "status_code": 200,
+      "body": [
+        {
+          "id": 1,
+          "filename": "a02-carbon-cycle-synthetic.md",
+          "status": "INDEXED"
+        }
+      ]
+    },
+    {
+      "sequence": 24,
+      "kind": "response",
+      "request_sequence": 19,
+      "elapsed_ms": 1051,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/goals",
+      "method": "GET",
+      "status_code": 200
+    },
+    {
+      "sequence": 25,
+      "kind": "request",
+      "request_sequence": 25,
+      "elapsed_ms": 1121,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/generate",
+      "method": "POST",
+      "body": {
+        "goal_id": 1,
+        "document_ids": [
+          1
+        ]
+      }
+    },
+    {
+      "sequence": 26,
+      "kind": "response",
+      "request_sequence": 25,
+      "elapsed_ms": 1135,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/generate",
+      "method": "POST",
+      "status_code": 202,
+      "body": {
+        "id": 1,
+        "status": "PROCESSING"
+      }
+    },
+    {
+      "sequence": 27,
+      "kind": "request",
+      "request_sequence": 27,
+      "elapsed_ms": 1135,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans",
+      "method": "GET"
+    },
+    {
+      "sequence": 28,
+      "kind": "response",
+      "request_sequence": 27,
+      "elapsed_ms": 1152,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans",
+      "method": "GET",
+      "status_code": 200
+    },
+    {
+      "sequence": 29,
+      "kind": "request",
+      "request_sequence": 29,
+      "elapsed_ms": 1153,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 30,
+      "kind": "response",
+      "request_sequence": 29,
+      "elapsed_ms": 1158,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "status": "READY",
+        "goal_id": 1,
+        "document_ids": [
+          1
+        ],
+        "sessions": [
+          {
+            "id": 1,
+            "order_index": 0,
+            "status": "PENDING"
+          },
+          {
+            "id": 2,
+            "order_index": 1,
+            "status": "PENDING"
+          },
+          {
+            "id": 3,
+            "order_index": 2,
+            "status": "PENDING"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 31,
+      "kind": "request",
+      "request_sequence": 31,
+      "elapsed_ms": 1178,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 32,
+      "kind": "response",
+      "request_sequence": 31,
+      "elapsed_ms": 1182,
+      "step": "generate_plan_and_wait_for_ready",
+      "path": "/plans/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "status": "READY",
+        "goal_id": 1,
+        "document_ids": [
+          1
+        ],
+        "sessions": [
+          {
+            "id": 1,
+            "order_index": 0,
+            "status": "PENDING"
+          },
+          {
+            "id": 2,
+            "order_index": 1,
+            "status": "PENDING"
+          },
+          {
+            "id": 3,
+            "order_index": 2,
+            "status": "PENDING"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 33,
+      "kind": "request",
+      "request_sequence": 33,
+      "elapsed_ms": 1220,
+      "step": "open_ready_session_and_load_quiz",
+      "path": "/sessions/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 34,
+      "kind": "response",
+      "request_sequence": 33,
+      "elapsed_ms": 1232,
+      "step": "open_ready_session_and_load_quiz",
+      "path": "/sessions/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "plan_id": 1,
+        "status": "PENDING",
+        "completed_at_present": false,
+        "has_material": true
+      }
+    },
+    {
+      "sequence": 35,
+      "kind": "request",
+      "request_sequence": 35,
+      "elapsed_ms": 1354,
+      "step": "open_ready_session_and_load_quiz",
+      "path": "/quizzes/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 36,
+      "kind": "response",
+      "request_sequence": 35,
+      "elapsed_ms": 1366,
+      "step": "open_ready_session_and_load_quiz",
+      "path": "/quizzes/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "session_id": 1,
+        "question_count": 10,
+        "question_types": {
+          "FLASHCARD": 5,
+          "MULTIPLE_CHOICE": 5
+        },
+        "questions": [
+          {
+            "id": 1,
+            "type": "FLASHCARD",
+            "option_count": 0
+          },
+          {
+            "id": 2,
+            "type": "FLASHCARD",
+            "option_count": 0
+          },
+          {
+            "id": 3,
+            "type": "FLASHCARD",
+            "option_count": 0
+          },
+          {
+            "id": 4,
+            "type": "FLASHCARD",
+            "option_count": 0
+          },
+          {
+            "id": 5,
+            "type": "FLASHCARD",
+            "option_count": 0
+          },
+          {
+            "id": 6,
+            "type": "MULTIPLE_CHOICE",
+            "option_count": 4
+          },
+          {
+            "id": 7,
+            "type": "MULTIPLE_CHOICE",
+            "option_count": 4
+          },
+          {
+            "id": 8,
+            "type": "MULTIPLE_CHOICE",
+            "option_count": 4
+          },
+          {
+            "id": 9,
+            "type": "MULTIPLE_CHOICE",
+            "option_count": 4
+          },
+          {
+            "id": 10,
+            "type": "MULTIPLE_CHOICE",
+            "option_count": 4
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 37,
+      "kind": "request",
+      "request_sequence": 37,
+      "elapsed_ms": 2069,
+      "step": "answer_every_flashcard_and_multiple_choice_question",
+      "path": "/quizzes/1/submit",
+      "method": "POST",
+      "body": {
+        "answers": [
+          {
+            "question_id": 1,
+            "type": "FLASHCARD",
+            "quality": 5
+          },
+          {
+            "question_id": 2,
+            "type": "FLASHCARD",
+            "quality": 5
+          },
+          {
+            "question_id": 3,
+            "type": "FLASHCARD",
+            "quality": 5
+          },
+          {
+            "question_id": 4,
+            "type": "FLASHCARD",
+            "quality": 5
+          },
+          {
+            "question_id": 5,
+            "type": "FLASHCARD",
+            "quality": 5
+          },
+          {
+            "question_id": 6,
+            "type": "MULTIPLE_CHOICE",
+            "selected_option_index": 0,
+            "matched_answer": true
+          },
+          {
+            "question_id": 7,
+            "type": "MULTIPLE_CHOICE",
+            "selected_option_index": 0,
+            "matched_answer": true
+          },
+          {
+            "question_id": 8,
+            "type": "MULTIPLE_CHOICE",
+            "selected_option_index": 0,
+            "matched_answer": true
+          },
+          {
+            "question_id": 9,
+            "type": "MULTIPLE_CHOICE",
+            "selected_option_index": 0,
+            "matched_answer": true
+          },
+          {
+            "question_id": 10,
+            "type": "MULTIPLE_CHOICE",
+            "selected_option_index": 0,
+            "matched_answer": true
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 38,
+      "kind": "response",
+      "request_sequence": 37,
+      "elapsed_ms": 2084,
+      "step": "answer_every_flashcard_and_multiple_choice_question",
+      "path": "/quizzes/1/submit",
+      "method": "POST",
+      "status_code": 200,
+      "body": {
+        "score": 100,
+        "correct": 5,
+        "total": 5
+      }
+    },
+    {
+      "sequence": 39,
+      "kind": "request",
+      "request_sequence": 39,
+      "elapsed_ms": 2171,
+      "step": "open_dashboard_after_submit",
+      "path": "/dashboard",
+      "method": "GET"
+    },
+    {
+      "sequence": 40,
+      "kind": "response",
+      "request_sequence": 39,
+      "elapsed_ms": 2182,
+      "step": "open_dashboard_after_submit",
+      "path": "/dashboard",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "sessions_completed": 1,
+        "average_score": 100,
+        "scores_count": 1
+      }
+    },
+    {
+      "sequence": 41,
+      "kind": "request",
+      "request_sequence": 41,
+      "elapsed_ms": 2330,
+      "step": "open_dashboard_after_submit",
+      "path": "/dashboard",
+      "method": "GET"
+    },
+    {
+      "sequence": 42,
+      "kind": "response",
+      "request_sequence": 41,
+      "elapsed_ms": 2349,
+      "step": "open_dashboard_after_submit",
+      "path": "/dashboard",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "sessions_completed": 1,
+        "average_score": 100,
+        "scores_count": 1
+      }
+    },
+    {
+      "sequence": 43,
+      "kind": "request",
+      "request_sequence": 43,
+      "elapsed_ms": 2445,
+      "step": "verify_completed_status_and_plan_badge_link",
+      "path": "/plans/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 44,
+      "kind": "response",
+      "request_sequence": 43,
+      "elapsed_ms": 2460,
+      "step": "verify_completed_status_and_plan_badge_link",
+      "path": "/plans/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "status": "READY",
+        "goal_id": 1,
+        "document_ids": [
+          1
+        ],
+        "sessions": [
+          {
+            "id": 1,
+            "order_index": 0,
+            "status": "COMPLETED"
+          },
+          {
+            "id": 2,
+            "order_index": 1,
+            "status": "PENDING"
+          },
+          {
+            "id": 3,
+            "order_index": 2,
+            "status": "PENDING"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": 45,
+      "kind": "request",
+      "request_sequence": 45,
+      "elapsed_ms": 2471,
+      "step": "verify_completed_status_and_plan_badge_link",
+      "path": "/sessions/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 46,
+      "kind": "response",
+      "request_sequence": 45,
+      "elapsed_ms": 2475,
+      "step": "verify_completed_status_and_plan_badge_link",
+      "path": "/sessions/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "plan_id": 1,
+        "status": "COMPLETED",
+        "completed_at_present": true,
+        "has_material": true
+      }
+    },
+    {
+      "sequence": 47,
+      "kind": "request",
+      "request_sequence": 47,
+      "elapsed_ms": 2540,
+      "step": "click_completed_session_link_and_capture_reopened_session",
+      "path": "/sessions/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 48,
+      "kind": "response",
+      "request_sequence": 47,
+      "elapsed_ms": 2548,
+      "step": "click_completed_session_link_and_capture_reopened_session",
+      "path": "/sessions/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "plan_id": 1,
+        "status": "COMPLETED",
+        "completed_at_present": true,
+        "has_material": true
+      }
+    },
+    {
+      "sequence": 49,
+      "kind": "request",
+      "request_sequence": 49,
+      "elapsed_ms": 2656,
+      "step": "click_completed_session_link_and_capture_reopened_session",
+      "path": "/sessions/1",
+      "method": "GET"
+    },
+    {
+      "sequence": 50,
+      "kind": "response",
+      "request_sequence": 49,
+      "elapsed_ms": 2662,
+      "step": "click_completed_session_link_and_capture_reopened_session",
+      "path": "/sessions/1",
+      "method": "GET",
+      "status_code": 200,
+      "body": {
+        "id": 1,
+        "plan_id": 1,
+        "status": "COMPLETED",
+        "completed_at_present": true,
+        "has_material": true
+      }
+    }
+  ],
+  "console_events": [
+    {
+      "at_utc": "2026-09-29T19:13:26.894Z",
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:27.092Z",
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:27.261Z",
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "at_utc": "2026-09-29T19:13:27.308Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:27.308Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:28.953Z",
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:28.959Z",
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:28.970Z",
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "at_utc": "2026-09-29T19:13:28.985Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:28.985Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.064Z",
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.066Z",
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.082Z",
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.100Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.100Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.279Z",
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.286Z",
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.297Z",
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold"
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.311Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition."
+    },
+    {
+      "at_utc": "2026-09-29T19:13:29.311Z",
+      "type": "warning",
+      "text": "⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath."
+    }
+  ],
+  "page_errors": [],
+  "failed_requests": [],
+  "failed_http_responses": [],
+  "screenshots": [
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/documents-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 53089,
+      "sha256": "25a1236ab0f594ec4ca1b308faa7c4dfcd20146c1e7b6b1349ed7989d38828e3",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/session-completed-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 44400,
+      "sha256": "4a3e9e0e6d6a52410d4c82cf210d3de39005c76ca39246b797a079416dea07b9",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/dashboard-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 52585,
+      "sha256": "bddbb9839ed4226eacecd649455b721cda21b8ac40d1df60dc27527a8b69af76",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/dashboard-mobile.png",
+      "viewport_css_px": "390x844",
+      "bytes": 28747,
+      "sha256": "1c19d7263b70061b7c819891ed74f6dad6a9c018c2ba1fbacf074f899adb610f",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/plan-completed-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 57796,
+      "sha256": "3dcc6f72529633367733c0f9d094ae1afd3a818da3331dee06bbf841523ae2d3",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/completed-session-reopened-desktop.png",
+      "viewport_css_px": "1440x1000",
+      "bytes": 105035,
+      "sha256": "2b044b88faba3638c6eb3d663d5f3b54f56b5f2ecffb8be6d14a9eba5c7a8981",
+      "run_id": "a02-correction-20260929-02"
+    },
+    {
+      "path": "docs/frontend-integration/evidence/a02/runs/a02-correction-20260929-02/completed-session-reopened-mobile.png",
+      "viewport_css_px": "390x844",
+      "bytes": 62072,
+      "sha256": "d8a0dc8a2834bced7fc727df3043d1022eb6aae361f54b994351e6bdc454d427",
+      "run_id": "a02-correction-20260929-02"
+    }
+  ],
+  "outcome": {
+    "status": "COMPLETED",
+    "last_step_started": "click_completed_session_link_and_capture_reopened_session",
+    "error": null
+  },
+  "audit_summary": {
+    "backend_request_count": 25,
+    "backend_response_count": 25,
+    "console_event_count": 20,
+    "page_error_count": 0,
+    "failed_request_count": 0,
+    "failed_http_response_count": 0,
+    "all_backend_requests_have_responses": true
+  }
+}

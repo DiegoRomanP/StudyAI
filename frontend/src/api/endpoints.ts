@@ -52,9 +52,17 @@ export const api = {
 
   // Plans
   listPlans: () => apiClient.get<PlanDTO[]>("/plans").then((r) => r.data),
-  generatePlan: (goal_id: number, document_ids: number[]) =>
+  /**
+   * Same `idempotencyKey` + same payload replays the original plan (202); the same
+   * key with another payload is a 409 `IDEMPOTENCY_KEY_REUSED`.
+   */
+  generatePlan: (goal_id: number, document_ids: number[], idempotencyKey?: string) =>
     apiClient
-      .post<PlanStatusDTO>("/plans/generate", { goal_id, document_ids })
+      .post<PlanStatusDTO>(
+        "/plans/generate",
+        { goal_id, document_ids },
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      )
       .then((r) => r.data),
   getPlanStatus: (id: number) =>
     apiClient.get<PlanStatusDTO>(`/plans/${id}/status`).then((r) => r.data),
@@ -106,6 +114,6 @@ export const api = {
     apiClient
       .post<LLMConnectionTestResponse>(`/llm-settings/${provider}/test`, payload)
       .then((r) => r.data),
-  listOllamaModels: () =>
-    apiClient.get<OllamaModel[]>("/llm-settings/OLLAMA/models").then((r) => r.data),
+  listProviderModels: (provider: LLMProviderKey) =>
+    apiClient.get<OllamaModel[]>(`/llm-settings/${provider}/models`).then((r) => r.data),
 };

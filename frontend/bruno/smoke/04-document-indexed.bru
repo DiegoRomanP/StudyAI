@@ -1,0 +1,81 @@
+meta {
+  name: Poll document indexing to INDEXED
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/documents/{{documentId}}
+}
+
+script:pre-request {
+  const timeoutMs = Number(bru.getEnvVar("requestTimeoutMs"));
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    bru.runner.stopExecution();
+    throw new Error("Document polling requires a positive initial request timeout.");
+  }
+  req.setTimeout(timeoutMs);
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isDefined
+}
+
+tests {
+  test("document indexing reaches INDEXED within bounded GET-only polling", async function() {
+    const documentId = bru.getVar("documentId");
+    const baseUrl = bru.getEnvVar("baseUrl");
+    const intervalMs = Number(bru.getEnvVar("pollIntervalMs"));
+    const maxAttempts = Number(bru.getEnvVar("documentPollMaxAttempts"));
+    const pollTimeoutMs = Number(bru.getEnvVar("documentPollTimeoutMs"));
+    const timeoutMs = Number(bru.getEnvVar("requestTimeoutMs"));
+    if (![intervalMs, maxAttempts, pollTimeoutMs, timeoutMs].every((value) => Number.isSafeInteger(value) && value > 0)) {
+      bru.runner.stopExecution();
+      throw new Error("Document polling requires positive integer interval, timeout, and attempt limits.");
+    }
+    let document = res.body;
+    let attempts = 0;
+    const deadline = Date.now() + pollTimeoutMs;
+
+    if (document.status === "FAILED") {
+      bru.runner.stopExecution();
+      throw new Error(`Document ${documentId} indexing FAILED: ${document.error_message || "no detail"}`);
+    }
+
+    try {
+      while (document.status !== "INDEXED" && attempts < maxAttempts && Date.now() < deadline) {
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) break;
+        await bru.sleep(Math.min(intervalMs, remainingMs));
+        const requestBudgetMs = deadline - Date.now();
+        if (requestBudgetMs <= 0) break;
+        const response = await bru.sendRequest({
+          method: "GET",
+          url: `${baseUrl}/documents/${documentId}`,
+          timeout: Math.min(timeoutMs, requestBudgetMs),
+        });
+        expect(response.status).to.equal(200);
+        expect(response.data.id).to.equal(documentId);
+        document = response.data;
+        attempts += 1;
+
+        if (document.status === "FAILED") {
+          bru.runner.stopExecution();
+          throw new Error(`Document ${documentId} indexing FAILED: ${document.error_message || "no detail"}`);
+        }
+      }
+    } catch (error) {
+      bru.runner.stopExecution();
+      throw error;
+    }
+
+    if (document.status !== "INDEXED") {
+      bru.runner.stopExecution();
+      throw new Error(`Document ${documentId} did not reach INDEXED after ${attempts}/${maxAttempts} GET polls within ${pollTimeoutMs}ms (timeout).`);
+    }
+    expect(document.filename).to.equal("studyai-a04-smoke.md");
+    expect(document.file_type).to.equal("md");
+    expect(document.status).to.equal("INDEXED");
+  });
+}

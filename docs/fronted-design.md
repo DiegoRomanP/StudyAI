@@ -1,6 +1,8 @@
 # Plan de diseño y consolidación del frontend de StudyAI
 
-> **Estado: propuesta, no implementada.** Este documento define el trabajo futuro; no describe funcionalidades ya entregadas. Se conserva el nombre `fronted-design.md` solicitado. Diagnóstico basado en el código actual de `frontend/` y en `AGENTS.md` (septiembre de 2026).
+> **Estado: superado (2026-10-17).** La paleta clara y el layout de esta propuesta quedaron sustituidos por el tema oscuro «flow» de ODD S6 (`odd/tasks/studyai-fluid-learning.md`) y el mockup `images/Estudio inteligente con StudyAI.png`. Los objetivos de recorrido (Inicio unificado, «Estudiar», acceso a todas las sesiones) se implementaron en A08–A13. Se conserva como registro histórico.
+>
+> Estado original: **propuesta, no implementada.** Este documento define el trabajo futuro; no describe funcionalidades ya entregadas. Se conserva el nombre `fronted-design.md` solicitado. Diagnóstico basado en el código actual de `frontend/` y en `AGENTS.md` (septiembre de 2026).
 
 ## 1. Meta y alcance
 

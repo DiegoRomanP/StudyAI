@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { getApiErrorMessage } from "../api/errors";
 import type { PlanDTO } from "../api/types";
-import { Badge, Button, Card, Spinner } from "../components/ui";
+import { AsyncState } from "../components/AsyncState";
+import { Alert, Badge, Button, Card, Select, Skeleton } from "../components/ui";
+import { DocumentPicker } from "../components/documents/DocumentPicker";
 import {
+  getDocumentsListSnapshot,
   useDeletePlan,
   useDocuments,
   useGeneratePlan,
@@ -11,6 +16,7 @@ import {
   usePlans,
 } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
+import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
 
 const STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
@@ -19,38 +25,79 @@ const STATUS = {
 } as const;
 
 export function PlanPage() {
-  const { data: goals } = useGoals();
-  const { data: documents } = useDocuments();
-  const { data: plans, isLoading } = usePlans();
+  const goalsQuery = useGoals();
+  const goals = goalsQuery.data;
+  const documentsQuery = useDocuments();
+  const { data: documents } = documentsQuery;
+  const plansQuery = usePlans();
+  const plans = plansQuery.data;
   const generate = useGeneratePlan();
+  const requestKey = useIdempotencyKey();
+  const generating = useRef(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
 
   const [goalId, setGoalId] = useState<number | "">("");
   const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
-
-  const indexedDocs = (documents ?? []).filter((d) => d.status === "INDEXED");
-
-  function toggleDoc(id: number) {
-    setSelectedDocs((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
+  const indexedDocumentIds = new Set(
+    (documents ?? [])
+      .filter((document) => document.status === "INDEXED")
+      .map((document) => document.id),
+  );
+  const selectedIndexedDocumentIds = selectedDocs.filter((id) => indexedDocumentIds.has(id));
+  const documentsAreReliable =
+    documents !== undefined &&
+    documentsQuery.status === "success" &&
+    getDocumentsListSnapshot(queryClient).isConfirmedByGet;
+  const canGeneratePlan =
+    goalId !== "" &&
+    !generate.isPending &&
+    documentsAreReliable &&
+    selectedIndexedDocumentIds.length > 0;
 
   async function handleGenerate() {
     if (goalId === "") return;
-    const res = await generate.mutateAsync({
-      goalId: Number(goalId),
-      documentIds: selectedDocs,
-    });
-    navigate(`/plan/${res.id}`);
+
+    const latestDocumentList = getDocumentsListSnapshot(queryClient);
+    const latestDocuments = latestDocumentList.documents;
+    const latestListIsReliable = latestDocumentList.isConfirmedByGet;
+    const currentIndexedDocumentIds = new Set(
+      (latestDocuments ?? [])
+        .filter((document) => document.status === "INDEXED")
+        .map((document) => document.id),
+    );
+    const documentIds = selectedDocs.filter((id) => currentIndexedDocumentIds.has(id));
+    if (documentIds.length !== selectedDocs.length) {
+      setSelectedDocs(documentIds);
+    }
+    if (!latestListIsReliable || documentIds.length === 0) return;
+    if (generating.current) return;
+
+    generating.current = true;
+    setGenerateError(null);
+    try {
+      const res = await generate.mutateAsync({
+        goalId: Number(goalId),
+        documentIds,
+        // A retry of the same goal + documents replays the original request server-side.
+        idempotencyKey: requestKey.keyFor(planRequestFingerprint(Number(goalId), documentIds)),
+      });
+      requestKey.reset();
+      navigate(`/plan/${res.id}`);
+    } catch (error: unknown) {
+      setGenerateError(getApiErrorMessage(error, "No se pudo iniciar la generación del plan."));
+    } finally {
+      generating.current = false;
+    }
   }
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Plan de estudio</h1>
-        <p className="text-slate-500">
+        <h1 className="font-display text-2xl font-bold sm:text-3xl">Plan de estudio</h1>
+        <p className="text-text-muted">
           Genera un plan a partir de una meta y tus documentos indexados.
         </p>
       </header>
@@ -58,12 +105,16 @@ export function PlanPage() {
       <Card className="space-y-4">
         <h2 className="text-lg font-semibold">Nuevo plan</h2>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Meta</label>
-          <select
+        <div className="space-y-2">
+          <Select
+            id="plan-goal"
+            label="Meta"
             value={goalId}
-            onChange={(e) => setGoalId(e.target.value === "" ? "" : Number(e.target.value))}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            onChange={(e) => {
+              setGoalId(e.target.value === "" ? "" : Number(e.target.value));
+              setGenerateError(null);
+            }}
+            disabled={goalsQuery.isError && !goals}
           >
             <option value="">Selecciona una meta…</option>
             {(goals ?? []).map((g) => (
@@ -71,75 +122,119 @@ export function PlanPage() {
                 {g.title}
               </option>
             ))}
-          </select>
-          {(goals ?? []).length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">
+          </Select>
+          {goalsQuery.isError ? (
+            <Alert tone="error">
+              <p>No se pudieron cargar tus metas.</p>
+              <div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void goalsQuery.refetch()}
+                  disabled={goalsQuery.isFetching}
+                >
+                  Reintentar carga de metas
+                </Button>
+              </div>
+            </Alert>
+          ) : goalsQuery.isSuccess && (goals ?? []).length === 0 ? (
+            <p className="text-sm text-state-warning">
               Primero crea una meta en la sección <Link className="underline" to="/goals">Metas</Link>.
             </p>
-          )}
+          ) : null}
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Documentos ({selectedDocs.length} seleccionados)
-          </label>
-          {indexedDocs.length === 0 ? (
-            <p className="text-xs text-amber-600">
+        <DocumentPicker
+          documents={documents ?? []}
+          selectedDocumentIds={selectedDocs}
+          onSelectionChange={(ids) => {
+            setSelectedDocs(ids);
+            setGenerateError(null);
+          }}
+          showEmptyState={documentsAreReliable && indexedDocumentIds.size === 0}
+          emptyState={
+            <p>
               No hay documentos indexados. Sube apuntes en{" "}
-              <Link className="underline" to="/documents">Documentos</Link>.
+              <Link className="underline" to="/documents">Recursos</Link>.
             </p>
-          ) : (
-            <div className="grid gap-2">
-              {indexedDocs.map((d) => (
-                <label
-                  key={d.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedDocs.includes(d.id)}
-                    onChange={() => toggleDoc(d.id)}
-                  />
-                  <span className="truncate">{d.filename}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+          }
+        />
 
-        <Button
-          onClick={handleGenerate}
-          disabled={goalId === "" || generate.isPending}
-        >
-          {generate.isPending ? "Iniciando…" : "Generar plan"}
-        </Button>
+        <div className="space-y-2">
+          <Button onClick={handleGenerate} disabled={!canGeneratePlan}>
+            {generate.isPending ? "Iniciando…" : "Generar plan"}
+          </Button>
+          {generateError && (
+            <Alert tone="error">
+              <p>{generateError}</p>
+              <p>Puedes volver a intentarlo: no se creará un plan duplicado.</p>
+            </Alert>
+          )}
+          {!documentsAreReliable ? (
+            <div className="space-y-2">
+              <p
+                role={documentsQuery.isError ? "alert" : "status"}
+                className="text-sm text-state-warning"
+              >
+                {documentsQuery.isError
+                  ? "No se puede verificar la lista de documentos. Reintenta antes de generar el plan."
+                  : "Cargando y verificando la lista de documentos…"}
+              </p>
+              {documentsQuery.isError && (
+                <Button
+                  variant="secondary"
+                  onClick={() => void documentsQuery.refetch()}
+                  disabled={documentsQuery.isFetching}
+                >
+                  {documentsQuery.isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
+                </Button>
+              )}
+            </div>
+          ) : selectedIndexedDocumentIds.length === 0 ? (
+            <p role="status" className="text-sm text-state-warning">
+              {(documents ?? []).some((document) => document.status === "INDEXED")
+                ? "Selecciona al menos un documento indexado para generar el plan."
+                : "Necesitas al menos un documento indexado para generar el plan."}
+            </p>
+          ) : null}
+        </div>
       </Card>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus planes</h2>
-        {isLoading ? (
-          <Spinner />
-        ) : plans && plans.length > 0 ? (
-          <>
-            <div className="grid gap-3">
-              {visible.map((p) => (
-                <PlanRow key={p.id} plan={p} />
-              ))}
-            </div>
-            {hiddenCount > 0 && (
-              <Button variant="secondary" onClick={showMore}>
-                Mostrar {hiddenCount} más
-              </Button>
-            )}
-            {expanded && plans.length > 6 && (
-              <Button variant="ghost" onClick={showLess}>
-                Mostrar menos
-              </Button>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-slate-400">Aún no has generado planes.</p>
-        )}
+        <AsyncState
+          data={plans}
+          isLoading={plansQuery.isPending}
+          isError={plansQuery.isError}
+          isFetching={plansQuery.isFetching}
+          isEmpty={(items) => items.length === 0}
+          loading={<Skeleton height={72} />}
+          loadingLabel="Cargando planes"
+          empty={<p className="text-sm text-text-muted">Aún no has generado planes.</p>}
+          onRetry={() => void plansQuery.refetch()}
+          initialErrorMessage="No se pudieron cargar tus planes."
+          updateErrorMessage="No se pudieron actualizar tus planes. Se muestran los últimos cargados."
+        >
+          {(items) => (
+            <>
+              <div className="grid gap-3">
+                {visible.map((p) => (
+                  <PlanRow key={p.id} plan={p} />
+                ))}
+              </div>
+              {hiddenCount > 0 && (
+                <Button variant="secondary" onClick={showMore}>
+                  Mostrar {hiddenCount} más
+                </Button>
+              )}
+              {expanded && items.length > 6 && (
+                <Button variant="ghost" onClick={showLess}>
+                  Mostrar menos
+                </Button>
+              )}
+            </>
+          )}
+        </AsyncState>
       </section>
     </div>
   );
@@ -159,19 +254,23 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
     setError(null);
     try {
       await deletePlan.mutateAsync(plan.id);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al eliminar el plan.");
+    } catch (caught: unknown) {
+      setError(getApiErrorMessage(caught, "Error al eliminar el plan."));
     }
   }
 
   return (
     <Card className="space-y-1">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link to={`/plan/${plan.id}`} className="min-w-0 flex-1">
-          <p className="truncate font-medium text-slate-800 hover:text-brand-600">{plan.title}</p>
-          <p className="text-xs text-slate-400">{plan.sessions.length} sesiones</p>
+          <p className="truncate font-medium text-text-primary hover:text-action">{plan.title}</p>
+          <p className="text-xs text-text-muted">
+            {plan.status === "READY"
+              ? `${plan.sessions.filter((session) => session.status === "COMPLETED").length} de ${plan.sessions.length} sesiones completadas`
+              : `${plan.sessions.length} sesiones`}
+          </p>
         </Link>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Badge color={meta.color}>{meta.label}</Badge>
           <Button
             variant="danger"
@@ -183,7 +282,7 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
           </Button>
         </div>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-xs text-state-error">{error}</p>}
     </Card>
   );
 }
