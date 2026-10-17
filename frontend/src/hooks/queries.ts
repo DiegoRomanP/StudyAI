@@ -7,7 +7,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
-import { isNotFoundError } from "../api/errors";
+import { isNotFoundError, isPlanDocumentsUnavailableError } from "../api/errors";
 import type {
   DocumentDTO,
   LLMCredentialDTO,
@@ -205,6 +205,12 @@ export function useGeneratePlan() {
       idempotencyKey?: string;
     }) => api.generatePlan(goalId, documentIds, idempotencyKey),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+    // The server is the authority: a selection it rejects is stale, so re-read the list.
+    onError: (error) => {
+      if (isPlanDocumentsUnavailableError(error)) {
+        void qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY });
+      }
+    },
   });
 }
 

@@ -60,6 +60,39 @@ describe("useGeneratePlan", () => {
     expect(api.generatePlan.mock.calls[0]).toEqual([73, [91, 4, 208], "attempt-1"]);
     expect(documentIds).toEqual(originalDocumentIds);
   });
+
+  it("refreshes the document list when the server rejects unavailable documents", async () => {
+    api.generatePlan.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: { detail: "No se puede generar…", code: "PLAN_DOCUMENTS_UNAVAILABLE", document_ids: [4] },
+      },
+    });
+    const queryClient = createClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useGeneratePlan(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.mutateAsync({ goalId: 1, documentIds: [4] }).catch(() => undefined);
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: DOCUMENTS_QUERY_KEY });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["plans"] });
+  });
+
+  it("does not refresh documents for unrelated failures", async () => {
+    api.generatePlan.mockRejectedValue({ isAxiosError: true, response: { status: 503, data: {} } });
+    const queryClient = createClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useGeneratePlan(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.mutateAsync({ goalId: 1, documentIds: [4] }).catch(() => undefined);
+    });
+
+    expect(invalidate).not.toHaveBeenCalled();
+  });
 });
 
 describe("cache consistency after writes", () => {

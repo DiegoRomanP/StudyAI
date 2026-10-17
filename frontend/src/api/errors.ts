@@ -84,3 +84,12 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
 export function isNotFoundError(error: unknown): boolean {
   return axios.isAxiosError(error) && error.response?.status === 404;
 }
+
+/** The plan request named documents that no longer exist or are not INDEXED. */
+export function isPlanDocumentsUnavailableError(error: unknown): boolean {
+  return (
+    axios.isAxiosError(error) &&
+    error.response?.status === 400 &&
+    (error.response.data as { code?: unknown } | undefined)?.code === "PLAN_DOCUMENTS_UNAVAILABLE"
+  );
+}
