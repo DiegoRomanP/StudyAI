@@ -2,6 +2,7 @@ import { Outlet, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
+import { StudyStreakCard } from "./components/home/HomeCards";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
@@ -15,7 +16,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 
 function AppLayout() {
   return (
-    <AppShell>
+    <AppShell sidebarFooter={<StudyStreakCard />}>
       <RouteErrorBoundary>
         <Outlet />
       </RouteErrorBoundary>

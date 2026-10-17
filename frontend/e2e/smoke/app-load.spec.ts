@@ -12,7 +12,8 @@ test("the production app loads the landing and enters the StudyAI home page", as
   await expect(page).toHaveTitle("StudyAI · Estudia de forma más inteligente");
   await page.getByRole("link", { name: "Comenzar gratis" }).first().click();
   await expect(page).toHaveURL(/\/inicio$/);
-  await expect(page.getByRole("heading", { name: /StudyAI organiza/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Prepara tu plan de estudio" })).toBeVisible();
   await expect(page).toHaveTitle("Inicio | StudyAI");
 
   const documentsResponse = page.waitForResponse(
@@ -20,7 +21,10 @@ test("the production app loads the landing and enters the StudyAI home page", as
       response.url() === new URL("/documents", apiOrigin).href &&
       response.request().method() === "GET",
   );
-  await page.getByRole("link", { name: "Explorar recursos" }).click();
+  await page
+    .getByRole("navigation", { name: "Navegación principal" })
+    .getByRole("link", { name: "Recursos" })
+    .click();
   await expect(page).toHaveURL(/\/documents$/);
 
   const response = await documentsResponse;

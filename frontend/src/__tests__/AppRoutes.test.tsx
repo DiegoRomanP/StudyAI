@@ -9,6 +9,10 @@ const api = vi.hoisted(() => ({
   listProviderCatalog: vi.fn(),
   listLlmCredentials: vi.fn(),
   getLlmRuntime: vi.fn(),
+  listPlans: vi.fn(),
+  getDashboard: vi.fn(),
+  listDocuments: vi.fn(),
+  listGoals: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
@@ -63,6 +67,16 @@ beforeEach(() => {
   api.getSession.mockResolvedValue(session);
   api.listProviderCatalog.mockResolvedValue([]);
   api.listLlmCredentials.mockResolvedValue([]);
+  api.listPlans.mockResolvedValue([]);
+  api.listDocuments.mockResolvedValue([]);
+  api.listGoals.mockResolvedValue([]);
+  api.getDashboard.mockResolvedValue({
+    scores: [],
+    weak_topics: [],
+    upcoming_reviews: [],
+    sessions_completed: 0,
+    average_score: 0,
+  });
   api.getLlmRuntime.mockResolvedValue({
     source: "MOCK",
     provider: null,
@@ -91,15 +105,12 @@ describe("App routes", () => {
     expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
   });
 
-  it("renders the app home at /inicio inside the shell", () => {
+  it("renders the app home at /inicio inside the shell", async () => {
     renderApp("/inicio");
 
-    expect(screen.getByRole("heading", { name: /StudyAI organiza/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Navegación principal" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /explorar recursos/i })).toHaveAttribute(
-      "href",
-      "/documents",
-    );
+    expect(await screen.findByRole("heading", { name: "Prepara tu plan de estudio" })).toBeInTheDocument();
   });
 
   it("shows a useful not-found page with a link back to Inicio", () => {
@@ -225,7 +236,7 @@ describe("App routes", () => {
     await waitFor(() => expect(document.title).toBe("Página no encontrada | StudyAI"));
     fireEvent.click(screen.getByRole("link", { name: /volver al inicio/i }));
 
-    expect(await screen.findByRole("heading", { name: /StudyAI organiza/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("Inicio | StudyAI"));
     expect(screen.getByRole("main")).toHaveFocus();
   });

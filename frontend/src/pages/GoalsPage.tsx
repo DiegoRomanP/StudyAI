@@ -4,16 +4,10 @@ import type { GoalDTO, GoalType } from "../api/types";
 import { getApiErrorMessage } from "../api/errors";
 import { GoalTemplatePicker } from "../components/goals/GoalTemplatePicker";
 import { AsyncState } from "../components/AsyncState";
-import { Badge, Button, Card, Input, Skeleton } from "../components/ui";
+import { Badge, Button, Card, Input, Select, Skeleton, Textarea } from "../components/ui";
 import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
-import type { GoalTemplate } from "../lib/goalTemplates";
+import { GOAL_TEMPLATES, GOAL_TYPE_LABELS as TYPE_LABELS, type GoalTemplate } from "../lib/goalTemplates";
 import { useShowMore } from "../hooks/useShowMore";
-
-const TYPE_LABELS: Record<GoalType, string> = {
-  EXAM: "Examen",
-  LEARNING: "Aprender",
-  MEMORIZATION: "Memorizar",
-};
 
 export function GoalsPage() {
   const goalsQuery = useGoals();
@@ -22,7 +16,7 @@ export function GoalsPage() {
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(goals);
 
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
-  const [selectedTemplateType, setSelectedTemplateType] = useState<GoalType | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
@@ -30,7 +24,7 @@ export function GoalsPage() {
 
   function applyTemplate(template: GoalTemplate) {
     setGoalType(template.type);
-    setSelectedTemplateType(template.type);
+    setSelectedTemplateId(template.id);
     setTitle(template.title);
     setSaved(false);
     setCreateError(null);
@@ -48,7 +42,7 @@ export function GoalsPage() {
         description,
       });
       setSaved(true);
-      setSelectedTemplateType(null);
+      setSelectedTemplateId(null);
       setTitle("");
       setDescription("");
     } catch (error) {
@@ -65,7 +59,7 @@ export function GoalsPage() {
         </p>
       </header>
 
-      <GoalTemplatePicker selectedGoalType={selectedTemplateType} onSelect={applyTemplate} />
+      <GoalTemplatePicker selectedTemplateId={selectedTemplateId} onSelect={applyTemplate} />
 
       <Card className="space-y-4">
         <Input
@@ -75,32 +69,42 @@ export function GoalsPage() {
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
-            setSelectedTemplateType(null);
+            // "Otro" has no preset title, so typing keeps it selected.
+            const preset = GOAL_TEMPLATES.find((item) => item.id === selectedTemplateId)?.title;
+            if (preset && preset !== event.target.value) setSelectedTemplateId(null);
             setSaved(false);
             setCreateError(null);
           }}
           placeholder="Ej. Aprobar el parcial de Cálculo"
           maxLength={255}
         />
-        <div>
-          <label
-            htmlFor="new-goal-description"
-            className="mb-1 block text-sm font-medium text-text-primary"
-          >
-            Descripción
-          </label>
-          <textarea
-            id="new-goal-description"
-            value={description}
-            onChange={(event) => {
-              setDescription(event.target.value);
-              setSaved(false);
-            }}
-            placeholder="Detalles: temas a cubrir, fecha, énfasis..."
-            rows={3}
-            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
-          />
-        </div>
+        <Select
+          id="new-goal-type"
+          label="Tipo de estudio"
+          hint="Define la estrategia del plan: duración de sesiones y mezcla de preguntas."
+          value={goalType}
+          onChange={(event) => {
+            setGoalType(event.target.value as GoalType);
+            setSaved(false);
+          }}
+        >
+          {(Object.keys(TYPE_LABELS) as GoalType[]).map((type) => (
+            <option key={type} value={type}>
+              {TYPE_LABELS[type]}
+            </option>
+          ))}
+        </Select>
+        <Textarea
+          id="new-goal-description"
+          label="Descripción"
+          value={description}
+          onChange={(event) => {
+            setDescription(event.target.value);
+            setSaved(false);
+          }}
+          placeholder="Detalles: temas a cubrir, fecha, énfasis..."
+          rows={3}
+        />
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={!title.trim() || createGoal.isPending}>
             {createGoal.isPending ? "Guardando..." : "Guardar meta"}

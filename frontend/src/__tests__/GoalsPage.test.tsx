@@ -41,16 +41,17 @@ describe("GoalsPage", () => {
   it("fills a template without persisting it until explicit confirmation", async () => {
     render(<GoalsPage />);
 
-    const examTemplate = screen.getByRole("button", { name: /Sacar buena nota/i });
+    const examTemplate = screen.getByRole("button", { name: /Universidad/i });
     expect(examTemplate).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: /Solo quiero aprender/i })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /Aprender desde cero/i })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
     fireEvent.click(examTemplate);
 
     expect(examTemplate).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("textbox", { name: "Título" })).toHaveValue("Aprobar el examen");
+    expect(screen.getByRole("textbox", { name: "Título" })).toHaveValue("Aprobar el examen del curso");
+    expect(screen.getByRole("combobox", { name: "Tipo de estudio" })).toHaveValue("EXAM");
     expect(goalHooks.createGoal).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Título" }), {
@@ -71,7 +72,7 @@ describe("GoalsPage", () => {
   it("keeps a manually edited title unassociated with a template while retaining the default type", async () => {
     render(<GoalsPage />);
 
-    const learningTemplate = screen.getByRole("button", { name: /Solo quiero aprender/i });
+    const learningTemplate = screen.getByRole("button", { name: /Aprender desde cero/i });
     fireEvent.change(screen.getByRole("textbox", { name: "Título" }), {
       target: { value: "Estudiar historia local" },
     });
@@ -104,7 +105,7 @@ describe("GoalsPage", () => {
       }),
     );
     render(<GoalsPage />);
-    fireEvent.click(screen.getByRole("button", { name: /Sacar buena nota/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Universidad/i }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar meta" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("La meta no se pudo guardar.");
@@ -191,5 +192,19 @@ describe("GoalsPage", () => {
     expect(screen.queryByText("Aún no tienes metas.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carga" }));
     expect(goalHooks.refetchGoals).toHaveBeenCalledOnce();
+  });
+
+  it("selects templates by identity even when two share a study type", () => {
+    render(<GoalsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Certificaciones/ }));
+
+    expect(screen.getByRole("button", { name: /Certificaciones/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Universidad/ })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: /Otro/ }));
+    expect(screen.getByRole("textbox", { name: "Título" })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Guardar meta" })).toBeDisabled();
   });
 });

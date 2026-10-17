@@ -1,50 +1,91 @@
-import { Link } from "react-router-dom";
+import { Quote } from "lucide-react";
 
-import { ButtonLink, Card } from "../components/ui";
+import { AsyncState } from "../components/AsyncState";
+import {
+  AllSessionsDoneCard,
+  ParetoFocusCard,
+  ProgressOverviewCard,
+  RecentPlans,
+  TodaySessionCard,
+} from "../components/home/HomeCards";
+import { StudySetup } from "../components/home/StudySetup";
+import { Card, Skeleton } from "../components/ui";
+import { useDashboard, usePlans } from "../hooks/queries";
+import { findNextSession, readyPlans, sessionProgress } from "../lib/studyProgress";
 
-const SECTIONS = [
-  { to: "/documents", label: "Recursos", detail: "Consulta y administra tus apuntes." },
-  { to: "/goals", label: "Metas", detail: "Define qué quieres aprender o preparar." },
-  { to: "/plan", label: "Plan de estudio", detail: "Genera planes y revisa los que ya existen." },
-  { to: "/dashboard", label: "Estadísticas", detail: "Consulta tus sesiones completadas y progreso." },
-  { to: "/settings", label: "API Keys", detail: "Revisa el proveedor de IA y sus opciones." },
-];
-
+/**
+ * Inicio: "what should I do next?" first. Returning learners see today's session,
+ * progress and Pareto focus from real data; first-time learners get the setup flow.
+ */
 export function HomePage() {
+  const plansQuery = usePlans();
+  const dashboardQuery = useDashboard();
+  const hasReadyPlan = readyPlans(plansQuery.data).length > 0;
+
   return (
-    <div className="space-y-6">
-      <header className="space-y-3">
-        <h1 className="max-w-reading text-3xl font-bold text-text-primary">
-          StudyAI organiza tus materiales para estudiar
-        </h1>
-        <p className="max-w-reading text-text-muted">
-          Reúne tus documentos, define una meta y consulta los planes, sesiones y repasos
-          disponibles. Puedes explorar cada sección sin iniciar una generación desde esta página.
-        </p>
+    <div className="space-y-8">
+      <header className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="space-y-2">
+          <p className="font-medium text-action-hover">¡Hola!</p>
+          <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
+            Tu camino de estudio de hoy
+          </h1>
+          <p className="max-w-reading text-text-muted">
+            Enfócate en lo que realmente importa. La IA analiza tu material y te guía con el método
+            Pareto.
+          </p>
+        </div>
+        <Card
+          variant="glass"
+          className="hidden max-w-xs items-start gap-2 !p-4 text-sm italic text-text-muted lg:flex"
+        >
+          <Quote aria-hidden="true" className="h-4 w-4 shrink-0 text-action-hover" />
+          <p>Pequeños pasos constantes crean grandes resultados.</p>
+        </Card>
       </header>
 
-      <Card className="space-y-4">
-        <h2 className="text-lg font-semibold text-text-primary">Explora StudyAI</h2>
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {SECTIONS.map((section) => (
-            <li key={section.to} className="min-w-0">
-              <h3 className="font-medium">
-                <Link to={section.to} className="text-action underline underline-offset-2">
-                  {section.label}
-                </Link>
-              </h3>
-              <p className="mt-1 text-sm text-text-muted">{section.detail}</p>
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-text-muted">
-          Tus planes y sesiones existentes siguen disponibles desde Plan de estudio y cada enlace
-          directo.
-        </p>
-        <div>
-          <ButtonLink to="/documents">Explorar recursos</ButtonLink>
-        </div>
-      </Card>
+      <AsyncState
+        data={plansQuery.data}
+        isLoading={plansQuery.isPending}
+        isError={plansQuery.isError}
+        isFetching={plansQuery.isFetching}
+        loading={<Skeleton height={220} />}
+        loadingLabel="Cargando tu progreso"
+        empty={null}
+        onRetry={() => void plansQuery.refetch()}
+        initialErrorMessage="No se pudieron cargar tus planes. Puedes preparar uno nuevo igualmente."
+        updateErrorMessage="No se pudieron actualizar tus planes. Se muestran los últimos cargados."
+      >
+        {(plans) => {
+          const ready = readyPlans(plans);
+          if (ready.length === 0) {
+            return plans.length > 0 ? <RecentPlans plans={plans} /> : null;
+          }
+          const next = findNextSession(plans);
+          const focusPlan = next?.plan ?? ready[0];
+          return (
+            <div className="space-y-6">
+              {next ? (
+                <TodaySessionCard plan={next.plan} session={next.session} />
+              ) : (
+                <AllSessionsDoneCard plan={ready[0]} />
+              )}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <ProgressOverviewCard progress={sessionProgress(plans)} dashboard={dashboardQuery.data} />
+                <ParetoFocusCard plan={focusPlan} />
+              </div>
+              <RecentPlans plans={plans} />
+            </div>
+          );
+        }}
+      </AsyncState>
+
+      <section aria-label="Nuevo plan de estudio" className="space-y-3">
+        {hasReadyPlan && (
+          <h2 className="font-display text-lg font-semibold text-text-primary">¿Material nuevo?</h2>
+        )}
+        <StudySetup headingLevel={hasReadyPlan ? 3 : 2} />
+      </section>
     </div>
   );
 }

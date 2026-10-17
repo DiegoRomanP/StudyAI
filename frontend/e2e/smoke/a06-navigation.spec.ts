@@ -462,13 +462,18 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await expect(skipLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#main-content")).toBeFocused();
-  await expect(page.getByRole("heading", { name: /StudyAI organiza/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeVisible();
   await expect(page).toHaveTitle("Inicio | StudyAI");
+  const todaySession = page.getByRole("region", { name: "Sesión de hoy" });
+  await expect(todaySession.getByRole("link", { name: "Comenzar sesión" })).toHaveAttribute(
+    "href",
+    "/session/54",
+  );
   mobileLayoutEvidence.push(
-    await assertMobileLayout(page, "Inicio", false, [
-      { tag: "a", href: "/documents" },
-      { tag: "a", href: "/goals" },
-    ], ["Home link /documents", "Home link /goals"]),
+    await assertMobileLayout(page, "Inicio", true, [
+      { tag: "a", href: "/session/54" },
+      { tag: "a", href: "/plan/27" },
+    ], ["today session link /session/54", "plan link /plan/27"]),
   );
 
   const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
@@ -681,7 +686,14 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await expect(page.getByRole("heading", { name: "Enlace al plan no válido" })).toBeVisible();
   await page.goto("/session/1.5");
   await expect(page.getByRole("heading", { name: "Enlace a la sesión no válido" })).toBeVisible();
-  expect(apiRequests.slice(requestsBeforeInvalidIds)).toEqual([]);
+  // Invalid IDs must never reach a plan/session/quiz request. The shell's streak card
+  // still reads the dashboard on every page, which is a global GET unrelated to the ID.
+  const invalidIdRequests = apiRequests.slice(requestsBeforeInvalidIds);
+  expect(
+    invalidIdRequests.filter(({ path }) => /^\/(plans|sessions|quizzes)\//.test(path)),
+  ).toEqual([]);
+  expect(invalidIdRequests.filter(({ method }) => method !== "GET")).toEqual([]);
+  expect(invalidIdRequests.every(({ path }) => path === "/dashboard")).toBe(true);
 
   await page.goto("/plan/27/extra");
   await expect(page.getByRole("heading", { name: /No encontramos esa página/ })).toBeVisible();

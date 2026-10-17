@@ -9,6 +9,7 @@ import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { useSession } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
+import { parseApiDate } from "../lib/studyProgress";
 
 type Phase = "study" | "break" | "test" | "done";
 
@@ -135,8 +136,8 @@ function SessionFlow({
 }
 
 function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
+  const date = parseApiDate(value);
+  return !date
     ? value
     : date.toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" });
 }

@@ -1,21 +1,26 @@
-import type { GoalType } from "../../api/types";
 import { GOAL_TEMPLATES, type GoalTemplate } from "../../lib/goalTemplates";
 import { OptionCard } from "../ui";
 
 interface GoalTemplatePickerProps {
-  selectedGoalType: GoalType | null;
+  selectedTemplateId: string | null;
   onSelect: (template: GoalTemplate) => void;
+  className?: string;
 }
 
-export function GoalTemplatePicker({ selectedGoalType, onSelect }: GoalTemplatePickerProps) {
+export function GoalTemplatePicker({
+  selectedTemplateId,
+  onSelect,
+  className = "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3",
+}: GoalTemplatePickerProps) {
   return (
-    <div role="group" aria-label="Plantillas de meta" className="grid gap-3 sm:grid-cols-3">
+    <div role="group" aria-label="Plantillas de meta" className={className}>
       {GOAL_TEMPLATES.map((template) => (
         <OptionCard
-          key={template.type}
+          key={template.id}
           title={template.label}
+          description={template.description}
           icon={template.icon}
-          selected={selectedGoalType === template.type}
+          selected={selectedTemplateId === template.id}
           onSelect={() => onSelect(template)}
         />
       ))}

@@ -136,7 +136,7 @@ test("legacy controls retain visible keyboard focus without calling a real provi
     );
     expect(goalsOverflow).toBe(false);
 
-    await expectVisibleKeyboardFocus(page, page.getByRole("button", { name: /Sacar buena nota/ }));
+    await expectVisibleKeyboardFocus(page, page.getByRole("button", { name: /Universidad/ }));
     const titleFocus = await expectVisibleKeyboardFocus(
       page,
       page.getByPlaceholder("Ej. Aprobar el parcial de Cálculo"),
@@ -162,7 +162,7 @@ test("legacy controls retain visible keyboard focus without calling a real provi
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expectVisibleKeyboardFocus(page, page.getByRole("link", { name: /Recursos/ }));
 
-  const hoverTarget = page.getByRole("button", { name: /Sacar buena nota/ });
+  const hoverTarget = page.getByRole("button", { name: /Universidad/ });
   await hoverTarget.hover();
   const hoverStyle = await hoverTarget.evaluate((element) => ({
     focused: element.matches(":focus"),
