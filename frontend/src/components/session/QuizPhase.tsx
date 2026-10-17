@@ -5,6 +5,8 @@ import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
+import { ChoiceOptions } from "./ChoiceOptions";
+import { SafeMarkdown } from "./SafeMarkdown";
 
 const QUALITY_LABELS = [
   "no la recordé",
@@ -160,7 +162,9 @@ function FlashCard({
     <Card className="space-y-4">
       <Badge>Flashcard</Badge>
       <div className="flex min-h-[120px] flex-col items-center justify-center gap-3 rounded-control border border-line bg-surface-subtle p-6 text-center">
-        <p className="text-lg text-text-primary">{question.prompt}</p>
+        <div className="prose-study max-w-none text-lg text-text-primary">
+          <SafeMarkdown>{question.prompt}</SafeMarkdown>
+        </div>
         {/* A stable control name; the revealed answer is announced from its own live region. */}
         <div id={answerId} role="status" aria-label="Respuesta" className="w-full">
           {flipped && (
@@ -225,26 +229,12 @@ function MultipleChoice({
   onSelect: (option: string) => void;
 }) {
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-4">
       <Badge color="brand">Opción múltiple</Badge>
-      <p className="font-medium text-text-primary">{question.prompt}</p>
-      <div className="grid gap-2">
-        {question.options.map((option, optionIndex) => (
-          <button
-            key={`${optionIndex}-${option}`}
-            type="button"
-            aria-pressed={selected === option}
-            onClick={() => onSelect(option)}
-            className={`min-h-11 rounded-control border px-4 py-2 text-left text-sm transition-colors motion-reduce:transition-none ${
-              selected === option
-                ? "border-action bg-action-subtle text-text-primary"
-                : "border-line text-text-primary hover:bg-surface-subtle"
-            }`}
-          >
-            {option}
-          </button>
-        ))}
+      <div className="prose-study max-w-none font-medium text-text-primary">
+        <SafeMarkdown>{question.prompt}</SafeMarkdown>
       </div>
+      <ChoiceOptions options={question.options} selected={selected} onSelect={onSelect} />
     </Card>
   );
 }

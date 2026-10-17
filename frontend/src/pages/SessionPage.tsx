@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import type { QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { QuizPhase } from "../components/session/QuizPhase";
+import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
@@ -72,8 +73,12 @@ function SessionFlow({
   session: SessionDetailDTO;
   updateError: ReactNode;
 }) {
-  const [phase, setPhase] = useState<Phase>("study");
+  // Práctica → Simulacro opens the test directly (`?fase=test`); the material stays one click back.
+  const [searchParams] = useSearchParams();
+  const [phase, setPhase] = useState<Phase>(() => (searchParams.get("fase") === "test" ? "test" : "study"));
   const [result, setResult] = useState<QuizResultDTO | null>(null);
+  // Reading the material during the test keeps QuizPhase mounted (answers, retake consent).
+  const [reviewing, setReviewing] = useState(false);
   // Live from the server (a cached PENDING may refetch as COMPLETED); this visit's own
   // submission moves to the result, so it never asks to confirm itself.
   const alreadyCompleted = session.status === "COMPLETED";
@@ -96,6 +101,11 @@ function SessionFlow({
         </Link>
         <h1 className="mt-1 text-2xl font-bold">{session.topic_name}</h1>
         <PhaseIndicator phase={phase} />
+        {phase === "test" && (
+          <Button type="button" variant="ghost" className="mt-2" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
+            {reviewing ? "Volver al test" : "Repasar el material"}
+          </Button>
+        )}
       </div>
 
       {alreadyCompleted && phase !== "done" && (
@@ -117,13 +127,22 @@ function SessionFlow({
         />
       )}
       {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
+      {phase === "test" && reviewing && (
+        <Card>
+          <div className="prose-study mx-auto max-w-reading">
+            <SafeMarkdown>{session.material?.content_markdown || "_Sin material._"}</SafeMarkdown>
+          </div>
+        </Card>
+      )}
       {phase === "test" && (
-        <QuizPhase
-          sessionId={session.id}
-          planId={session.plan_id}
-          alreadyCompleted={alreadyCompleted}
-          onSubmitted={handleSubmitted}
-        />
+        <div hidden={reviewing}>
+          <QuizPhase
+            sessionId={session.id}
+            planId={session.plan_id}
+            alreadyCompleted={alreadyCompleted}
+            onSubmitted={handleSubmitted}
+          />
+        </div>
       )}
       {phase === "done" &&
         (result ? (

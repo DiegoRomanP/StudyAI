@@ -39,6 +39,7 @@ describe("AppShell", () => {
     expect(within(desktopNavigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Inicio",
       "Plan de estudio",
+      "Práctica",
       "Temas (Pareto)",
       "Recursos",
       "Metas",
@@ -47,7 +48,7 @@ describe("AppShell", () => {
     ]);
     expect(
       within(desktopNavigation).getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/inicio", "/plan", "/temas", "/documents", "/goals", "/settings", "/dashboard"]);
+    ).toEqual(["/inicio", "/plan", "/practica", "/temas", "/documents", "/goals", "/settings", "/dashboard"]);
     expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -57,6 +58,7 @@ describe("AppShell", () => {
     expect(within(bottomNavigation).getAllByRole("link").map((link) => link.textContent?.trim())).toEqual([
       "Inicio",
       "Plan",
+      "Práctica",
       "Estadísticas",
     ]);
     // Primary links plus the "Más" trigger never exceed five controls (S7).

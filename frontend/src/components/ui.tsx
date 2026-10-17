@@ -7,7 +7,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { useId } from "react";
+import { forwardRef, useId } from "react";
 import { Check, ChevronRight, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { LinkProps } from "react-router-dom";
@@ -29,18 +29,16 @@ function buttonClassName(variant: ButtonVariant, className: string) {
   return `${BUTTON_BASE} ${BUTTON_VARIANTS[variant]} ${className}`.trim();
 }
 
-export function Button({
-  variant = "primary",
-  className = "",
-  children,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }
+>(function Button({ variant = "primary", className = "", children, ...props }, ref) {
   return (
-    <button className={buttonClassName(variant, className)} {...props}>
+    <button ref={ref} className={buttonClassName(variant, className)} {...props}>
       {children}
     </button>
   );
-}
+});
 
 export function ButtonLink({
   variant = "primary",

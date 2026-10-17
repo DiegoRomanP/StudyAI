@@ -61,7 +61,7 @@ export function StudyPhase({
       </Card>
 
       <Card>
-        <div className="prose-study max-w-none">
+        <div className="prose-study mx-auto max-w-reading">
           <SafeMarkdown>{markdown || "_Sin material._"}</SafeMarkdown>
         </div>
       </Card>

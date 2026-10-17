@@ -1,5 +1,6 @@
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type QueryClient,
@@ -254,6 +255,16 @@ export function useQuiz(sessionId: number | null) {
     queryKey: ["quiz", sessionId],
     queryFn: () => api.getQuiz(sessionId as number),
     enabled: sessionId != null,
+  });
+}
+
+/** Read-only quizzes for several sessions (Práctica); shares the `["quiz", id]` cache. */
+export function useSessionQuizzes(sessionIds: number[]) {
+  return useQueries({
+    queries: sessionIds.map((sessionId) => ({
+      queryKey: ["quiz", sessionId],
+      queryFn: () => api.getQuiz(sessionId),
+    })),
   });
 }
 

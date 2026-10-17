@@ -131,7 +131,8 @@ const dashboard: DashboardDTO = {
       session_id: 54,
       topic_name: "Conectividad de hábitats",
       score: 80,
-      completed_at: "2026-09-29T12:00:00Z",
+      // Recent, so it falls inside Estadísticas' default "7 días" period.
+      completed_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     },
   ],
   weak_topics: [{ topic_name: "Recursos florales urbanos", score: 42 }],
@@ -440,6 +441,10 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       }
       if (url.pathname === "/sessions/54") return fulfillJson(route, session);
       if (url.pathname === "/quizzes/54") return fulfillJson(route, quiz);
+      const quizPath = /^\/quizzes\/(\d+)$/.exec(url.pathname);
+      if (quizPath) {
+        return fulfillJson(route, { id: 600 + Number(quizPath[1]), session_id: Number(quizPath[1]), questions: [] });
+      }
       if (url.pathname === "/documents") return fulfillJson(route, documents);
       if (url.pathname === "/goals") return fulfillJson(route, goals);
       if (url.pathname === "/plans") return fulfillJson(route, [plan]);
@@ -477,7 +482,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   );
 
   const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
-  const menuLabels = ["Inicio", "Plan", "Estadísticas"];
+  const menuLabels = ["Inicio", "Plan", "Práctica", "Estadísticas"];
   expect(await bottomNavigation.getByRole("link").allTextContents()).toEqual(menuLabels);
   await expect(bottomNavigation.getByRole("link", { name: "API Keys" })).toHaveCount(0);
 
@@ -581,11 +586,24 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       },
     },
     {
+      label: "Práctica",
+      path: "/practica",
+      heading: "Práctica",
+      title: "Práctica | StudyAI",
+      index: 2,
+      expectedControls: [{ tag: "button", label: "Difíciles" }],
+      readinessEvidence: ["practice question: pollinator corridors", "filter: Difíciles"],
+      waitForFixture: async () => {
+        await expect(page.getByText("Pregunta 1 de 1", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Difíciles", exact: true })).toBeVisible();
+      },
+    },
+    {
       label: "Estadísticas",
       path: "/dashboard",
       heading: "Estadísticas",
       title: "Estadísticas | StudyAI",
-      index: 2,
+      index: 3,
       expectedControls: [],
       readinessEvidence: ["weak topic: Recursos florales urbanos", "average score: 80%"],
       waitForFixture: async () => {
@@ -689,7 +707,8 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await expect(page.getByRole("button", { name: quiz.questions[0].options[0] })).toBeVisible();
   mobileLayoutEvidence.push(
     await assertMobileLayout(page, "Quiz", true, [
-      { tag: "button", label: quiz.questions[0].options[0] },
+      // Text content includes the decorative A–D badge (aria-hidden; the accessible name above omits it).
+      { tag: "button", label: `A${quiz.questions[0].options[0]}` },
     ], ["quiz state: Pregunta 1 de 1", `answer action: ${quiz.questions[0].options[0]}`]),
   );
 

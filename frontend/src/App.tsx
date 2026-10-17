@@ -11,6 +11,7 @@ import { LandingPage } from "./pages/LandingPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlanDetailPage } from "./pages/PlanDetailPage";
 import { PlanPage } from "./pages/PlanPage";
+import { PracticePage } from "./pages/PracticePage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TopicsPage } from "./pages/TopicsPage";
@@ -39,6 +40,7 @@ export default function App() {
       />
       <Route element={<AppLayout />}>
         <Route path="/inicio" element={<HomePage />} />
+        <Route path="/practica" element={<PracticePage />} />
         <Route path="/temas" element={<TopicsPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/goals" element={<GoalsPage />} />

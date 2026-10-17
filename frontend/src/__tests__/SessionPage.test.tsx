@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 function renderSession(
-  options: { session?: SessionDetailDTO; quiz?: QuizDTO; cachedSession?: SessionDetailDTO } = {},
+  options: { session?: SessionDetailDTO; quiz?: QuizDTO; cachedSession?: SessionDetailDTO; path?: string } = {},
 ) {
   vi.spyOn(api, "getSession").mockResolvedValue(options.session ?? session);
   vi.spyOn(api, "getQuiz").mockResolvedValue(options.quiz ?? quiz);
@@ -81,7 +81,7 @@ function renderSession(
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter
-        initialEntries={["/session/5"]}
+        initialEntries={[options.path ?? "/session/5"]}
         future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
       >
         <Routes>
@@ -175,6 +175,43 @@ describe("SessionPage", () => {
     const summary = await screen.findByRole("region", { name: "Resultado del test" });
     expect(within(summary).getByText(/1 flashcard calificada/)).toBeInTheDocument();
     expect(within(summary).queryByText("0%")).not.toBeInTheDocument();
+  });
+
+  it("opens straight on the test from Práctica's Simulacro and keeps the material one click away", async () => {
+    renderSession({ path: "/session/5?fase=test" });
+
+    expect(await screen.findByText("¿Qué mide Big O?")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /saltar al receso/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar respuesta" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Calidad 3/ }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Repasar el material" }));
+    expect(screen.getByText("¿Qué mide Big O?")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Volver al test" }));
+
+    // The answer given before reading the material is still there.
+    expect(screen.getByRole("button", { name: /^Calidad 3/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("asks before a new attempt on a completed session even when opened on the test", async () => {
+    renderSession({ session: { ...session, status: "COMPLETED", completed_at: "2026-10-10T10:00:00" }, path: "/session/5?fase=test" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Registrar un nuevo intento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Repasar el material" }));
+    fireEvent.click(screen.getByRole("button", { name: "Volver al test" }));
+    expect(screen.queryByRole("button", { name: "Registrar un nuevo intento" })).not.toBeInTheDocument();
+    expect(screen.getByText("¿Qué mide Big O?")).toBeInTheDocument();
+  });
+
+  it("shows multiple-choice options as lettered choices with a Markdown prompt", async () => {
+    renderSession({ path: "/session/5?fase=test" });
+    await answerFlashcard("¿Qué mide Big O?", 0);
+    await answerFlashcard("¿Qué es una pila?", 4);
+
+    const options = screen.getByRole("group", { name: "Opciones" });
+    expect(within(options).getAllByRole("button").map((button) => button.textContent)).toEqual(
+      quiz.questions[2].options.map((option, index) => `${"ABCD"[index]}${option}`),
+    );
   });
 
   it("offers a retry when the quiz cannot be loaded", async () => {
