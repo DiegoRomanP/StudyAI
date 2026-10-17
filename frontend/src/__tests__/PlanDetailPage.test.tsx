@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -67,5 +67,36 @@ describe("PlanDetailPage", () => {
     renderPlan();
 
     expect(await screen.findByText("Este plan no tiene sesiones disponibles.")).toBeInTheDocument();
+  });
+
+  it("offers the next pending session and lists every session by suggested day or order", async () => {
+    vi.spyOn(api, "getPlan").mockResolvedValue({
+      ...readyPlan,
+      created_at: "2026-10-12T10:00:00",
+      sessions: [
+        { id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" },
+        { id: 72, order_index: 2, topic_name: "Heaps", duration_minutes: 25, review_offset_days: 3, status: "PENDING" },
+        { id: 71, order_index: 1, topic_name: "Árboles", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+      ],
+    });
+    renderPlan();
+
+    expect(await screen.findByRole("link", { name: /Comenzar siguiente sesión/ })).toHaveAttribute(
+      "href",
+      "/session/71",
+    );
+    expect(screen.getByText("1 de 3 sesiones completadas")).toBeInTheDocument();
+
+    const sessions = screen.getByRole("region", { name: "Sesiones" });
+    const days = within(sessions).getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent);
+    expect(days).toHaveLength(2);
+    expect(days[0]).toMatch(/12/);
+    expect(days[1]).toMatch(/15/);
+    expect(within(sessions).getByRole("link", { name: /Grafos.*Completada/ })).toHaveAttribute("href", "/session/70");
+
+    fireEvent.click(within(sessions).getByRole("button", { name: "Lista" }));
+    const links = within(sessions).getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/session/70", "/session/71", "/session/72"]);
+    expect(screen.getByRole("link", { name: /Ver análisis Pareto/ })).toHaveAttribute("href", "/temas?plan=9");
   });
 });

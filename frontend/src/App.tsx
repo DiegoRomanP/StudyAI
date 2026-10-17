@@ -13,6 +13,7 @@ import { PlanDetailPage } from "./pages/PlanDetailPage";
 import { PlanPage } from "./pages/PlanPage";
 import { SessionPage } from "./pages/SessionPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TopicsPage } from "./pages/TopicsPage";
 
 function AppLayout() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
       />
       <Route element={<AppLayout />}>
         <Route path="/inicio" element={<HomePage />} />
+        <Route path="/temas" element={<TopicsPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/plan" element={<PlanPage />} />

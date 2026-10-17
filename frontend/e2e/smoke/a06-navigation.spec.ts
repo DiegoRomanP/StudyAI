@@ -194,7 +194,7 @@ async function openMobileOverflow(page: Page) {
   return { moreButton, navigation };
 }
 
-const OVERFLOW_LABELS = ["Recursos", "Metas", "API Keys"];
+const OVERFLOW_LABELS = ["Temas (Pareto)", "Recursos", "Metas", "API Keys"];
 
 async function navigateByKeyboard(
   page: Page,
@@ -512,11 +512,23 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
 
   const destinations = [
     {
+      label: "Temas (Pareto)",
+      path: "/temas",
+      heading: "Temas (Pareto)",
+      title: "Temas (Pareto) | StudyAI",
+      index: 0,
+      expectedControls: [{ tag: "a", href: "/plan/27" }],
+      readinessEvidence: [`prioritized topic: ${plan.topics[0].name}`, "plan link: /plan/27"],
+      waitForFixture: async () => {
+        await expect(page.getByRole("heading", { name: plan.topics[0].name })).toBeVisible();
+      },
+    },
+    {
       label: "Recursos",
       path: "/documents",
       heading: "Recursos",
       title: "Recursos | StudyAI",
-      index: 0,
+      index: 1,
       expectedControls: [{ tag: "button", label: "Eliminar" }],
       readinessEvidence: [`document row: ${documents[0].filename}`, "row action: Eliminar"],
       waitForFixture: async () => {
@@ -530,7 +542,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       path: "/goals",
       heading: "Metas",
       title: "Metas | StudyAI",
-      index: 1,
+      index: 2,
       expectedControls: [
         { tag: "button", label: "Editar" },
         { tag: "button", label: "Eliminar" },
@@ -587,7 +599,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       path: "/settings",
       heading: "API Keys",
       title: "API Keys | StudyAI",
-      index: 2,
+      index: 3,
       expectedControls: [
         { tag: "input", label: "sk-openai-test" },
         { tag: "button", label: "Guardar clave" },

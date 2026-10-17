@@ -96,7 +96,7 @@ export function PlanPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Plan de estudio</h1>
+        <h1 className="font-display text-2xl font-bold sm:text-3xl">Plan de estudio</h1>
         <p className="text-text-muted">
           Genera un plan a partir de una meta y tus documentos indexados.
         </p>
@@ -264,7 +264,11 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link to={`/plan/${plan.id}`} className="min-w-0 flex-1">
           <p className="truncate font-medium text-text-primary hover:text-action">{plan.title}</p>
-          <p className="text-xs text-text-muted">{plan.sessions.length} sesiones</p>
+          <p className="text-xs text-text-muted">
+            {plan.status === "READY"
+              ? `${plan.sessions.filter((session) => session.status === "COMPLETED").length} de ${plan.sessions.length} sesiones completadas`
+              : `${plan.sessions.length} sesiones`}
+          </p>
         </Link>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Badge color={meta.color}>{meta.label}</Badge>

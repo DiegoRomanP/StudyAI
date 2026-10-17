@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   ChartColumn,
+  ChartNoAxesColumnDecreasing,
   Ellipsis,
   FolderOpen,
   House,
@@ -41,6 +42,7 @@ export const NAVIGATION: NavigationItem[] = [
     activePatterns: ["/plan/:planId", "/session/:sessionId"],
     title: "Plan de estudio",
   },
+  { to: "/temas", label: "Temas (Pareto)", shortLabel: "Temas", icon: ChartNoAxesColumnDecreasing, title: "Temas (Pareto)" },
   { to: "/documents", label: "Recursos", icon: FolderOpen, title: "Recursos" },
   { to: "/goals", label: "Metas", icon: Target, title: "Metas" },
   { to: "/settings", label: "API Keys", icon: KeyRound, title: "API Keys" },

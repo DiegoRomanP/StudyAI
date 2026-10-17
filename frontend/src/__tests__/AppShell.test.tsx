@@ -39,6 +39,7 @@ describe("AppShell", () => {
     expect(within(desktopNavigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Inicio",
       "Plan de estudio",
+      "Temas (Pareto)",
       "Recursos",
       "Metas",
       "API Keys",
@@ -46,7 +47,7 @@ describe("AppShell", () => {
     ]);
     expect(
       within(desktopNavigation).getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/inicio", "/plan", "/documents", "/goals", "/settings", "/dashboard"]);
+    ).toEqual(["/inicio", "/plan", "/temas", "/documents", "/goals", "/settings", "/dashboard"]);
     expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -142,6 +143,7 @@ describe("AppShell", () => {
     expect(moreButton).toHaveAttribute("aria-expanded", "true");
     expect(overflowNavigation).toBeInTheDocument();
     expect(within(overflowNavigation).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/temas",
       "/documents",
       "/goals",
       "/settings",

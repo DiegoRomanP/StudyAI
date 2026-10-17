@@ -113,6 +113,14 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Prepara tu plan de estudio" })).toBeInTheDocument();
   });
 
+  it("serves the Pareto topic analysis at /temas with its title", async () => {
+    renderApp("/temas");
+
+    expect(screen.getByRole("heading", { level: 1, name: "Temas (Pareto)" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Temas (Pareto)" })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(document.title).toBe("Temas (Pareto) | StudyAI"));
+  });
+
   it("shows a useful not-found page with a link back to Inicio", () => {
     renderApp("/ruta-que-no-existe");
 
