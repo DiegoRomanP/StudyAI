@@ -18,7 +18,7 @@ El mockup (`images/Estudio inteligente con StudyAI.png`) muestra widgets que la 
 ## Defectos de contrato observados (no son widgets)
 
 - **Fechas sin zona horaria.** SQLite + Pydantic serializan `datetime` UTC sin `Z` (p. ej. `2026-10-17T14:34:44.006386`). El frontend las interpreta como UTC (`parseApiDate`, `src/lib/studyProgress.ts`). Lo correcto sería que el backend emita ISO 8601 con offset.
-- **`POST /plans/generate` no valida `document_ids`.** Se verificó el 2026-10-17 con el backend en modo demo: un plan con un ID de documento inexistente llegó a `READY`. La meta sí se valida (propiedad), pero la existencia, la propiedad y el estado `INDEXED` de cada documento no; ya figuraba como carrera abierta en A07. El cliente revalida antes de enviar (`useStudyStart`, `PlanPage`), pero la garantía debe vivir en `PlanService.create_plan`.
+- ~~**`POST /plans/generate` no valida `document_ids`.**~~ **Resuelto (rama `fix/plan-document-validation`).** Se reprodujo el 2026-10-17 en modo demo: un plan con un ID inexistente llegaba a `READY`. Ahora `PlanService.create_plan` exige documentos propios e `INDEXED` (y al menos uno) en la misma sesión que inserta el plan. Si no se cumple, responde 400 `PLAN_DOCUMENTS_UNAVAILABLE` con `document_ids` y no crea el plan. El cliente vuelve a leer la lista de documentos al recibir ese error.
 - **`weak_topics` incluye todos los temas calificados**, ordenados de peor a mejor (también al 100 %). La UI colorea por puntuación en lugar de tratarlos todos como débiles.
 
 ## Cómo cerrar una fila

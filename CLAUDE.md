@@ -138,6 +138,14 @@ Completing a session (`POST /sessions/{id}/complete`) publishes `session.complet
 per-flashcard quality ratings (0–5); `ProgressService` applies `calculate_next_review` (SM-2,
 `app/algorithms/sm2.py`) to update `FlashcardReview` rows.
 
+**Creating a plan validates its documents server-side.** `PlanService.create_plan` requires at
+least one `document_id` and that each one exists, belongs to the caller and is `INDEXED`
+(`_require_indexed_documents`), otherwise 400 `PLAN_DOCUMENTS_UNAVAILABLE` with the offending
+`document_ids` and no plan row. A foreign ID is reported exactly like a missing one (never
+disclose other users' documents). The check runs *after* the idempotency lookup so a replay of
+an already-accepted request still returns its plan. Without it, retrieval silently found nothing
+and a plan reached READY with generic content.
+
 **Deleting a plan (`DELETE /plans/{id}`, `PlanService.delete_plan`) must clean up `FlashcardReview`
 rows explicitly** — `FlashcardReview.question_id` points *at* a `QuizQuestion` but isn't a child of
 it in the ORM's `cascade="all, delete-orphan"` chain (`Plan` → `Session` → `Quiz` → `QuizQuestion`),

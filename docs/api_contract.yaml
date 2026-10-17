@@ -144,6 +144,11 @@ paths:
         payload devuelve 409. Sin clave, conserva el comportamiento anterior y
         crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
         actual; no es una cola durable ni garantiza recuperación tras un cierre.
+        Cada document_id debe existir, pertenecer al usuario y estar INDEXED;
+        si no, o si la lista está vacía, responde 400 y no crea el plan. Un ID
+        ajeno se informa igual que uno inexistente. La validación ocurre después
+        de comprobar la idempotencia: repetir una solicitud ya aceptada devuelve
+        su plan aunque un documento se haya borrado después.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -160,6 +165,7 @@ paths:
                 goal_id: { type: integer }
                 document_ids:
                   type: array
+                  minItems: 1
                   items: { type: integer }
       responses:
         "202":
@@ -167,6 +173,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanStatus" }
+        "400":
+          description: >-
+            Algún documento no existe, no pertenece al usuario o no está
+            INDEXED (o no se envió ninguno); document_ids lista los afectados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code, document_ids]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: PLAN_DOCUMENTS_UNAVAILABLE }
+                  document_ids:
+                    type: array
+                    items: { type: integer }
         "409":
           description: La clave de idempotencia ya se utilizó con una solicitud diferente
           content:
