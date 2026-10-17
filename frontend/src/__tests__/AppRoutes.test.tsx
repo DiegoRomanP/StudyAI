@@ -103,6 +103,14 @@ describe("App routes", () => {
       expect(cta).toHaveAttribute("href", "/inicio");
     }
     expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver demo" })).toHaveAttribute("href", "/demo");
+  });
+
+  it("serves the simulated demo outside the app shell", async () => {
+    renderApp("/demo");
+
+    expect(await screen.findByRole("region", { name: "Aviso de demostración" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
   });
 
   it("renders the app home at /inicio inside the shell", async () => {

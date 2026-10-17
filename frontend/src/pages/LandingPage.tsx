@@ -145,6 +145,9 @@ export function LandingPage() {
                 Comenzar gratis
                 <ArrowRight aria-hidden="true" className="h-4 w-4" />
               </ButtonLink>
+              <ButtonLink to="/demo" variant="secondary" className="px-6">
+                Ver demo
+              </ButtonLink>
             </div>
           </m.div>
 

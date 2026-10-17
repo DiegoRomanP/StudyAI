@@ -1,9 +1,10 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { Outlet, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import { StudyStreakCard } from "./components/home/HomeCards";
-import { DashboardPage } from "./pages/DashboardPage";
+import { Spinner } from "./components/ui";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { HomePage } from "./pages/HomePage";
@@ -11,16 +12,26 @@ import { LandingPage } from "./pages/LandingPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PlanDetailPage } from "./pages/PlanDetailPage";
 import { PlanPage } from "./pages/PlanPage";
-import { PracticePage } from "./pages/PracticePage";
-import { SessionPage } from "./pages/SessionPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TopicsPage } from "./pages/TopicsPage";
+
+// Heavy routes load on demand: Recharts (Estadísticas), Markdown (Sesión/Práctica), the demo.
+const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const DemoPage = lazy(() => import("./pages/DemoPage").then((module) => ({ default: module.DemoPage })));
+const PracticePage = lazy(() => import("./pages/PracticePage").then((module) => ({ default: module.PracticePage })));
+const SessionPage = lazy(() => import("./pages/SessionPage").then((module) => ({ default: module.SessionPage })));
+
+function Lazy({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<Spinner label="Cargando…" />}>{children}</Suspense>;
+}
 
 function AppLayout() {
   return (
     <AppShell sidebarFooter={<StudyStreakCard />}>
       <RouteErrorBoundary>
-        <Outlet />
+        <Lazy>
+          <Outlet />
+        </Lazy>
       </RouteErrorBoundary>
     </AppShell>
   );
@@ -35,6 +46,16 @@ export default function App() {
         element={
           <RouteErrorBoundary>
             <LandingPage />
+          </RouteErrorBoundary>
+        }
+      />
+      <Route
+        path="/demo"
+        element={
+          <RouteErrorBoundary>
+            <Lazy>
+              <DemoPage />
+            </Lazy>
           </RouteErrorBoundary>
         }
       />
