@@ -20,6 +20,8 @@ def test_catalog_is_derived_from_provider_owned_metadata():
 
     assert catalog[LLMProviderName.NVIDIA].allows_custom_model is False
     assert catalog[LLMProviderName.OLLAMA].supports_model_discovery is True
+    # Ollama models must be picked from the discovered installed list, never typed freely.
+    assert catalog[LLMProviderName.OLLAMA].allows_custom_model is False
     assert catalog[LLMProviderName.OPENAI].supports_custom_base_url is True
 
 

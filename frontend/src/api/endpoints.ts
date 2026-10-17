@@ -106,6 +106,6 @@ export const api = {
     apiClient
       .post<LLMConnectionTestResponse>(`/llm-settings/${provider}/test`, payload)
       .then((r) => r.data),
-  listOllamaModels: () =>
-    apiClient.get<OllamaModel[]>("/llm-settings/OLLAMA/models").then((r) => r.data),
+  listProviderModels: (provider: LLMProviderKey) =>
+    apiClient.get<OllamaModel[]>(`/llm-settings/${provider}/models`).then((r) => r.data),
 };

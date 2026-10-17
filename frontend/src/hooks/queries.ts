@@ -45,7 +45,12 @@ function invalidateLlmCredentialsOnConflict(
   error: unknown,
 ) {
   const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
-  if (response?.status === 409 || response?.data?.code === "LLM_AUTHENTICATION_FAILED") {
+  // 409: concurrent change; 404: another tab deleted the configuration.
+  if (
+    response?.status === 409 ||
+    response?.status === 404 ||
+    response?.data?.code === "LLM_AUTHENTICATION_FAILED"
+  ) {
     qc.invalidateQueries({ queryKey: ["llm-credentials"] });
     invalidateLlmRuntime(qc);
   }
@@ -261,6 +266,8 @@ export function useSaveLlmCredential() {
   return useMutation({
     mutationFn: ({ provider, payload }: { provider: LLMProviderKey; payload: LLMCredentialUpsert }) =>
       api.saveLlmCredential(provider, payload),
+    // The variables carry the plaintext key: never keep a finished save in the mutation cache.
+    gcTime: 0,
     onSuccess: (credential) => {
       replaceCachedLlmCredential(qc, credential);
       invalidateLlmRuntime(qc);
@@ -308,6 +315,7 @@ export function useDeactivateAllLlmCredentials() {
       qc.invalidateQueries({ queryKey: ["llm-credentials"] });
       invalidateLlmRuntime(qc);
     },
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -319,6 +327,7 @@ export function useDeleteLlmCredential() {
       qc.invalidateQueries({ queryKey: ["llm-credentials"] });
       invalidateLlmRuntime(qc);
     },
+    onError: (error) => invalidateLlmCredentialsOnConflict(qc, error),
   });
 }
 
@@ -335,10 +344,11 @@ export function useTestLlmCredential() {
   });
 }
 
-export function useOllamaModels(enabled: boolean) {
+/** Installed models for a provider whose catalog entry supports model discovery. */
+export function useProviderModels(provider: LLMProviderKey, enabled: boolean) {
   return useQuery({
-    queryKey: ["ollama-models"],
-    queryFn: api.listOllamaModels,
+    queryKey: ["llm-provider-models", provider],
+    queryFn: () => api.listProviderModels(provider),
     enabled,
     retry: false,
   });

@@ -3,13 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../api/types";
+import { resolveLlmRuntime } from "../components/llm/LlmRuntimeSummary";
 
 const api = vi.hoisted(() => ({
   listProviderCatalog: vi.fn(),
   listLlmCredentials: vi.fn(),
   getLlmRuntime: vi.fn(),
   saveLlmCredential: vi.fn(),
-  listOllamaModels: vi.fn(),
+  listProviderModels: vi.fn(),
   updateLlmCredentialModel: vi.fn(),
   testLlmCredential: vi.fn(),
   activateLlmCredential: vi.fn(),
@@ -33,6 +34,15 @@ const catalog: ProviderCatalogEntry = {
   supports_model_discovery: false,
   supports_custom_base_url: true,
   allows_custom_model: true,
+};
+
+const anthropicCatalog: ProviderCatalogEntry = {
+  ...catalog,
+  provider: "ANTHROPIC",
+  label: "Anthropic (Claude)",
+  default_model: "claude-haiku-4-5",
+  default_base_url: null,
+  supports_custom_base_url: false,
 };
 
 const credential: LLMCredentialDTO = {
@@ -168,7 +178,10 @@ describe("SettingsPage", () => {
 
     api.updateLlmCredentialModel.mockRejectedValue({
       isAxiosError: true,
-      response: { status: 409, data: { detail: "La configuración cambió." } },
+      response: {
+        status: 409,
+        data: { detail: "La configuración cambió.", code: "LLM_CONFIGURATION_CHANGED" },
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
 
@@ -177,6 +190,55 @@ describe("SettingsPage", () => {
         model: "gpt-4o-mini",
         base_url: "https://local-proxy.example/v1",
         expected_revision: 7,
+      });
+    });
+  });
+
+  it("recovers a 409 by adopting the confirmed remote revision before the next save", async () => {
+    const remoteCredential = {
+      ...credential,
+      config_revision: 8,
+      base_url: "https://remote-proxy.example/v1",
+    };
+    api.listLlmCredentials
+      .mockResolvedValueOnce([credential])
+      .mockResolvedValueOnce([remoteCredential])
+      .mockResolvedValueOnce([remoteCredential]);
+    api.updateLlmCredentialModel
+      .mockRejectedValueOnce({
+        isAxiosError: true,
+        response: {
+        status: 409,
+        data: { detail: "La configuración cambió.", code: "LLM_CONFIGURATION_CHANGED" },
+      },
+      })
+      .mockResolvedValueOnce({ ...remoteCredential, config_revision: 9, is_verified: false });
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByLabelText("URL base personalizada"), {
+      target: { value: "https://local-proxy.example/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
+
+    expect(
+      await screen.findByText("La configuración cambió en otra pestaña. Tu borrador local no se sobrescribió."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Usar configuración remota" }));
+    expect(await screen.findByLabelText("URL base personalizada")).toHaveValue(
+      "https://remote-proxy.example/v1",
+    );
+
+    fireEvent.change(screen.getByLabelText("URL base personalizada"), {
+      target: { value: "https://after-recovery.example/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar y verificar modelo" }));
+
+    await waitFor(() => {
+      expect(api.updateLlmCredentialModel).toHaveBeenLastCalledWith("OPENAI", {
+        model: "gpt-4o-mini",
+        base_url: "https://after-recovery.example/v1",
+        expected_revision: 8,
       });
     });
   });
@@ -192,6 +254,7 @@ describe("SettingsPage", () => {
       requires_api_key: false,
       supports_model_discovery: true,
       supports_custom_base_url: false,
+      allows_custom_model: false,
     };
     const ollamaCredential: LLMCredentialDTO = {
       ...credential,
@@ -204,6 +267,7 @@ describe("SettingsPage", () => {
       requires_api_key: false,
       supports_model_discovery: true,
       supports_custom_base_url: false,
+      allows_custom_model: false,
     };
     const savedCredential = { ...ollamaCredential, config_revision: 1, is_verified: false };
     const draft = { ...savedCredential, config_revision: 2 };
@@ -212,7 +276,7 @@ describe("SettingsPage", () => {
     api.listLlmCredentials
       .mockResolvedValueOnce([ollamaCredential])
       .mockResolvedValueOnce([]);
-    api.listOllamaModels.mockResolvedValue([
+    api.listProviderModels.mockResolvedValue([
       { id: "qwen3.5:9b", size_bytes: null, parameter_size: null, context_length: null },
     ]);
     api.saveLlmCredential.mockResolvedValue(savedCredential);
@@ -303,6 +367,7 @@ describe("SettingsPage", () => {
     expect(screen.queryByText("Personalizado…")).not.toBeInTheDocument();
     expect(screen.queryByText("Configuración avanzada")).not.toBeInTheDocument();
     expect(screen.getByText(/modelo guardado ya no es compatible/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar" })).toBeDisabled();
   });
 
   it("keeps the saved NVIDIA model selected when credentials finish loading", async () => {
@@ -496,6 +561,7 @@ describe("SettingsPage", () => {
   });
 
   it("refreshes the runtime source after deactivating a user credential", async () => {
+    api.listProviderCatalog.mockResolvedValue([catalog, anthropicCatalog]);
     api.getLlmRuntime
       .mockResolvedValueOnce({
         source: "USER",
@@ -558,6 +624,7 @@ describe("SettingsPage", () => {
   });
 
   it("shows the Anthropic server configuration instead of demo mode", async () => {
+    api.listProviderCatalog.mockResolvedValue([catalog, anthropicCatalog]);
     api.getLlmRuntime.mockResolvedValue({
       source: "ENV",
       provider: "ANTHROPIC",
@@ -571,11 +638,12 @@ describe("SettingsPage", () => {
     renderSettings();
 
     expect(await screen.findByText("Configuración del servidor")).toBeInTheDocument();
-    expect(screen.getByText(/ANTHROPIC/)).toBeInTheDocument();
+    expect(screen.getByText("Anthropic (Claude) · claude-plan")).toBeInTheDocument();
     expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
   });
 
   it("renders the safe runtime fallback reason", async () => {
+    api.listProviderCatalog.mockResolvedValue([catalog, anthropicCatalog]);
     api.getLlmRuntime.mockResolvedValue({
       source: "ENV",
       provider: "ANTHROPIC",
@@ -610,6 +678,41 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
     expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("fails closed for runtime models with an incompatible value type", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "MOCK",
+      provider: null,
+      models: {
+        topic_analysis: 7,
+        session_plan: "simulado",
+        session_content: "simulado",
+      },
+      fallback_reason: null,
+    });
+
+    const malformedRuntime = {
+      source: "MOCK",
+      provider: null,
+      models: {
+        topic_analysis: 7,
+        session_plan: "simulado",
+        session_content: "simulado",
+      },
+      fallback_reason: null,
+    };
+
+    expect(() => resolveLlmRuntime(malformedRuntime, [catalog])).not.toThrow();
+    expect(resolveLlmRuntime(malformedRuntime, [catalog]).kind).toBe("unknown");
+  });
+
+  it("shows an unknown state when the completed runtime response is empty", async () => {
+    api.getLlmRuntime.mockResolvedValue(null);
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Consultando la configuración del servidor…")).not.toBeInTheDocument();
   });
 
   it("shows an unknown state for incomplete runtime models", async () => {
@@ -681,5 +784,111 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
     expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+  });
+
+  it("does not mark a saved credential active unless the runtime confirms it", async () => {
+    api.listLlmCredentials.mockResolvedValue([{ ...credential, is_active: true }]);
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+
+    expect(screen.queryByText("Activo")).not.toBeInTheDocument();
+  });
+
+  it("shows an unknown runtime when its provider is missing from the live catalog", async () => {
+    api.getLlmRuntime.mockResolvedValue({
+      source: "USER",
+      provider: "GEMINI",
+      models: {
+        topic_analysis: "gemini-3.8-flash",
+        session_plan: "gemini-3.8-flash",
+        session_content: "gemini-3.8-flash",
+      },
+      fallback_reason: null,
+    });
+    renderSettings();
+
+    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(screen.queryByText("Configuración de usuario activa")).not.toBeInTheDocument();
+  });
+
+  it("exposes a labeled model control in the provider configuration", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+
+    expect(screen.getByLabelText("Modelo")).toBeInTheDocument();
+  });
+
+  it("exposes a labeled API-key control", async () => {
+    api.listLlmCredentials.mockResolvedValue([]);
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+
+    expect(screen.getByLabelText("Clave de API")).toBeInTheDocument();
+  });
+
+  it("invalidates verification evidence while a local model draft is edited", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "__custom__" } });
+
+    expect(screen.getByText(/sin verificar/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar" })).toBeDisabled();
+  });
+
+  it("invalidates verification evidence when a saved URL is edited", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByLabelText("URL base personalizada"), {
+      target: { value: "https://unverified-proxy.example/v1" },
+    });
+
+    expect(screen.getByText(/sin verificar/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar" })).toBeDisabled();
+  });
+
+  it("invalidates verification evidence when replacing an API key", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar clave" }));
+    fireEvent.change(screen.getByLabelText("Clave de API"), {
+      target: { value: "sk-new-secret" },
+    });
+
+    expect(screen.getByText(/sin verificar/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar" })).toBeDisabled();
+  });
+
+  it("exposes the reusable advanced provider setup region from Settings", async () => {
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+
+    expect(screen.getByRole("region", { name: "Configuración de OpenAI" })).toHaveAttribute(
+      "data-variant",
+      "advanced",
+    );
+  });
+
+  it("clears the submitted API key from the browser after save", async () => {
+    api.listLlmCredentials.mockResolvedValue([]);
+    renderSettings();
+
+    await screen.findByText("OpenAI");
+    fireEvent.change(screen.getByPlaceholderText("sk-..."), {
+      target: { value: "sk-secret-that-must-not-remain" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar clave" }));
+
+    await waitFor(() => {
+      expect(api.saveLlmCredential).toHaveBeenCalled();
+      expect(screen.queryByDisplayValue("sk-secret-that-must-not-remain")).not.toBeInTheDocument();
+    });
+    expect(document.body).not.toHaveTextContent("sk-secret-that-must-not-remain");
   });
 });
