@@ -4,7 +4,7 @@
 
 **Arquitectura:** integración incremental sobre React 18 + TypeScript + Vite + Tailwind 3. Las páginas compondrán componentes reutilizables; la coordinación de operaciones estará en hooks; las llamadas al servidor seguirán pasando por TanStack Query y el cliente Axios tipado.
 
-**Estado:** integración incremental. A01 tiene hallazgos Dev-Reviewer `CAMBIOS REQUERIDOS`; A02–A04 están implementadas y aprobadas técnicamente; A05 está aprobada técnicamente, con diseño/Penpot pendiente; A06 está aprobada técnicamente y committed en `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. El follow-up A07 fue aprobado técnicamente por Dev-Reviewer en su segundo pase (2026-09-30). La base está committed en `5ecad50b7c006b4cc0b99157b66ee1736cc699b1`; la corrección posterior aún no tiene commit. Las verificaciones del árbol corregido posterior a esa base incluyen 107 Vitest, runner 33/33 y QA integrado 78/78 con runtime `MOCK`; no se atribuyen al commit `5ecad50`. La validación cliente de procedencia `GET`/`POST` es provisional y la carrera backend sigue pendiente. La revisión visual/Penpot, A01, `PEN-03` y las dos decisiones de producto de la sección 8 siguen sin aprobación. A08–A18 siguen pendientes y no se adelantan en esta actualización.
+**Estado (2026-10-17):** A08–A13 implementadas y verificadas mediante el plan ODD `odd/tasks/studyai-fluid-learning.md` (commits `e207aba`…`57e536a`; detalle en cada actividad). La landing pública, la demo simulada y la navegación del mockup se añadieron por decisión del usuario (T09, T15). A14–A18 se cubren en parte con el E2E del recorrido completo (`e2e/smoke/study-flow.spec.ts`) y la revisión responsive de T10; la paridad con Penpot, A01, `PEN-03` y las decisiones de la sección 8 siguen sin aprobación formal. Historial anterior: integración incremental. A01 tiene hallazgos Dev-Reviewer `CAMBIOS REQUERIDOS`; A02–A04 están implementadas y aprobadas técnicamente; A05 está aprobada técnicamente, con diseño/Penpot pendiente; A06 está aprobada técnicamente y committed en `58e3a97861993122f41a712310bc9b5d5d5dc2ca`. El follow-up A07 fue aprobado técnicamente por Dev-Reviewer en su segundo pase (2026-09-30). La base está committed en `5ecad50b7c006b4cc0b99157b66ee1736cc699b1`; la corrección posterior aún no tiene commit. Las verificaciones del árbol corregido posterior a esa base incluyen 107 Vitest, runner 33/33 y QA integrado 78/78 con runtime `MOCK`; no se atribuyen al commit `5ecad50`. La validación cliente de procedencia `GET`/`POST` es provisional y la carrera backend sigue pendiente. La revisión visual/Penpot, A01, `PEN-03` y las dos decisiones de producto de la sección 8 siguen sin aprobación. A08–A18 siguen pendientes y no se adelantan en esta actualización.
 
 ## 1. Hallazgos que condicionan el trabajo
 
@@ -326,6 +326,8 @@ Comprobar etiquetas y estado deshabilitado de `Input`/`Select`, navegación sem�
 
 ## A08. Extraer configuración de proveedor para Inicio y Configuración
 
+> **Estado A08 (2026-10-17):** implementada y verificada de forma independiente; commit `e207aba` (ODD T04). `ProviderSetup` reutilizable (variantes avanzada y compacta) en API Keys e Inicio.
+
 **Dependencias:** A05; mantener verdes las pruebas existentes.
 
 **Archivos:** `ProviderSetup.tsx`, `LlmRuntimeSummary.tsx`, `useProviderSetup.ts`, `SettingsPage.tsx`.
@@ -348,6 +350,8 @@ Comprobar etiquetas y estado deshabilitado de `Input`/`Select`, navegación sem�
 **Criterio de salida:** el mismo flujo seguro puede completarse dentro de Inicio y en Configuración.
 
 ## A09. Implementar la coordinación de «Estudiar»
+
+> **Estado A09 (2026-10-17):** implementada en `b4d2dda` (ODD T05, L52) tras una revisión independiente con cambios corregidos. `useStudyStart`: bloqueo síncrono, meta reutilizada, `Idempotency-Key` estable, etapas inciertas meta/plan, error con reintento si el GET del plan falla y opción de dejar de seguir un plan en proceso.
 
 **Dependencias:** A07–A08.
 
@@ -394,6 +398,8 @@ Cubrir doble clic, StrictMode, meta reutilizada, fallo después de guardar meta,
 
 ## A10. Construir Inicio: primera visita y regreso
 
+> **Estado A10 (2026-10-17):** implementada en `b4d2dda` (ODD T05). Inicio en `/inicio` (landing pública en `/`): sesión de hoy real, progreso, repasos SM-2, enfoque Pareto y la configuración en una sola superficie; sin redirección al llegar a READY.
+
 **Dependencias:** A06–A09.
 
 **Archivo:** `HomePage.tsx`.
@@ -418,6 +424,8 @@ Verificar primera visita, regreso, `MOCK`, `ENV`, `USER`, runtime desconocido y 
 
 ## A11. Integrar páginas profundas y coherencia de caché
 
+> **Estado A11 (2026-10-17):** implementada en `e966140` (ODD T06). Detalle del plan con Calendario/Lista por fecha sugerida y la nueva página `/temas` (Pareto). Caché coherente desde T13 (`74f81cb`).
+
 **Dependencias:** A07 y A10.
 
 **Archivos:** páginas de Documentos, Metas, Plan y Detalle; `hooks/queries.ts`.
@@ -437,6 +445,8 @@ Verificar primera visita, regreso, `MOCK`, `ENV`, `USER`, runtime desconocido y 
 **Criterio de salida:** listas, detalle, Inicio y progreso reflejan la misma realidad del servidor después de cada operación.
 
 ## A12. Integrar sesión, quiz y resultado
+
+> **Estado A12 (2026-10-17):** implementada en `74f81cb` (T13: resultado confirmado, flashcards accesibles, reintento, Markdown seguro) y en `576fc15` (ODD T07: opciones A–D, `/practica` de solo lectura y simulacro con `?fase=test`). Revisión independiente con cambios corregidos.
 
 **Dependencias:** A05 y A11.
 
@@ -463,6 +473,8 @@ Incluir quiz vacío, última pregunta, calidad `0`, fallo de envío, resultado v
 **Criterio de salida:** estudio → receso → quiz → resultado funciona con datos reales y sin confirmaciones prematuras.
 
 ## A13. Integrar Dashboard y completar Configuración
+
+> **Estado A13 (2026-10-17):** implementada en `a096ea0` (ODD T08). Estadísticas con 7 días/30 días/Todo, gráfico de área, tabla equivalente y solo métricas reales. Las métricas sin contrato están en [`t12-contract-gaps.md`](frontend-integration/t12-contract-gaps.md).
 
 **Dependencias:** A08 y A12.
 

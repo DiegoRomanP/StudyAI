@@ -81,7 +81,7 @@ export function DocumentsPage() {
             )}
           </>
         ) : !isError ? (
-          <p className="text-sm text-slate-400">Aún no has subido documentos.</p>
+          <p className="text-sm text-text-muted">Aún no has subido documentos.</p>
         ) : null}
       </section>
     </div>
@@ -108,14 +108,14 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
   return (
     <Card className="flex items-center justify-between">
       <div className="min-w-0">
-        <p className="truncate font-medium text-slate-800">{doc.filename}</p>
-        <p className="text-xs text-slate-400">
+        <p className="truncate font-medium text-text-primary">{doc.filename}</p>
+        <p className="text-xs text-text-muted">
           {(doc.file_size / 1024).toFixed(1)} KB · .{doc.file_type}
         </p>
         {doc.status === "FAILED" && doc.error_message && (
-          <p className="mt-1 text-xs text-red-600">{doc.error_message}</p>
+          <p className="mt-1 text-xs text-state-error">{doc.error_message}</p>
         )}
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-xs text-state-error">{error}</p>}
       </div>
       <div className="flex items-center gap-3">
         {doc.status === "PENDING" && <Spinner />}

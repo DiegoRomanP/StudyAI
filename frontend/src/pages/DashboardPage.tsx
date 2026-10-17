@@ -34,6 +34,13 @@ const RANGE_LABELS: Record<StatsRange, string> = {
 
 const AXIS_TICK = { fontSize: 12, fill: "rgb(var(--color-text-muted))" };
 
+/** Weak-topic tone by score: the backend lists every graded topic, weakest first. */
+function scoreTone(score: number) {
+  if (score < 60) return { text: "text-state-error", bar: "bg-state-error" };
+  if (score < 80) return { text: "text-state-warning", bar: "bg-state-warning" };
+  return { text: "text-state-success", bar: "bg-state-success" };
+}
+
 function shortDate(value: string | null) {
   const date = parseApiDate(value);
   return date ? date.toLocaleDateString("es", { day: "numeric", month: "short" }) : "Sin fecha";
@@ -227,17 +234,20 @@ function DashboardContent({
             <p className="text-sm text-text-muted">Sin datos todavía.</p>
           ) : (
             <ul className="space-y-3">
-              {data.weak_topics.map((topic, index) => (
-                <li key={`${index}-${topic.topic_name}`} className="space-y-1 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="min-w-0 truncate">{topic.topic_name}</span>
-                    <span className="font-semibold text-state-error">{topic.score}%</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted" aria-hidden="true">
-                    <div className="h-full rounded-full bg-state-error" style={{ width: `${Math.min(100, Math.max(0, topic.score))}%` }} />
-                  </div>
-                </li>
-              ))}
+              {data.weak_topics.map((topic, index) => {
+                const tone = scoreTone(topic.score);
+                return (
+                  <li key={`${index}-${topic.topic_name}`} className="space-y-1 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate">{topic.topic_name}</span>
+                      <span className={`font-semibold ${tone.text}`}>{topic.score}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted" aria-hidden="true">
+                      <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.min(100, Math.max(0, topic.score))}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

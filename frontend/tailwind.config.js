@@ -38,46 +38,6 @@ export default {
         white: tokenColor("--color-text-primary"),
         glass: "var(--surface-glass)",
         "glass-line": "var(--border-glass)",
-
-        // Legacy utility aliases keep existing pages on the semantic palette during extraction.
-        brand: {
-          50: tokenColor("--color-surface-action-subtle"),
-          100: tokenColor("--color-surface-muted"),
-          300: tokenColor("--color-surface-muted"),
-          400: tokenColor("--color-action-text"),
-          500: tokenColor("--color-action-text"),
-          600: tokenColor("--color-action-text"),
-          700: tokenColor("--color-action-hover"),
-        },
-        slate: {
-          50: tokenColor("--color-surface-subtle"),
-          100: tokenColor("--color-surface-muted"),
-          200: tokenColor("--color-line"),
-          300: tokenColor("--color-line-strong"),
-          400: tokenColor("--color-text-muted"),
-          500: tokenColor("--color-text-muted"),
-          600: tokenColor("--color-text-muted"),
-          700: tokenColor("--color-text-primary"),
-          800: tokenColor("--color-text-primary"),
-          900: tokenColor("--color-text-primary"),
-        },
-        green: {
-          100: tokenColor("--color-surface-success"),
-          600: tokenColor("--color-state-success"),
-          700: tokenColor("--color-state-success"),
-        },
-        amber: {
-          100: tokenColor("--color-surface-warning"),
-          600: tokenColor("--color-state-warning"),
-          700: tokenColor("--color-state-warning"),
-        },
-        red: {
-          100: tokenColor("--color-surface-error"),
-          200: tokenColor("--color-surface-error"),
-          300: tokenColor("--color-state-error"),
-          600: tokenColor("--color-state-error"),
-          700: tokenColor("--color-state-error"),
-        },
       },
       fontFamily: {
         sans: ["var(--font-ui)"],

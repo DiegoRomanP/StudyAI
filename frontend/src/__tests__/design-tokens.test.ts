@@ -143,7 +143,7 @@ describe("StudyAI dark design tokens", () => {
     );
   });
 
-  it("locks font fallback stacks and legacy Tailwind aliases", () => {
+  it("locks font fallback stacks and keeps legacy Tailwind aliases removed", () => {
     expect(tokenSource).toContain('--font-display: "Manrope", "Segoe UI", sans-serif;');
     expect(tokenSource).toContain('--font-ui: "Inter", "Segoe UI", sans-serif;');
     expect(tokenSource).toContain('--font-reading: "Inter", "Segoe UI", sans-serif;');
@@ -152,36 +152,9 @@ describe("StudyAI dark design tokens", () => {
     expect(tailwindSource).toContain('ui: ["var(--font-ui)"]');
     expect(tailwindSource).toContain('reading: ["var(--font-reading)"]');
 
-    const brandAliases = readConfigBlock("brand");
-    const slateAliases = readConfigBlock("slate");
-    expect(brandAliases).not.toBe("");
-    expect(slateAliases).not.toBe("");
-
-    for (const alias of [
-      '50: tokenColor("--color-surface-action-subtle")',
-      '100: tokenColor("--color-surface-muted")',
-      '300: tokenColor("--color-surface-muted")',
-      '400: tokenColor("--color-action-text")',
-      '500: tokenColor("--color-action-text")',
-      '600: tokenColor("--color-action-text")',
-      '700: tokenColor("--color-action-hover")',
-    ]) {
-      expect(brandAliases).toContain(alias);
-    }
-
-    for (const alias of [
-      '50: tokenColor("--color-surface-subtle")',
-      '100: tokenColor("--color-surface-muted")',
-      '200: tokenColor("--color-line")',
-      '300: tokenColor("--color-line-strong")',
-      '400: tokenColor("--color-text-muted")',
-      '500: tokenColor("--color-text-muted")',
-      '600: tokenColor("--color-text-muted")',
-      '700: tokenColor("--color-text-primary")',
-      '800: tokenColor("--color-text-primary")',
-      '900: tokenColor("--color-text-primary")',
-    ]) {
-      expect(slateAliases).toContain(alias);
+    // Legacy brand/slate/red/amber/green aliases were removed once no utility used them.
+    for (const alias of ["brand", "slate", "red", "amber", "green"]) {
+      expect(readConfigBlock(alias)).toBe("");
     }
   });
 
