@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
+import { isNotFoundError } from "../api/errors";
 import type {
   DocumentDTO,
   LLMCredentialDTO,
@@ -15,6 +16,7 @@ import type {
   LLMCredentialUpsert,
   LLMConnectionTest,
   LLMProviderKey,
+  PlanDTO,
   QuizAnswer,
 } from "../api/types";
 
@@ -175,8 +177,10 @@ export function useDeleteGoal() {
     mutationFn: (id: number) => api.deleteGoal(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["goals"] });
-      // Deleting a goal cascades to its plans on the backend.
+      // Deleting a goal cascades to its plans (and their results/reviews) on the backend.
       qc.invalidateQueries({ queryKey: ["plans"] });
+      qc.invalidateQueries({ queryKey: ["plan"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }
@@ -189,8 +193,16 @@ export function usePlans() {
 export function useGeneratePlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ goalId, documentIds }: { goalId: number; documentIds: number[] }) =>
-      api.generatePlan(goalId, documentIds),
+    mutationFn: ({
+      goalId,
+      documentIds,
+      idempotencyKey,
+    }: {
+      goalId: number;
+      documentIds: number[];
+      /** Reuse the same key when retrying the same logical request. */
+      idempotencyKey?: string;
+    }) => api.generatePlan(goalId, documentIds, idempotencyKey),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
   });
 }
@@ -199,7 +211,21 @@ export function useDeletePlan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deletePlan(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+    onSuccess: (_, id) => {
+      // Its sessions and quizzes no longer exist either: never reopen them from cache.
+      const cachedSessions = [
+        ...(qc.getQueryData<PlanDTO>(["plan", id])?.sessions ?? []),
+        ...(qc.getQueryData<PlanDTO[]>(["plans"])?.find((plan) => plan.id === id)?.sessions ?? []),
+      ];
+      for (const session of cachedSessions) {
+        qc.removeQueries({ queryKey: ["session", session.id] });
+        qc.removeQueries({ queryKey: ["quiz", session.id] });
+      }
+      qc.removeQueries({ queryKey: ["plan", id] });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      // The plan's quiz results and flashcard reviews are deleted with it.
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
   });
 }
 
@@ -210,7 +236,7 @@ export function usePlan(planId: number | null) {
     queryFn: () => api.getPlan(planId as number),
     enabled: planId != null,
     refetchInterval: (query) =>
-      query.state.data?.status === "PROCESSING" ? 3000 : false,
+      query.state.data?.status === "PROCESSING" && !isNotFoundError(query.state.error) ? 3000 : false,
   });
 }
 
@@ -234,11 +260,19 @@ export function useQuiz(sessionId: number | null) {
 export function useSubmitQuiz() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ quizId, answers }: { quizId: number; answers: QuizAnswer[] }) =>
-      api.submitQuiz(quizId, answers),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    mutationFn: ({
+      quizId,
+      answers,
+    }: {
+      quizId: number;
+      sessionId: number;
+      answers: QuizAnswer[];
+    }) => api.submitQuiz(quizId, answers),
+    onSuccess: (_, { sessionId }) => {
+      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      qc.invalidateQueries({ queryKey: ["plans"] });
       qc.invalidateQueries({ queryKey: ["plan"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

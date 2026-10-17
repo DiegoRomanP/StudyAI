@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const tokenSource = readFileSync(resolve(process.cwd(), "src/styles/tokens.css"), "utf8");
@@ -111,6 +111,28 @@ describe("StudyAI dark design tokens", () => {
     expect(tailwindSource).toContain('white: tokenColor("--color-text-primary")');
     expect(globalStyles).toContain("outline: 3px solid rgb(var(--color-focus));");
     expect(globalStyles).toContain("@media (prefers-reduced-motion: reduce)");
+  });
+
+  it("defines every action color utility that components use", () => {
+    const sourceRoot = resolve(process.cwd(), "src");
+    const componentFiles = readdirSync(sourceRoot, { recursive: true, encoding: "utf8" }).filter(
+      (file) => file.endsWith(".tsx") && !file.includes("__tests__") && !file.includes(".test."),
+    );
+    const actionBlock = readConfigBlock("action");
+    const usedSuffixes = new Set<string>();
+    for (const file of componentFiles) {
+      const source = readFileSync(join(sourceRoot, file), "utf8");
+      for (const match of source.matchAll(/\b(?:bg|text|border|ring|from|to|via)-action-([a-z]+)\b/g)) {
+        usedSuffixes.add(match[1]);
+      }
+    }
+
+    expect(usedSuffixes.size).toBeGreaterThan(0);
+    for (const suffix of usedSuffixes) {
+      expect(actionBlock, `action-${suffix} is used but not defined`).toMatch(
+        new RegExp(`\\b${suffix}\\s*:`),
+      );
+    }
   });
 
   it("reserves mobile root scroll space for the fixed navigation and device safe area", () => {

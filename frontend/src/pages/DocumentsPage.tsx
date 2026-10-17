@@ -99,8 +99,8 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
     setError(null);
     try {
       await deleteDocument.mutateAsync(doc.id);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "Error al eliminar el documento.");
+    } catch (caught: unknown) {
+      setError(getApiErrorMessage(caught, "Error al eliminar el documento."));
     }
   }
 

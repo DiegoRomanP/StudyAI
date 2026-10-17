@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -528,7 +528,97 @@ describe("PlanPage generation", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Generar plan" }));
 
-    await waitFor(() => expect(api.generatePlan).toHaveBeenCalledWith(73, [34]));
+    await waitFor(() =>
+      expect(api.generatePlan).toHaveBeenCalledWith(73, [34], expect.any(String)),
+    );
     expect(api.generatePlan).toHaveBeenCalledOnce();
+  });
+});
+
+describe("PlanPage errors", () => {
+  const goal = {
+    id: 73,
+    goal_type: "LEARNING" as const,
+    title: "Aprender biología",
+    description: "",
+    created_at: "2026-09-30T00:00:00Z",
+  };
+
+  function renderPage(queryClient: QueryClient) {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("explains a failed generation and retries the same request with the same idempotency key", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(["goals"], [goal]);
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([goal]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    const generatePlan = vi
+      .spyOn(api, "generatePlan")
+      .mockRejectedValueOnce({ isAxiosError: true, request: {}, message: "Network Error" })
+      .mockResolvedValueOnce({ id: 51, status: "PROCESSING", error_message: "" });
+    renderPage(queryClient);
+
+    fireEvent.change(screen.getByLabelText("Meta"), { target: { value: "73" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: documents[0].filename }));
+    fireEvent.click(screen.getByRole("button", { name: "Generar plan" }));
+
+    expect(
+      await screen.findByText("No se pudo conectar con el servidor. Inténtalo de nuevo."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Generar plan" }));
+    await waitFor(() => expect(generatePlan).toHaveBeenCalledTimes(2));
+    const firstKey = generatePlan.mock.calls[0][2];
+    expect(firstKey).toEqual(expect.any(String));
+    expect(generatePlan.mock.calls[1][2]).toBe(firstKey);
+  });
+
+  it("does not present failed goal or plan lists as empty", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    seedConfirmedDocuments(queryClient, []);
+    vi.spyOn(api, "listGoals").mockRejectedValue({ isAxiosError: true, response: { status: 503, data: {} } });
+    vi.spyOn(api, "listDocuments").mockResolvedValue([]);
+    vi.spyOn(api, "listPlans").mockRejectedValue({ isAxiosError: true, response: { status: 503, data: {} } });
+    renderPage(queryClient);
+
+    expect(await screen.findByText("No se pudieron cargar tus metas.")).toBeInTheDocument();
+    expect(await screen.findByText("No se pudieron cargar tus planes.")).toBeInTheDocument();
+    expect(screen.queryByText(/Primero crea una meta/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no has generado planes.")).not.toBeInTheDocument();
+  });
+
+  it("shows waiting, not an empty list, while offline queries are paused", async () => {
+    onlineManager.setOnline(false);
+    try {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      seedConfirmedDocuments(queryClient, []);
+      vi.spyOn(api, "listGoals").mockResolvedValue([]);
+      vi.spyOn(api, "listDocuments").mockResolvedValue([]);
+      vi.spyOn(api, "listPlans").mockResolvedValue([]);
+      renderPage(queryClient);
+
+      expect(await screen.findByRole("status", { name: "Cargando planes" })).toBeInTheDocument();
+      expect(screen.queryByText("Aún no has generado planes.")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Primero crea una meta/)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

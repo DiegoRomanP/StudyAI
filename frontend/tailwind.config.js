@@ -23,6 +23,7 @@ export default {
           DEFAULT: tokenColor("--color-action-text"),
           fill: tokenColor("--color-action-primary"),
           hover: tokenColor("--color-action-hover"),
+          subtle: tokenColor("--color-surface-action-subtle"),
         },
         line: tokenColor("--color-line"),
         "line-strong": tokenColor("--color-line-strong"),

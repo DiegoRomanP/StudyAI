@@ -6,12 +6,21 @@ const goalHooks = vi.hoisted(() => ({
   updateGoal: vi.fn(),
   deleteGoal: vi.fn(),
   goals: [] as unknown[],
+  goalsError: false,
+  refetchGoals: vi.fn(),
 }));
 
 vi.mock("../hooks/queries", () => ({
   useCreateGoal: () => ({ mutateAsync: goalHooks.createGoal, isPending: false }),
   useDeleteGoal: () => ({ mutateAsync: goalHooks.deleteGoal, isPending: false }),
-  useGoals: () => ({ data: goalHooks.goals, isLoading: false }),
+  useGoals: () => ({
+    data: goalHooks.goalsError ? undefined : goalHooks.goals,
+    isLoading: false,
+    isPending: false,
+    isError: goalHooks.goalsError,
+    isFetching: false,
+    refetch: goalHooks.refetchGoals,
+  }),
   useUpdateGoal: () => ({ mutateAsync: goalHooks.updateGoal, isPending: false }),
 }));
 
@@ -21,6 +30,7 @@ describe("GoalsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     goalHooks.goals = [];
+    goalHooks.goalsError = false;
     goalHooks.createGoal.mockResolvedValue({ id: 4 });
   });
 
@@ -134,5 +144,52 @@ describe("GoalsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
     await waitFor(() => expect(goalHooks.deleteGoal).toHaveBeenCalledWith(4));
+  });
+
+  it("shows server validation errors from an edit instead of crashing", async () => {
+    goalHooks.goals = [
+      {
+        id: 8,
+        goal_type: "EXAM",
+        title: "Parcial",
+        description: "",
+        created_at: "2026-10-01T00:00:00Z",
+      },
+    ];
+    goalHooks.updateGoal.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 422,
+        data: {
+          detail: [
+            {
+              type: "string_too_long",
+              loc: ["body", "title"],
+              msg: "String should have at most 255 characters",
+              input: "x",
+            },
+          ],
+        },
+      },
+    });
+    render(<GoalsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    const titleFields = screen.getAllByRole("textbox", { name: "Título" });
+    const editTitle = titleFields[titleFields.length - 1];
+    expect(editTitle).toHaveAttribute("maxLength", "255");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    expect(await screen.findByText("String should have at most 255 characters")).toBeInTheDocument();
+  });
+
+  it("distinguishes a failed goal list from an empty one", () => {
+    goalHooks.goalsError = true;
+    render(<GoalsPage />);
+
+    expect(screen.getByText("No se pudieron cargar tus metas.")).toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes metas.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar carga" }));
+    expect(goalHooks.refetchGoals).toHaveBeenCalledOnce();
   });
 });

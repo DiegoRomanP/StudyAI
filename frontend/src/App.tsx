@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
+import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
@@ -14,6 +15,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 export default function App() {
   return (
     <AppShell>
+      <RouteErrorBoundary>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/documents" element={<DocumentsPage />} />
@@ -25,6 +27,7 @@ export default function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </RouteErrorBoundary>
     </AppShell>
   );
 }

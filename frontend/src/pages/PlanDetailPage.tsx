@@ -1,14 +1,15 @@
 import { Link, useParams } from "react-router-dom";
 
+import { isNotFoundError } from "../api/errors";
 import type { PlanTopicDTO, SessionSummaryDTO } from "../api/types";
-import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../components/ui";
+import { ActivityIndicator, Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { usePlan } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
 
 export function PlanDetailPage() {
   const { planId } = useParams();
   const id = parsePositiveSafeRouteId(planId);
-  const { data: plan, isLoading, isError, refetch } = usePlan(id);
+  const { data: plan, isLoading, isError, error, refetch } = usePlan(id);
 
   if (id === null) {
     return (
@@ -17,6 +18,23 @@ export function PlanDetailPage() {
         <Alert tone="error">
           <p>El identificador del plan debe ser un entero decimal positivo y seguro.</p>
           <ButtonLink to="/plan" variant="secondary">Ir a los planes</ButtonLink>
+        </Alert>
+      </section>
+    );
+  }
+
+  if (isError && isNotFoundError(error)) {
+    return (
+      <section className="space-y-4" aria-labelledby="plan-missing-title">
+        <h1 id="plan-missing-title" className="text-2xl font-bold">Este plan ya no existe</h1>
+        <Alert tone="info">
+          <p>Puede que se haya eliminado junto con su meta. Tus otros planes siguen disponibles.</p>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink to="/plan" variant="secondary">Volver a los planes</ButtonLink>
+            <Button type="button" variant="ghost" onClick={() => void refetch()}>
+              Reintentar
+            </Button>
+          </div>
         </Alert>
       </section>
     );
@@ -61,15 +79,15 @@ export function PlanDetailPage() {
           ← Volver
         </Link>
         <Card className="space-y-4 text-center">
-          <div className="flex justify-center">
-            <Spinner />
-          </div>
           <h2 className="text-lg font-semibold">Generando tu plan…</h2>
-          <p className="text-sm text-slate-500">
+          <div className="flex justify-center">
+            <ActivityIndicator label="Generación en curso" />
+          </div>
+          <p className="text-sm text-text-muted">
             La IA está analizando temas, seleccionando lo más relevante (Pareto) y
-            creando sesiones con material y quizzes. Esto se actualiza solo.
+            creando sesiones con material y quizzes. Esta página se actualiza sola; el servidor no
+            informa un porcentaje de avance.
           </p>
-          <ProgressBar value={60} />
         </Card>
       </div>
     );
@@ -132,9 +150,11 @@ export function PlanDetailPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Sesiones</h2>
-        {plan.sessions.map((s) => (
-          <SessionCard key={s.id} session={s} />
-        ))}
+        {plan.sessions.length === 0 ? (
+          <p className="text-sm text-text-muted">Este plan no tiene sesiones disponibles.</p>
+        ) : (
+          plan.sessions.map((s) => <SessionCard key={s.id} session={s} />)
+        )}
       </section>
     </div>
   );

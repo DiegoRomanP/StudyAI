@@ -563,7 +563,8 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       readinessEvidence: ["weak topic: Recursos florales urbanos", "average score: 80%"],
       waitForFixture: async () => {
         await expect(page.getByText("Recursos florales urbanos", { exact: true })).toBeVisible();
-        await expect(page.getByText("80%", { exact: true })).toBeVisible();
+        // The first match is the visible stat; the chart's text table repeats it inside <details>.
+        await expect(page.getByText("80%", { exact: true }).first()).toBeVisible();
       },
     },
     {
@@ -690,7 +691,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await expect(unknownRouteOverflow.moreButton).toBeFocused();
 
   await page.goto("/plan/404");
-  await expect(page.getByRole("heading", { name: "No se pudo abrir el plan" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Este plan ya no existe" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("heading", { name: "Plan recuperado tras 404" })).toBeVisible();

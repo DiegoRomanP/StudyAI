@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AsyncState } from "../components/AsyncState";
 import { ActivityIndicator, Button, ButtonLink, Input, Select, Skeleton } from "../components/ui";
-import { SessionDone } from "../pages/SessionPage";
+import { SessionResult } from "../components/session/SessionResult";
 
 describe("UI primitives", () => {
   it("associates visible labels and errors with native form controls", () => {
@@ -69,7 +69,20 @@ describe("UI primitives", () => {
           initialEntries={["/session/42"]}
         >
           <Routes>
-            <Route path="/session/42" element={<SessionDone planId={17} />} />
+            <Route
+              path="/session/42"
+              element={
+                <SessionResult
+                  planId={17}
+                  result={{
+                    score: 50,
+                    correct: 1,
+                    total: 2,
+                    detail: { "9": { type: "flashcard", quality: 3 } },
+                  }}
+                />
+              }
+            />
             <Route path="/dashboard" element={<p>Dashboard destino</p>} />
             <Route path="/plan/:planId" element={<p>Plan destino</p>} />
           </Routes>
@@ -77,7 +90,7 @@ describe("UI primitives", () => {
       );
 
     const firstRender = renderDoneView();
-    const dashboardLink = screen.getByRole("link", { name: "Ver Dashboard" });
+    const dashboardLink = screen.getByRole("link", { name: "Ver estadísticas" });
     expect(dashboardLink).toHaveAttribute("href", "/dashboard");
     expect(dashboardLink.querySelector("button")).toBeNull();
     fireEvent.click(dashboardLink);
