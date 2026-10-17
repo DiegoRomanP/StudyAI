@@ -146,7 +146,7 @@ test("legacy controls retain visible keyboard focus without calling a real provi
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("Detalles: temas a cubrir, fecha, énfasis..."));
 
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "Configuración" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "API Keys" })).toBeVisible();
     await expectVisibleKeyboardFocus(page, page.locator("select").first());
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("https://api.openai.com/v1"));
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("sk-ant-test"));
@@ -160,7 +160,7 @@ test("legacy controls retain visible keyboard focus without calling a real provi
   await page.setViewportSize({ width: 1280, height: 790 });
   await page.goto("/goals");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await expectVisibleKeyboardFocus(page, page.getByRole("link", { name: /Documentos/ }));
+  await expectVisibleKeyboardFocus(page, page.getByRole("link", { name: /Recursos/ }));
 
   const hoverTarget = page.getByRole("button", { name: /Sacar buena nota/ });
   await hoverTarget.hover();

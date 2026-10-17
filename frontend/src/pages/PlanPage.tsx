@@ -155,7 +155,7 @@ export function PlanPage() {
           emptyState={
             <p>
               No hay documentos indexados. Sube apuntes en{" "}
-              <Link className="underline" to="/documents">Documentos</Link>.
+              <Link className="underline" to="/documents">Recursos</Link>.
             </p>
           }
         />

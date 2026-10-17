@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "../components/AppShell";
 
-function renderShell(initialPath = "/", onBackgroundAction = vi.fn()) {
+function renderShell(initialPath = "/inicio", onBackgroundAction = vi.fn()) {
   return render(
     <MemoryRouter
       initialEntries={[initialPath]}
@@ -32,18 +32,21 @@ describe("AppShell", () => {
     expect(screen.getByRole("main")).toHaveAttribute("tabindex", "-1");
   });
 
-  it("keeps all six destinations in the desktop sidebar and five primary mobile links", () => {
+  it("keeps every destination in the desktop sidebar and at most five mobile primary controls", () => {
     renderShell();
 
     const desktopNavigation = screen.getByRole("navigation", { name: "Navegación principal" });
     expect(within(desktopNavigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Inicio",
-      "Documentos",
+      "Plan de estudio",
+      "Recursos",
       "Metas",
-      "Plan",
-      "Dashboard",
-      "Configuración",
+      "API Keys",
+      "Estadísticas",
     ]);
+    expect(
+      within(desktopNavigation).getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual(["/inicio", "/plan", "/documents", "/goals", "/settings", "/dashboard"]);
     expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -52,12 +55,15 @@ describe("AppShell", () => {
     const bottomNavigation = screen.getByRole("navigation", { name: "Navegación inferior" });
     expect(within(bottomNavigation).getAllByRole("link").map((link) => link.textContent?.trim())).toEqual([
       "Inicio",
-      "Documentos",
-      "Metas",
       "Plan",
-      "Dashboard",
+      "Estadísticas",
     ]);
-    expect(within(bottomNavigation).queryByRole("link", { name: "Configuración" })).not.toBeInTheDocument();
+    // Primary links plus the "Más" trigger never exceed five controls (S7).
+    expect(
+      within(bottomNavigation).getAllByRole("link").length +
+        within(bottomNavigation).getAllByRole("button").length,
+    ).toBeLessThanOrEqual(5);
+    expect(within(bottomNavigation).queryByRole("link", { name: "API Keys" })).not.toBeInTheDocument();
     expect(within(bottomNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -75,12 +81,12 @@ describe("AppShell", () => {
     );
   });
 
-  it("marks direct plan routes active in both desktop and bottom navigation", () => {
-    renderShell("/plan/27");
+  it.each(["/plan/27", "/session/54"])("marks %s active as part of Plan in both navigations", (path) => {
+    renderShell(path);
 
     expect(
       within(screen.getByRole("navigation", { name: "Navegación principal" })).getByRole("link", {
-        name: "Plan",
+        name: "Plan de estudio",
       }),
     ).toHaveAttribute("aria-current", "page");
     expect(
@@ -95,18 +101,18 @@ describe("AppShell", () => {
     ).not.toHaveAttribute("aria-current");
   });
 
-  it("uses the provided flowing SVG mark as decorative imagery in both brand links", () => {
+  it("draws the supplied flowing mark as decorative imagery in both brand links to Inicio", () => {
     renderShell();
 
     const brandLinks = screen.getAllByRole("link", { name: "StudyAI" });
     expect(brandLinks).toHaveLength(2);
 
     for (const link of brandLinks) {
-      const mark = link.querySelector("img");
+      expect(link).toHaveAttribute("href", "/inicio");
+      const mark = link.querySelector("svg");
       expect(mark).not.toBeNull();
-      expect(mark?.getAttribute("src")).toBe("/favicon.svg");
-      expect(mark?.getAttribute("alt")).toBe("");
       expect(mark?.getAttribute("aria-hidden")).toBe("true");
+      expect(mark?.querySelector("path")?.getAttribute("d")).toBe("M12 39 C21 16 31 15 37 28 S48 48 54 22");
     }
   });
 
@@ -115,7 +121,7 @@ describe("AppShell", () => {
 
     await waitFor(() => expect(document.title).toBe("Página no encontrada | StudyAI"));
     const desktopNavigation = screen.getByRole("navigation", { name: "Navegación principal" });
-    expect(within(desktopNavigation).getByRole("link", { name: "Plan" })).not.toHaveAttribute(
+    expect(within(desktopNavigation).getByRole("link", { name: "Plan de estudio" })).not.toHaveAttribute(
       "aria-current",
     );
     expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).not.toHaveAttribute(
@@ -125,7 +131,7 @@ describe("AppShell", () => {
 
   it("opens a non-modal overflow disclosure and restores focus on Escape", () => {
     const backgroundAction = vi.fn();
-    renderShell("/", backgroundAction);
+    renderShell("/inicio", backgroundAction);
     const moreButton = screen.getByRole("button", { name: "Más" });
 
     expect(moreButton).toHaveAttribute("aria-expanded", "false");
@@ -136,6 +142,8 @@ describe("AppShell", () => {
     expect(moreButton).toHaveAttribute("aria-expanded", "true");
     expect(overflowNavigation).toBeInTheDocument();
     expect(within(overflowNavigation).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/documents",
+      "/goals",
       "/settings",
     ]);
     expect(screen.getByRole("main")).not.toHaveAttribute("inert");
@@ -165,15 +173,16 @@ describe("AppShell", () => {
     expect(bottomNavigation).not.toContainElement(overflowNavigation);
   });
 
-  it("marks Configuración on the Más trigger and restores focus when its current route is chosen", () => {
+  it("marks API Keys on the Más trigger and restores focus when its current route is chosen", () => {
     renderShell("/settings");
     const moreButton = screen.getByRole("button", { name: /Más/ });
     expect(moreButton).toHaveAttribute("aria-current", "page");
+    expect(moreButton).toHaveTextContent("API Keys actual");
     fireEvent.click(moreButton);
 
     const currentLink = within(
       screen.getByRole("navigation", { name: "Más destinos" }),
-    ).getByRole("link", { name: "Configuración" });
+    ).getByRole("link", { name: "API Keys" });
     expect(currentLink).toHaveAttribute("aria-current", "page");
     currentLink.focus();
     fireEvent.click(currentLink);

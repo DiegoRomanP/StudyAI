@@ -39,6 +39,20 @@ body {
   color: transparent;
 }
 
+/* Ambient highlight drifting along the landing river (CSS, not JS; S10). */
+@keyframes flow-drift {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -350; }
+}
+
+.flow-drift {
+  animation: flow-drift 9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-drift { animation: none; }
+}
+
 /* Basic typography for LLM-rendered markdown study material. */
 .prose-study h1 { @apply text-2xl font-bold mt-4 mb-2; }
 .prose-study h2 { @apply text-xl font-semibold mt-4 mb-2; }

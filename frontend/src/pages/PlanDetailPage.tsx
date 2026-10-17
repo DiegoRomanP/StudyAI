@@ -108,7 +108,7 @@ export function PlanDetailPage() {
             Si el error menciona un límite de solicitudes ("rate limit") o una clave inválida,
             revisa tu proveedor en{" "}
             <Link className="underline" to="/settings">
-              Configuración
+              API Keys
             </Link>{" "}
             e intenta generar el plan de nuevo desde{" "}
             <Link className="underline" to="/plan">

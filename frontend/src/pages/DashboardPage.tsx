@@ -19,7 +19,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">Estadísticas</h1>
         <p className="text-text-muted">Tu progreso y próximas revisiones (SM-2).</p>
       </header>
       <AsyncState

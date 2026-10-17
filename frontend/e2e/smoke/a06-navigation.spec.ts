@@ -75,7 +75,7 @@ const plan: PlanDTO = {
         : `Sesión ${index + 1}: diversidad y corredores ecológicos en la ciudad`,
     duration_minutes: 25,
     review_offset_days: 1 + index,
-    status: index === 6 ? "COMPLETED" : "READY",
+    status: index === 6 ? "COMPLETED" : "PENDING",
   })),
 };
 
@@ -86,7 +86,7 @@ const session: SessionDetailDTO = {
   topic_name: plan.sessions[0].topic_name,
   duration_minutes: 25,
   review_offset_days: 1,
-  status: "READY",
+  status: "PENDING",
   completed_at: null,
   material: {
     content_markdown: [
@@ -194,19 +194,24 @@ async function openMobileOverflow(page: Page) {
   return { moreButton, navigation };
 }
 
+const OVERFLOW_LABELS = ["Recursos", "Metas", "API Keys"];
+
 async function navigateByKeyboard(
   page: Page,
   destination: { label: string; path: string; index: number },
 ) {
   const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
   const moreButton = page.getByRole("button", { name: /^Más/ });
-  const isOverflowDestination = destination.label === "Configuración";
+  const isOverflowDestination = OVERFLOW_LABELS.includes(destination.label);
   let link: Locator;
 
   if (isOverflowDestination) {
     const overflow = await openMobileOverflow(page);
     link = overflow.navigation.getByRole("link", { name: destination.label, exact: true });
-    await page.keyboard.press("Tab");
+    // From the Más trigger, the overflow links follow in DOM order.
+    for (let tab = 0; tab <= destination.index; tab += 1) {
+      await page.keyboard.press("Tab");
+    }
   } else {
     link = bottomNavigation.getByRole("link", { name: destination.label, exact: true });
     await bottomNavigation.getByRole("link", { name: "Inicio", exact: true }).focus();
@@ -340,7 +345,9 @@ async function assertMobileLayout(
     ).toBe(true);
   }
   if (layout.focusables.length === 0) {
-    expect(label, "only the read-only Dashboard has no in-page keyboard actions").toBe("Dashboard");
+    expect(label, "only the read-only Estadísticas page has no in-page keyboard actions").toBe(
+      "Estadísticas",
+    );
     await expect(page.locator("#main-content")).toBeVisible();
     return {
       label,
@@ -449,7 +456,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
     return route.fallback();
   });
 
-  await page.goto("/");
+  await page.goto("/inicio");
   const skipLink = page.getByRole("link", { name: "Saltar al contenido" });
   await page.keyboard.press("Tab");
   await expect(skipLink).toBeFocused();
@@ -465,9 +472,9 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   );
 
   const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
-  const menuLabels = ["Inicio", "Documentos", "Metas", "Plan", "Dashboard"];
+  const menuLabels = ["Inicio", "Plan", "Estadísticas"];
   expect(await bottomNavigation.getByRole("link").allTextContents()).toEqual(menuLabels);
-  await expect(bottomNavigation.getByRole("link", { name: "Configuración" })).toHaveCount(0);
+  await expect(bottomNavigation.getByRole("link", { name: "API Keys" })).toHaveCount(0);
 
   const menuBounds = [];
   for (const label of menuLabels) {
@@ -480,16 +487,19 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320);
     menuBounds.push({ label, x: bounds!.x, right: bounds!.x + bounds!.width });
   }
-  expect(menuBounds).toHaveLength(5);
+  expect(menuBounds).toHaveLength(menuLabels.length);
 
   const { moreButton, navigation } = await openMobileOverflow(page);
-  const settingsLink = navigation.getByRole("link", { name: "Configuración", exact: true });
-  await page.keyboard.press("Tab");
-  await expect(settingsLink).toBeFocused();
-  const settingsBounds = await settingsLink.boundingBox();
-  expect(settingsBounds).not.toBeNull();
-  expect(settingsBounds!.x).toBeGreaterThanOrEqual(0);
-  expect(settingsBounds!.x + settingsBounds!.width).toBeLessThanOrEqual(320);
+  expect(await navigation.getByRole("link").allTextContents()).toEqual(OVERFLOW_LABELS);
+  for (const label of OVERFLOW_LABELS) {
+    const overflowLink = navigation.getByRole("link", { name: label, exact: true });
+    await page.keyboard.press("Tab");
+    await expect(overflowLink).toBeFocused();
+    const overflowBounds = await overflowLink.boundingBox();
+    expect(overflowBounds, `${label} overflow link bounds`).not.toBeNull();
+    expect(overflowBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(overflowBounds!.x + overflowBounds!.width).toBeLessThanOrEqual(320);
+  }
   await page.screenshot({ path: testInfo.outputPath("a06-mobile-navigation-320.png") });
   await page.keyboard.press("Escape");
   await expect(moreButton).toHaveAttribute("aria-expanded", "false");
@@ -497,11 +507,11 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
 
   const destinations = [
     {
-      label: "Documentos",
+      label: "Recursos",
       path: "/documents",
-      heading: "Documentos",
-      title: "Documentos | StudyAI",
-      index: 1,
+      heading: "Recursos",
+      title: "Recursos | StudyAI",
+      index: 0,
       expectedControls: [{ tag: "button", label: "Eliminar" }],
       readinessEvidence: [`document row: ${documents[0].filename}`, "row action: Eliminar"],
       waitForFixture: async () => {
@@ -515,7 +525,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       path: "/goals",
       heading: "Metas",
       title: "Metas | StudyAI",
-      index: 2,
+      index: 1,
       expectedControls: [
         { tag: "button", label: "Editar" },
         { tag: "button", label: "Eliminar" },
@@ -534,7 +544,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       path: "/plan",
       heading: "Plan de estudio",
       title: "Plan de estudio | StudyAI",
-      index: 3,
+      index: 1,
       expectedControls: [
         { tag: "a", href: "/plan/27" },
         { tag: "input", label: "checkbox" },
@@ -554,11 +564,11 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       },
     },
     {
-      label: "Dashboard",
+      label: "Estadísticas",
       path: "/dashboard",
-      heading: "Dashboard",
-      title: "Dashboard | StudyAI",
-      index: 4,
+      heading: "Estadísticas",
+      title: "Estadísticas | StudyAI",
+      index: 2,
       expectedControls: [],
       readinessEvidence: ["weak topic: Recursos florales urbanos", "average score: 80%"],
       waitForFixture: async () => {
@@ -568,11 +578,11 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       },
     },
     {
-      label: "Configuración",
+      label: "API Keys",
       path: "/settings",
-      heading: "Configuración",
-      title: "Configuración | StudyAI",
-      index: 0,
+      heading: "API Keys",
+      title: "API Keys | StudyAI",
+      index: 2,
       expectedControls: [
         { tag: "input", label: "sk-openai-test" },
         { tag: "button", label: "Guardar clave" },
@@ -685,7 +695,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   const unknownRouteOverflow = await openMobileOverflow(page);
   await expect(unknownRouteOverflow.moreButton).not.toHaveAttribute("aria-current", "page");
   await expect(
-    unknownRouteOverflow.navigation.getByRole("link", { name: "Configuración", exact: true }),
+    unknownRouteOverflow.navigation.getByRole("link", { name: "API Keys", exact: true }),
   ).not.toHaveAttribute("aria-current", "page");
   await page.keyboard.press("Escape");
   await expect(unknownRouteOverflow.moreButton).toBeFocused();

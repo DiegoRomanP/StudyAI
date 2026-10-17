@@ -32,7 +32,7 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, BoundaryState
             <Button type="button" variant="secondary" onClick={() => window.location.reload()}>
               Recargar
             </Button>
-            <ButtonLink to="/" variant="ghost">
+            <ButtonLink to="/inicio" variant="ghost">
               Ir al inicio
             </ButtonLink>
           </div>

@@ -3,11 +3,11 @@ import { Link } from "react-router-dom";
 import { ButtonLink, Card } from "../components/ui";
 
 const SECTIONS = [
-  { to: "/documents", label: "Documentos", detail: "Consulta y administra tus apuntes." },
+  { to: "/documents", label: "Recursos", detail: "Consulta y administra tus apuntes." },
   { to: "/goals", label: "Metas", detail: "Define qué quieres aprender o preparar." },
   { to: "/plan", label: "Plan de estudio", detail: "Genera planes y revisa los que ya existen." },
-  { to: "/dashboard", label: "Dashboard", detail: "Consulta tus sesiones completadas y progreso." },
-  { to: "/settings", label: "Configuración", detail: "Revisa el proveedor de IA y sus opciones." },
+  { to: "/dashboard", label: "Estadísticas", detail: "Consulta tus sesiones completadas y progreso." },
+  { to: "/settings", label: "API Keys", detail: "Revisa el proveedor de IA y sus opciones." },
 ];
 
 export function HomePage() {
@@ -42,7 +42,7 @@ export function HomePage() {
           directo.
         </p>
         <div>
-          <ButtonLink to="/documents">Explorar documentos</ButtonLink>
+          <ButtonLink to="/documents">Explorar recursos</ButtonLink>
         </div>
       </Card>
     </div>

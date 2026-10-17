@@ -1,3 +1,4 @@
+import { APP_HOME_PATH } from "../components/AppShell";
 import { ButtonLink, Card } from "../components/ui";
 
 export function NotFoundPage() {
@@ -11,7 +12,7 @@ export function NotFoundPage() {
         <p className="text-text-muted">
           La dirección puede haber cambiado o no existe. Vuelve al inicio para elegir una sección.
         </p>
-        <ButtonLink to="/">Volver al inicio</ButtonLink>
+        <ButtonLink to={APP_HOME_PATH}>Volver al inicio</ButtonLink>
       </Card>
     </section>
   );

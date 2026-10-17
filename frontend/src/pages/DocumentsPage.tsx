@@ -28,9 +28,10 @@ export function DocumentsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Documentos</h1>
-        <p className="text-slate-500">
-          Sube tus apuntes en PDF o Markdown. Se indexan automáticamente para el RAG.
+        <h1 className="text-2xl font-bold">Recursos</h1>
+        <p className="text-text-muted">
+          Sube tus apuntes en PDF o Markdown. Se indexan automáticamente para que la IA pueda
+          usarlos al crear tus planes.
         </p>
       </header>
 

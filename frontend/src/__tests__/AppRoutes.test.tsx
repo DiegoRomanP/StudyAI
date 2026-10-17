@@ -34,7 +34,7 @@ const session = {
   topic_name: "Sesión de enlace directo",
   duration_minutes: 25,
   review_offset_days: 1,
-  status: "READY",
+  status: "PENDING",
   completed_at: null,
   material: { content_markdown: "Contenido de prueba", youtube_keywords: [] },
 };
@@ -72,11 +72,31 @@ beforeEach(() => {
 });
 
 describe("App routes", () => {
-  it("renders an honest home page at / instead of redirecting to Documents", () => {
+  it("serves the public landing at / without the app navigation", () => {
     renderApp("/");
 
+    // The highlighted word is a nested span; compare the visible text exactly (S2 copy).
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      /^Estudia de forma más inteligente, no más difícil\.$/,
+    );
+    expect(
+      screen.getByText(
+        "Tu aprendizaje tiene un camino. StudyAI te ayuda a descubrirlo, enfocarte en lo esencial y dominar lo que realmente importa.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Find your flow. Master what matters.")).toBeInTheDocument();
+    for (const cta of screen.getAllByRole("link", { name: /Comenzar/ })) {
+      expect(cta).toHaveAttribute("href", "/inicio");
+    }
+    expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
+  });
+
+  it("renders the app home at /inicio inside the shell", () => {
+    renderApp("/inicio");
+
     expect(screen.getByRole("heading", { name: /StudyAI organiza/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /explorar documentos/i })).toHaveAttribute(
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /explorar recursos/i })).toHaveAttribute(
       "href",
       "/documents",
     );
@@ -86,7 +106,7 @@ describe("App routes", () => {
     renderApp("/ruta-que-no-existe");
 
     expect(screen.getByRole("heading", { name: /no encontramos esa página/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /volver al inicio/i })).toHaveAttribute("href", "/inicio");
   });
 
   it.each([
@@ -129,8 +149,9 @@ describe("App routes", () => {
     expect(await screen.findByRole("heading", { name: "Plan de enlace directo" })).toBeInTheDocument();
     expect(api.getPlan).toHaveBeenCalledOnce();
     expect(api.getPlan).toHaveBeenCalledWith(27);
-    expect(screen.getAllByRole("link", { name: "Plan" })).toHaveLength(2);
-    for (const planLink of screen.getAllByRole("link", { name: "Plan" })) {
+    const planLinks = screen.getAllByRole("link", { name: /^Plan( de estudio)?$/ });
+    expect(planLinks).toHaveLength(2);
+    for (const planLink of planLinks) {
       expect(planLink).toHaveAttribute("aria-current", "page");
     }
   });
@@ -185,15 +206,15 @@ describe("App routes", () => {
     expect(screen.getByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
   });
 
-  it("opens Configuración from Más and focuses the deep-linked page after navigation", async () => {
-    renderApp("/");
+  it("opens API Keys from Más and focuses the deep-linked page after navigation", async () => {
+    renderApp("/inicio");
 
     fireEvent.click(screen.getByRole("button", { name: "Más" }));
     const overflowNavigation = screen.getByRole("navigation", { name: "Más destinos" });
-    fireEvent.click(within(overflowNavigation).getByRole("link", { name: "Configuración" }));
+    fireEvent.click(within(overflowNavigation).getByRole("link", { name: "API Keys" }));
 
-    expect(await screen.findByRole("heading", { name: "Configuración" })).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe("Configuración | StudyAI"));
+    expect(await screen.findByRole("heading", { name: "API Keys" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("API Keys | StudyAI"));
     expect(screen.getByRole("main")).toHaveFocus();
     expect(screen.queryByRole("navigation", { name: "Más destinos" })).not.toBeInTheDocument();
   });
