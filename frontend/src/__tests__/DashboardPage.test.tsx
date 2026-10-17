@@ -47,19 +47,50 @@ describe("DashboardPage", () => {
     expect(getDashboard).toHaveBeenCalledTimes(2);
   });
 
-  it("offers a text alternative to the score chart", async () => {
+  it("filters quiz history by period and offers a text alternative to the chart", async () => {
+    const daysAgo = (days: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      // Backend format: naive UTC without offset.
+      return date.toISOString().replace("Z", "");
+    };
     vi.spyOn(api, "getDashboard").mockResolvedValue({
       ...emptyDashboard,
       scores: [
-        { session_id: 1, topic_name: "Grafos", score: 80, completed_at: "2026-10-10T10:00:00Z" },
+        { session_id: 1, topic_name: "Historia", score: 40, completed_at: daysAgo(20) },
+        { session_id: 2, topic_name: "Grafos", score: 80, completed_at: daysAgo(1) },
       ],
+      sessions_completed: 2,
+      average_score: 60,
+    });
+    renderDashboard();
+
+    const summary = await screen.findByRole("region", { name: "Resumen del periodo" });
+    expect(screen.getByRole("button", { name: "7 días" })).toHaveAttribute("aria-pressed", "true");
+    expect(summary).toHaveTextContent("Quizzes resueltos1");
+    expect(summary).toHaveTextContent("Precisión media80%");
+    let table = screen.getByRole("table", { name: "Puntaje por sesión" });
+    expect(table).toHaveTextContent("Grafos");
+    expect(table).not.toHaveTextContent("Historia");
+
+    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    expect(summary).toHaveTextContent("Quizzes resueltos2");
+    expect(summary).toHaveTextContent("Precisión media60%");
+    table = screen.getByRole("table", { name: "Puntaje por sesión" });
+    expect(table).toHaveTextContent("Historia");
+  });
+
+  it("explains an empty period instead of an empty chart", async () => {
+    vi.spyOn(api, "getDashboard").mockResolvedValue({
+      ...emptyDashboard,
+      scores: [{ session_id: 1, topic_name: "Grafos", score: 80, completed_at: "2020-01-10T10:00:00" }],
       sessions_completed: 1,
       average_score: 80,
     });
     renderDashboard();
 
-    const table = await screen.findByRole("table", { name: "Puntaje por sesión" });
-    expect(table).toHaveTextContent("Grafos");
-    expect(table).toHaveTextContent("80%");
+    expect(await screen.findByText("No resolviste quizzes en los últimos 7 días.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ver todo el historial" }));
+    expect(screen.getByRole("table", { name: "Puntaje por sesión" })).toHaveTextContent("Grafos");
   });
 });
