@@ -40,7 +40,7 @@ studyai/
 │       ├── events/          # Bus de eventos de sesión (Observer)
 │       └── core/            # Config, logging, excepciones
 ├── frontend/                # Vite + React + TypeScript + Tailwind + TanStack Query
-│   └── src/{pages,components,api,hooks,lib}
+│   └── src/{pages,components,api,hooks,lib,demo,styles}
 └── docs/
     ├── api_contract.yaml    # Contrato OpenAPI mínimo
     └── AGENTS_STATUS.md     # Estado de avance por fases
@@ -52,92 +52,51 @@ studyai/
   Anthropic SDK, httpx. Opcional: PyMuPDF, sentence-transformers, ChromaDB,
   LangChain text-splitters.
 - **Frontend:** React 18, TypeScript, Vite, TailwindCSS, TanStack Query, React
-  Router, Axios, Recharts, react-markdown, Vitest y Testing Library.
+  Router, Axios, Recharts, react-markdown, Lucide, Motion, Vitest, Testing
+  Library, Playwright y Bruno.
 
-### Base visual del frontend
+### Interfaz web
 
-El frontend incluye tokens CSS semánticos y utilidades Tailwind, controles
-nativos reutilizables y una primitiva `AsyncState` que conserva los datos
-previos ante un error de actualización cuando las páginas la integran. La tabla
-de valores observados/candidatos, ratios de contraste calculados y límites del
-handoff Penpot están en
-[`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md).
-La documentación no declara paridad visual ni certificación WCAG; los aliases
-`brand-*` y de paletas antiguas solo mantienen compatibilidad para las vistas
-que aún no se han extraído.
+La interfaz sigue el mockup `images/Estudio inteligente con StudyAI.png`: tema
+oscuro «flow» con tokens semánticos (`frontend/src/styles/tokens.css` expuestos
+en Tailwind), iconos Lucide y transiciones que respetan `prefers-reduced-motion`.
 
-### Navegación y rutas (A06)
+| Ruta | Pantalla | Qué hace |
+|---|---|---|
+| `/` | Landing | Presentación pública, «Comenzar gratis» y «Ver demo». |
+| `/demo` | Demostración simulada | Recorrido del mockup con datos de ejemplo y un aviso fijo; no llama a la API ni pide claves. |
+| `/inicio` | Inicio | Sesión de hoy, progreso, repasos SM-2 y enfoque Pareto. Para empezar: material → meta (5 plantillas) → IA → **Estudiar**, todo en la misma pantalla. |
+| `/plan`, `/plan/:id` | Plan de estudio | Planes y su detalle con vista Calendario/Lista por fecha sugerida. |
+| `/session/:id` | Sesión | Estudio → receso → quiz → resultado confirmado. `?fase=test` abre directamente el test. |
+| `/practica` | Práctica | «Preguntas»: práctica local con corrección inmediata que **no guarda nada**. «Simulacro»: abre el test real de una sesión. |
+| `/temas` | Temas (Pareto) | Relevancia y dificultad estimadas por la IA, y la selección Pareto. |
+| `/documents` | Recursos | Subida (PDF/Markdown) e indexación. |
+| `/goals` | Metas | Crear, editar y borrar metas. |
+| `/dashboard` | Estadísticas | Precisión por quiz con filtro 7 días/30 días/Todo, racha, temas débiles y próximas revisiones. |
+| `/settings` | API Keys | Proveedor de IA propio (ver abajo). |
 
-`/` explica el propósito de StudyAI y enlaza a sus secciones. La navegación de
-escritorio y el menú móvil permiten volver a Inicio o visitar Documentos, Metas,
-Plan, Dashboard y Configuración; los enlaces a planes y sesiones existentes
-siguen funcionando directamente. Las rutas desconocidas tienen una página 404
-con regreso al inicio. El menú móvil es una divulgación no modal que no bloquea
-el contenido: Escape lo cierra y devuelve el foco al botón. Los IDs de plan y
-sesión se validan antes de consultar la API.
+En móvil, la barra inferior muestra Inicio, Plan, Práctica y Estadísticas; el
+resto está en «Más». Las rutas pesadas (Estadísticas, Sesión, Práctica y la demo)
+se cargan bajo demanda.
 
-Dev-Reviewer aprobó técnicamente A06 tras dos ciclos de corrección y una tercera
-revisión. La evidencia registrada incluye 75 pruebas Vitest, dos ejecuciones del
-runner QA con 33/33 casos cada una y `test:qa` con 78/78 checks (API 3, E2E 3 y
-Bruno 72); runtime `MOCK` y E2E a 320 px con retraso controlado de 500 ms en los
-GET del backend. A06 está committed en
-`58e3a97861993122f41a712310bc9b5d5d5dc2ca`. La ubicación persistente de Inicio
-en la navegación móvil (PEN-03/A01) sigue sin decisión; esta entrega no añade
-una barra inferior ni declara paridad visual con Penpot. Véase
-[`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md).
+Criterios que la interfaz mantiene:
 
-### Subida y plantillas reutilizables (A07)
+- **Solo datos reales.** Cada métrica se deriva de la API. Los widgets del mockup
+  sin contrato todavía (explicaciones, historial de incorrectas, tiempo de
+  estudio…) aparecen solo en `/demo` y están listados en
+  [`docs/frontend-integration/t12-contract-gaps.md`](docs/frontend-integration/t12-contract-gaps.md).
+- **Sin duplicados.** «Estudiar» reutiliza la meta ya creada y envía
+  `Idempotency-Key` al generar el plan, así que reintentar no duplica nada.
+- **Errores distintos de vacío.** Un fallo de carga muestra un aviso con
+  reintento, nunca una lista vacía falsa.
+- **Fechas.** El backend envía fechas UTC sin zona; el cliente las interpreta
+  con `parseApiDate`.
+- **Seguridad del contenido.** El Markdown generado por el LLM se renderiza sin
+  enlaces ni imágenes externas.
 
-`DocumentsPage` usa `DocumentUpload`, que conserva el selector nativo y ofrece
-arrastre, validación temprana por extensión/tamaño (máximo actual
-`25 × 1024 × 1024` bytes) y resultado separado por archivo. La respuesta del
-servidor decide la aceptación. `PENDING` se muestra como aceptación con
-indexación en curso mientras se confirma; si falla el GET de documentos, la UI
-indica que el estado actual no está confirmado y permite reintentar. En un error
-de lectura conserva los datos disponibles, que pueden ser parciales, y muestra
-un aviso sin convertir el fallo en lista vacía. El polling existente de
-`useDocuments` cada 2 s mientras la caché contiene un DTO `PENDING` sigue intacto.
-`PlanPage` usa `DocumentPicker`, que solo permite
-elegir documentos `INDEXED`, elimina IDs seleccionados cuando dejan de ser
-válidos y vuelve a filtrarlos justo antes de `api.generatePlan`. Los errores HTTP
-por archivo siguen visibles y el control nativo se restablece para permitir
-repetir el mismo nombre.
-
-Para generar un plan debe existir una lista fiable y al menos un documento
-`INDEXED` seleccionado. Si la lectura inicial o una actualización falla, el CTA
-explica el bloqueo, ofrece reintentar y no envía una selección vacía al backend.
-Al generar, `PlanPage` vuelve a validar sincrónicamente contra la caché más
-reciente de TanStack Query y conserva solo los IDs todavía indexados.
-
-Después de que la API acepta un documento como `PENDING`, `useUploadDocument`
-incorpora el DTO a `['documents']` por ID, preserva los documentos conocidos y
-actualiza una entrada existente sin duplicarla; luego invalida/refresca la lista.
-Así el polling de 2 s continúa aunque falle la lectura inicial o la revalidación.
-Una lista visible durante ese fallo puede ser parcial; la UI mantiene el estado
-de indexación como no confirmado y el reintento manual hasta que un GET confirme
-`INDEXED` o `FAILED`.
-
-Las tres plantillas actuales tienen una sola definición en
-`frontend/src/lib/goalTemplates.ts`; `GoalTemplatePicker` es controlado, no
-presenta una plantilla como aplicada al inicio y solo rellena los campos tras una
-elección explícita. La edición manual del título quita ese estado visual; el tipo
-`LEARNING` se mantiene como valor por defecto para creación manual. En `GoalsPage`
-la meta se crea tras pulsar Guardar, con título recortado y respuesta/error
-confirmados. Las mutaciones continúan en los hooks
-TanStack Query; no hay cambios de backend, endpoints ni URL. Las piezas reciben
-callbacks y datos, listas para la composición posterior de Inicio en A10; la
-Home actual no se adelantó en A07. Dev-Reviewer aún debe revisar y aceptar esta
-implementación. A01, PEN-03 y las dos decisiones de §8 siguen abiertas.
-
-La suite completa frontend terminó con 100/100 pruebas Vitest. La corrida
-integrada de QA aislado terminó con 78/78 checks (API 3, E2E 3, Bruno 72), cero
-fallos/omisiones, runtime `MOCK` y limpieza de procesos/datos; no se usó un
-proveedor LLM real. Build conserva la advertencia ya conocida de chunk >500 kB
-(824.30 kB minificado, 244.37 kB gzip). Dev-Reviewer solicitó cambios en sus
-dos revisiones; el segundo y último ciclo técnico queda pendiente de
-re-revisión/aceptación independiente. No se declara aceptado. El reporte QA, el
-detalle A07, la secuencia TDD y las limitaciones de evidencia están en
-[`docs/frontend-integration/a07-shared-upload-and-goal-templates.md`](docs/frontend-integration/a07-shared-upload-and-goal-templates.md).
+El historial de integración (A05–A07 y el plan ODD) está en
+[`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md) y
+`odd/tasks/studyai-fluid-learning.md`.
 
 ---
 
@@ -245,11 +204,12 @@ Frontend (`frontend/.env`): `VITE_API_URL` (por defecto `http://localhost:8001`)
 > `ANTHROPIC_API_KEY` activa Claude, parseo real de PDF y RAG semántico de forma
 > transparente (detección automática en tiempo de ejecución).
 
-### Configurar tu propia clave de API (sección "Configuración" en la UI)
+### Configurar tu propia clave de API (sección "API Keys" en la UI)
 
-En vez de (o además de) editar `backend/.env`, la pestaña **⚙️ Configuración**
-del frontend permite guardar tu propia clave para **Anthropic (Claude), OpenAI
-(ChatGPT), Zhipu GLM, OpenRouter, NVIDIA NIM o Hugging Face**. También permite
+En vez de (o además de) editar `backend/.env`, la sección **API Keys** del
+frontend (`/settings`; también en versión compacta desde Inicio) permite guardar
+tu propia clave para **Anthropic (Claude), OpenAI (ChatGPT), Google Gemini,
+Zhipu GLM, OpenRouter, NVIDIA NIM o Hugging Face**. También permite
 usar **Ollama local**, sin clave: la tarjeta descubre los modelos ya instalados
 en el daemon que ve el backend y excluye las entradas `:cloud`.
 
@@ -393,16 +353,25 @@ autenticación invalida la evidencia de la configuración guardada y la desactiv
 
 ## Flujo de uso
 
+Todo el recorrido se puede hacer desde **Inicio** (`/inicio`); las páginas
+dedicadas siguen disponibles para tener más control.
+
 1. **Subir documentos** (`.pdf` / `.md`) → se indexan de forma asíncrona
    (`PENDING → INDEXED`).
-2. **Crear una meta** eligiendo tipo: `EXAM`, `LEARNING` o `MEMORIZATION`.
-3. **Generar un plan** a partir de la meta y los documentos → generación
-   asíncrona (`PROCESSING → READY`), con *polling* de estado.
+2. **Elegir una meta**: una plantilla (Universidad, Certificaciones,
+   Entrevistas técnicas, Aprender desde cero, Otro) o una meta guardada; el
+   tipo es `EXAM`, `LEARNING` o `MEMORIZATION`.
+3. **Estudiar** guarda la meta y genera el plan de forma asíncrona
+   (`PROCESSING → READY`), con *polling* de estado. Inicio muestra la siguiente
+   sesión sin redirigir.
 4. **Estudiar una sesión**: material → receso → quiz. Las flashcards se puntúan
    0–5 y las preguntas de opción múltiple se autocalifican.
 5. **Completar la sesión** dispara el evento `session.completed`, que actualiza
    la programación de repaso (SM-2).
-6. **Dashboard**: puntuaciones, temas débiles y próximas revisiones.
+6. **Practicar** en `/practica` sin registrar resultados, o hacer el simulacro
+   (el test real de la sesión).
+7. **Estadísticas**: precisión por periodo, racha, temas débiles y próximas
+   revisiones.
 
 ---
 
@@ -443,6 +412,8 @@ en `/docs`.
 - [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
 - [`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md): tokens implementados, componentes base, contraste calculado y límites/gaps A01 de la entrega A05.
 - [`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md): rutas, navegación móvil/teclado, guardas de IDs, evidencias y decisiones abiertas de A06.
+- [`odd/tasks/studyai-fluid-learning.md`](odd/tasks/studyai-fluid-learning.md): plan ODD de la interfaz «flow» (A08–A13, landing, demo), decisiones y registro de verificación.
+- [`docs/frontend-integration/t12-contract-gaps.md`](docs/frontend-integration/t12-contract-gaps.md): widgets del mockup y defectos de contrato que la API aún no cubre.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
@@ -476,10 +447,18 @@ npm run lint     # tsc --noEmit
 npm run build
 ```
 
-La cobertura actual incluye pruebas de errores API, `SettingsPage` (sincronización
-de revisiones y restricciones de NVIDIA), navegación/shell/rutas A06 y enlaces
-profundos de plan/sesión. Playwright verifica el flujo de navegación con teclado
-a 320 px y el acceso directo a recursos en el build de producción.
+La cobertura incluye errores de la API, la coordinación de «Estudiar»
+(`useStudyStart`), Inicio, Plan, Temas, Sesión, Práctica (que no escribe nada),
+Estadísticas, la demo (que no llama a la API), API Keys y la navegación.
+
+QA aislado contra el backend real en modo demo (Bruno + Playwright):
+
+```bash
+npm --prefix frontend run test:qa
+```
+
+Playwright cubre el recorrido completo desde Inicio (subir material → plan →
+quiz → Estadísticas) y la navegación con teclado a 320 px.
 
 ---
 
@@ -488,7 +467,7 @@ a 320 px y el acceso directo a recursos en el build de producción.
 - La subida valida extensión (`.pdf` / `.md`) y tamaño máximo (`MAX_UPLOAD_MB`).
 - Acceso a datos siempre vía SQLAlchemy ORM parametrizado (sin SQL crudo).
 - La API key de operador se lee del entorno; `.env` está en `.gitignore`.
-- Las claves que el usuario guarda desde **Configuración** se cifran en
+- Las claves que el usuario guarda desde **API Keys** se cifran en
   reposo (Fernet) y nunca se devuelven completas por la API — ver sección
   "Configurar tu propia clave de API" más arriba.
 - Los overrides compatibles de `base_url` (URL base personalizada) se validan para evitar
