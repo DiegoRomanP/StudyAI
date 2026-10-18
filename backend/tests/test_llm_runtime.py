@@ -107,6 +107,7 @@ def test_runtime_reports_mock_only_when_no_user_or_server_provider():
             "session_content": "simulado",
         },
         "fallback_reason": None,
+        "bundled": False,
     }
 
 
@@ -133,6 +134,7 @@ def test_runtime_reports_env_anthropic_after_user_credentials_are_deactivated(mo
             "session_content": "server-quiz-model",
         },
         "fallback_reason": None,
+        "bundled": False,
     }
 
 

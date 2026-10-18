@@ -14,3 +14,6 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
 os.environ["CHROMA_PERSIST_DIR"] = f"{_TMP}/chroma"
 os.environ["UPLOAD_DIR"] = f"{_TMP}/uploads"
 os.environ["ANTHROPIC_API_KEY"] = ""
+# The operator's free-tier keys must never reach a test run (no network, no quota).
+os.environ["NVIDIA_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""

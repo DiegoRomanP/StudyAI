@@ -120,6 +120,9 @@ export function createBackendEnvironment({ source, runDirectory, backendUrl, fro
     ...safeChildEnvironment(source),
     APP_ENV: "qa",
     ANTHROPIC_API_KEY: "",
+    // The included free-tier AI must never reach a QA run: no network, no quota.
+    NVIDIA_API_KEY: "",
+    GEMINI_API_KEY: "",
     CORS_ORIGINS: frontendUrl,
     DATABASE_URL: `sqlite:///${databasePath}`,
     CHROMA_PERSIST_DIR: `${runDirectory}/chroma`,

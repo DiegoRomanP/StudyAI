@@ -4,7 +4,9 @@ Priority order:
     1. The user's active ``LLMCredential`` configured through the settings UI.
     2. The operator-level ``ANTHROPIC_API_KEY`` from ``.env`` (legacy path,
        unchanged, keeps existing deployments working with zero migration).
-    3. ``MockLLMProvider`` — the deterministic offline fallback that makes the
+    3. The operator's free-tier chain (``NVIDIA_API_KEY`` then ``GEMINI_API_KEY``),
+       which needs nothing from the learner.
+    4. ``MockLLMProvider`` — the deterministic offline fallback that makes the
        whole app runnable with no key at all.
 
 Provider construction is cheap (building an SDK/httpx client, no network I/O),
@@ -26,6 +28,7 @@ from app.core.logging import get_logger, safe_model_identifier
 from app.core.security import SecretDecryptionError, decrypt_secret
 from app.llm.base import LLMProvider
 from app.llm.credential_state import is_verified
+from app.llm.default_free_provider import FreeTierProvider, build_free_tiers
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.provider_registry import get_provider_definition
 from app.models.llm_credential import LLMCredential, LLMProviderName
@@ -45,6 +48,8 @@ class LLMRuntimeState:
     provider: LLMProviderName | None
     models: dict[str, str]
     fallback_reason: str | None = None
+    # True when the server's included free-tier AI answers (the learner chooses nothing).
+    bundled: bool = False
 
 
 @dataclass(frozen=True)
@@ -147,12 +152,32 @@ def resolve_llm_provider(db: Session, user_id: int) -> ProviderResolution:
                 else "La configuración del servidor no está disponible; se usará el modo demo."
             )
     else:
-        logger.info("No LLM credential configured — using deterministic mock LLM provider.")
         fallback_reason = (
             "La configuración activa no está disponible; se aplicó el modo demo."
             if user_fallback
             else None
         )
+
+    free_tiers = build_free_tiers(settings)
+    if free_tiers:
+        primary = free_tiers[0]
+        logger.info("Using the included free-tier AI (primary: %s / %s)", primary.name,
+                    safe_model_identifier(primary.model))
+        return ProviderResolution(
+            provider=FreeTierProvider(free_tiers),
+            runtime=LLMRuntimeState(
+                source="ENV",
+                provider=primary.provider,
+                models={kind: primary.model for kind in _RUNTIME_KINDS},
+                fallback_reason=(
+                    "La configuración activa no está disponible; se aplicó la IA incluida."
+                    if user_fallback
+                    else None
+                ),
+                bundled=True,
+            ),
+        )
+    logger.info("No LLM credential configured — using deterministic mock LLM provider.")
     return ProviderResolution(
         provider=MockLLMProvider(),
         runtime=LLMRuntimeState(

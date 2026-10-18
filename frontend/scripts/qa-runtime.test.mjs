@@ -68,6 +68,8 @@ test("backend and test environments override dotenv values and omit inherited cr
   });
 
   assert.equal(backend.ANTHROPIC_API_KEY, "");
+  assert.equal(backend.NVIDIA_API_KEY, "");
+  assert.equal(backend.GEMINI_API_KEY, "");
   assert.equal(backend.DATABASE_URL, "sqlite:////tmp/studyai-qa-run/studyai.sqlite3");
   assert.equal(backend.UPLOAD_DIR, "/tmp/studyai-qa-run/uploads");
   assert.equal(backend.CHROMA_PERSIST_DIR, "/tmp/studyai-qa-run/chroma");

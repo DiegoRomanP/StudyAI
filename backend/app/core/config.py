@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     # single call even needs to retry. Skipped entirely for MockLLMProvider so
     # local dev/tests stay instant. Raise this in `.env` for very tight tiers.
     LLM_REQUEST_PACING_SECONDS: float = Field(default=2.0, ge=0, allow_inf_nan=False)
+    # Operator-provided free-tier AI for learners who have not connected their own:
+    # NVIDIA first, Google once NVIDIA's quota is gone. Keys live only in the environment.
+    NVIDIA_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    DEFAULT_NVIDIA_MODEL: str = "deepseek-ai/deepseek-v4.1-flash"
+    DEFAULT_GEMINI_MODEL: str = "gemma-4-26b-a4b-it"
+    # Free tiers get a short leash so a stalled provider hands over to the next one quickly.
+    DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
+    DEFAULT_AI_TOTAL_BUDGET_SECONDS: float = Field(default=120.0, gt=0, allow_inf_nan=False)
     # Ollama runs on the backend host, not in the browser. This URL is operator
     # configuration rather than a user-provided override, so it cannot turn the
     # settings API into an internal-network proxy.
@@ -144,6 +153,24 @@ class Settings(BaseSettings):
     @property
     def has_llm_key(self) -> bool:
         return bool(self.ANTHROPIC_API_KEY.strip())
+
+    @property
+    def has_default_nvidia_key(self) -> bool:
+        return bool(self.NVIDIA_API_KEY.strip())
+
+    @property
+    def has_default_gemini_key(self) -> bool:
+        return bool(self.GEMINI_API_KEY.strip())
+
+    @property
+    def default_ai_policy(self) -> LLMCallPolicy:
+        return LLMCallPolicy(
+            connect_timeout_seconds=min(10.0, self.DEFAULT_AI_READ_TIMEOUT_SECONDS),
+            read_timeout_seconds=self.DEFAULT_AI_READ_TIMEOUT_SECONDS,
+            total_budget_seconds=self.DEFAULT_AI_TOTAL_BUDGET_SECONDS,
+            max_attempts=2,
+            max_rate_limit_retries=1,
+        )
 
     @property
     def max_upload_bytes(self) -> int:

@@ -564,7 +564,7 @@ components:
           type: string
           enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI]
           nullable: true
-          description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC.
+          description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC, salvo bundled=true (NVIDIA o GEMINI).
         models:
           type: object
           required: [topic_analysis, session_plan, session_content]
@@ -578,6 +578,10 @@ components:
           type: string
           nullable: true
           description: Motivo público saneado cuando se degradó desde una fuente de mayor prioridad.
+        bundled:
+          type: boolean
+          default: false
+          description: Verdadero cuando responde la IA gratuita incluida del servidor (NVIDIA y luego Gemini); el usuario no elige modelo.
     LLMProviderError:
       type: object
       required: [detail, code, retryable]

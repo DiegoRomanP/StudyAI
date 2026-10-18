@@ -139,6 +139,7 @@ class LLMRuntimeResponse(BaseModel):
     provider: LLMProviderName | None
     models: LLMRuntimeModels
     fallback_reason: str | None
+    bundled: bool = False
 
     @model_validator(mode="after")
     def _validate_provider_for_source(self) -> "LLMRuntimeResponse":
@@ -148,8 +149,12 @@ class LLMRuntimeResponse(BaseModel):
             model != "simulado" for model in self.models.model_dump().values()
         ):
             raise ValueError("MOCK requiere modelos simulados.")
-        if self.source == "ENV" and self.provider != LLMProviderName.ANTHROPIC:
+        if self.bundled and self.source != "ENV":
+            raise ValueError("La IA incluida solo puede venir del servidor.")
+        if self.source == "ENV" and not self.bundled and self.provider != LLMProviderName.ANTHROPIC:
             raise ValueError("ENV requiere Anthropic.")
+        if self.bundled and self.provider not in (LLMProviderName.NVIDIA, LLMProviderName.GEMINI):
+            raise ValueError("La IA incluida usa NVIDIA o Gemini.")
         if self.source == "USER" and self.provider is None:
             raise ValueError("USER requiere un proveedor real.")
         return self
