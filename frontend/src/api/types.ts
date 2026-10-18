@@ -215,6 +215,8 @@ export interface LLMRuntimeDTO {
   provider: LLMProviderKey | null;
   models: LLMRuntimeModels;
   fallback_reason: string | null;
+  /** The server's included free-tier AI answers; the learner chose nothing. */
+  bundled?: boolean;
 }
 
 export type LLMProviderErrorCode =

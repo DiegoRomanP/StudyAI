@@ -2,14 +2,16 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Full first-use journey against the real backend in demo mode (MOCK LLM, isolated
- * QA database): upload → indexed → goal template → Estudiar → ready plan →
- * session → quiz → confirmed result → Estadísticas.
+ * QA database): upload → indexed → goal template → demo mode (chosen on purpose) →
+ * Estudiar → ready plan → session → quiz → confirmed result → Estadísticas.
+ * The setup is a step-by-step wizard: each "Continuar" unlocks the next step.
  */
 test("a learner goes from material to a graded quiz entirely from Inicio", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/inicio");
   await expect(page.getByRole("heading", { name: "Prepara tu plan de estudio" })).toBeVisible();
-  await expect(page.getByText("Modo demo activo")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Paso 1 de 4: Sube tu material" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Estudiar" })).toHaveCount(0);
 
   await page.locator('input[type="file"]').first().setInputFiles({
     name: "algoritmos.md",
@@ -33,9 +35,21 @@ test("a learner goes from material to a graded quiz entirely from Inicio", async
   const material = page.getByRole("checkbox", { name: "algoritmos.md" });
   await expect(material).toBeVisible({ timeout: 30_000 });
   await material.check();
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await expect(page.getByRole("heading", { name: "Paso 2 de 4: Elige tu meta" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continuar" })).toBeDisabled();
   await page.getByRole("button", { name: /Universidad/ }).click();
   await expect(page.getByRole("textbox", { name: "Tu meta" })).toHaveValue("Aprobar el examen del curso");
+  await page.getByRole("button", { name: "Continuar" }).click();
 
+  // No provider configured: the learner must connect one or pick the demo on purpose.
+  await expect(page.getByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  await page.getByRole("button", { name: "Seguir en modo demo" }).click();
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await expect(page.getByRole("heading", { name: "Paso 4 de 4: Todo listo" })).toBeVisible();
   const study = page.getByRole("button", { name: "Estudiar" });
   await expect(study).toBeEnabled();
   await study.click();

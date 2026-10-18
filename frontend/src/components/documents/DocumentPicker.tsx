@@ -45,7 +45,7 @@ export function DocumentPicker({
 
   return (
     <fieldset className="min-w-0 space-y-2">
-      <legend className="mb-2 text-sm font-medium text-text-primary">
+      <legend className={documents.length > 0 ? "mb-2 text-sm font-medium text-text-primary" : "sr-only"}>
         Documentos ({selectedCount} seleccionados)
       </legend>
 
@@ -80,7 +80,7 @@ export function DocumentPicker({
                     checked={checked}
                     disabled={!selectable}
                     aria-labelledby={filenameId}
-                    aria-describedby={statusId}
+                    aria-describedby={selectable ? undefined : statusId}
                     onChange={(event) => {
                       if (!selectable) return;
                       const nextIds = event.currentTarget.checked
@@ -94,12 +94,14 @@ export function DocumentPicker({
                     <span id={filenameId} className="block truncate font-medium text-text-primary">
                       {document.filename}
                     </span>
-                    <span id={statusId} className="block text-xs text-text-muted">
-                      {getStatusLabel(document)}
-                      {document.status === "FAILED" && document.error_message
-                        ? ` ${document.error_message}`
-                        : ""}
-                    </span>
+                    {!selectable && (
+                      <span id={statusId} className="block text-xs text-text-muted">
+                        {getStatusLabel(document)}
+                        {document.status === "FAILED" && document.error_message
+                          ? ` ${document.error_message}`
+                          : ""}
+                      </span>
+                    )}
                   </span>
                 </label>
               </li>

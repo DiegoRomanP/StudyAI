@@ -15,7 +15,7 @@ export function GoalTemplatePicker({
   return (
     <fieldset className="min-w-0">
       <legend className="mb-2 text-sm font-medium text-text-primary">
-        Elige una plantilla (puedes cambiarla luego)
+        Plantilla
       </legend>
       <div className={className}>
         {GOAL_TEMPLATES.map((template) => (

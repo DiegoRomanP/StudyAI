@@ -1,9 +1,7 @@
 import { useEffect } from "react";
-import { Quote } from "lucide-react";
 import { useLocation } from "react-router-dom";
 
 import { AsyncState } from "../components/AsyncState";
-import { HelpTerm } from "../components/help/HelpTerm";
 import { GettingStarted } from "../components/home/GettingStarted";
 import {
   AllSessionsDoneCard,
@@ -13,13 +11,14 @@ import {
   TodaySessionCard,
 } from "../components/home/HomeCards";
 import { StudySetup } from "../components/home/StudySetup";
-import { Card, Skeleton } from "../components/ui";
+import { Skeleton } from "../components/ui";
 import { useDashboard, usePlans } from "../hooks/queries";
 import { findNextSession, readyPlans, sessionProgress } from "../lib/studyProgress";
 
 /**
  * Inicio: "what should I do next?" first. Returning learners see today's session,
- * progress and Pareto focus from real data; first-time learners get the setup flow.
+ * progress and Pareto focus from real data; first-time learners see only the setup wizard,
+ * one step at a time.
  */
 export function HomePage() {
   const plansQuery = usePlans();
@@ -41,27 +40,14 @@ export function HomePage() {
 
   return (
     <div className="space-y-8">
-      <header className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-        <div className="space-y-2">
-          <p className="font-medium text-action-hover">¡Hola!</p>
-          <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
-            Tu camino de estudio de hoy
-          </h1>
-          <p className="max-w-reading text-text-muted">
-            Enfócate en lo que realmente importa. La IA analiza tu material y te guía con los{" "}
-            <HelpTerm term="temasClave">temas clave</HelpTerm>.
-          </p>
-        </div>
-        <Card
-          variant="glass"
-          className="hidden max-w-xs items-start gap-2 !p-4 text-sm italic text-text-muted lg:flex"
-        >
-          <Quote aria-hidden="true" className="h-4 w-4 shrink-0 text-action-hover" />
-          <p>Pequeños pasos constantes crean grandes resultados.</p>
-        </Card>
+      <header>
+        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
+          Tu camino de estudio de hoy
+        </h1>
       </header>
 
-      <GettingStarted />
+      {/* The setup wizard is its own guide; the checklist takes over once there is a plan. */}
+      {hasReadyPlan && <GettingStarted />}
 
       <AsyncState
         data={plansQuery.data}

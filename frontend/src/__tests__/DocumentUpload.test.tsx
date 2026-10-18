@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DocumentDTO, DocumentStatus } from "../api/types";
@@ -109,6 +109,20 @@ describe("DocumentUpload", () => {
 
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
     expect(await screen.findByText(/listo: ya puedes usarlo en un plan/i)).toBeInTheDocument();
+  });
+
+  it("uses a single large drop zone that opens the file selector when clicked", () => {
+    const { container } = render(<DocumentUpload onUpload={onUpload} />);
+
+    const input = screen.getByLabelText("Selecciona uno o varios documentos") as HTMLInputElement;
+    expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+    const zone = screen.getByRole("region", { name: "Zona de arrastre de documentos" });
+    const label = within(zone).getByText("o haz clic para elegirlos").closest("label");
+    // Clicking anywhere on the zone's label activates the (visually hidden) native input.
+    expect(label).toHaveAttribute("for", input.id);
+    expect(zone).toContainElement(input);
+    expect(within(zone).getByText("Arrastra tus archivos aquí")).toBeInTheDocument();
+    expect(input).toHaveAccessibleDescription(/PDF o Markdown/);
   });
 
   it("supports dropping files without replacing the native file selector", async () => {

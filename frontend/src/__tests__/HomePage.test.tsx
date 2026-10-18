@@ -27,10 +27,41 @@ const openAi: ProviderCatalogEntry = {
   allows_custom_model: true,
 };
 
+const nvidia: ProviderCatalogEntry = {
+  ...openAi,
+  provider: "NVIDIA",
+  label: "NVIDIA NIM",
+  default_model: "deepseek-ai/deepseek-v4.1-flash",
+  default_base_url: "https://integrate.api.nvidia.com/v1",
+  common_models: [{ id: "deepseek-ai/deepseek-v4.1-flash", free: true }],
+  key_placeholder: "nvapi-...",
+  supports_custom_base_url: false,
+  allows_custom_model: false,
+};
+
+const bundledRuntime: LLMRuntimeDTO = {
+  source: "ENV",
+  provider: "NVIDIA",
+  models: {
+    topic_analysis: "deepseek-ai/deepseek-v4.1-flash",
+    session_plan: "deepseek-ai/deepseek-v4.1-flash",
+    session_content: "deepseek-ai/deepseek-v4.1-flash",
+  },
+  fallback_reason: null,
+  bundled: true,
+};
+
 const mockRuntime: LLMRuntimeDTO = {
   source: "MOCK",
   provider: null,
   models: { topic_analysis: "simulado", session_plan: "simulado", session_content: "simulado" },
+  fallback_reason: null,
+};
+
+const userRuntime: LLMRuntimeDTO = {
+  source: "USER",
+  provider: "OPENAI",
+  models: { topic_analysis: "gpt-4o-mini", session_plan: "gpt-4o-mini", session_content: "gpt-4o-mini" },
   fallback_reason: null,
 };
 
@@ -79,9 +110,11 @@ function LocationProbe() {
 function mockApi({
   plans = [],
   documents = [],
-  runtime = mockRuntime,
+  runtime = userRuntime,
   dashboard = emptyDashboard,
+  catalog = [openAi],
 }: {
+  catalog?: ProviderCatalogEntry[];
   plans?: PlanDTO[];
   documents?: DocumentDTO[];
   runtime?: LLMRuntimeDTO | Error;
@@ -91,7 +124,7 @@ function mockApi({
   vi.spyOn(api, "getDashboard").mockResolvedValue(dashboard);
   vi.spyOn(api, "listDocuments").mockResolvedValue(documents);
   vi.spyOn(api, "listGoals").mockResolvedValue([]);
-  vi.spyOn(api, "listProviderCatalog").mockResolvedValue([openAi]);
+  vi.spyOn(api, "listProviderCatalog").mockResolvedValue(catalog);
   vi.spyOn(api, "listLlmCredentials").mockResolvedValue([]);
   if (runtime instanceof Error) vi.spyOn(api, "getLlmRuntime").mockRejectedValue(runtime);
   else vi.spyOn(api, "getLlmRuntime").mockResolvedValue(runtime);
@@ -114,8 +147,37 @@ function renderHome() {
   return queryClient;
 }
 
+async function chooseDocument() {
+  fireEvent.click(await screen.findByRole("checkbox", { name: indexedDocument.filename }));
+}
+
+function next() {
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+}
+
+async function reachGoalStep() {
+  await chooseDocument();
+  next();
+  await screen.findByRole("heading", { name: "Paso 2 de 4: Elige tu meta" });
+}
+
+async function reachAiStep() {
+  await reachGoalStep();
+  fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
+  next();
+  await screen.findByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" });
+}
+
+async function reachLastStep() {
+  await reachAiStep();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled());
+  next();
+  await screen.findByRole("heading", { name: "Paso 4 de 4: Todo listo" });
+}
+
 beforeEach(() => {
   window.sessionStorage.clear();
+  window.localStorage.clear();
 });
 
 afterEach(() => {
@@ -123,46 +185,215 @@ afterEach(() => {
 });
 
 describe("HomePage", () => {
-  it("guides a first visit through material, goal and provider before studying", async () => {
+  it("shows a first visit only the first step, with no way to start yet", async () => {
     mockApi();
     renderHome();
 
     expect(screen.getByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Prepara tu plan de estudio" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Paso 1: Tu material/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Paso 2: Elige tu meta/ })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Paso 3: Conecta tu IA/ })).toBeInTheDocument();
-    expect(await screen.findByText("Modo demo activo")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Estudiar" })).toBeDisabled();
-    expect(
-      await screen.findByText("Sube un PDF o Markdown; en unos segundos estará listo para usar."),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Paso 1 de 4: Sube tu material" })).toBeInTheDocument();
+    const steps = screen.getByRole("list", { name: "Pasos para preparar tu plan" });
+    expect(within(steps).getByText("Material").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(within(steps).queryAllByRole("button")).toHaveLength(0);
+
+    // Nothing from the later steps is on screen, and "Estudiar" does not exist yet.
+    expect(screen.queryByRole("button", { name: /Universidad/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Usando OpenAI")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Estudiar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Primeros pasos" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Sesión de hoy" })).not.toBeInTheDocument();
+
+    const next = screen.getByRole("button", { name: "Continuar" });
+    expect(next).toBeDisabled();
+    const reason = await screen.findByText("Falta subir un documento.");
+    expect(next).toHaveAttribute("aria-describedby", reason.id);
+    expect(document.getElementById("preparar-plan")).toBeInTheDocument();
   });
 
-  it("lists every missing requirement and links it to the disabled Estudiar button", async () => {
-    mockApi({ runtime: new Error("runtime down") });
+  it("unlocks each step only when the previous one is done, and Estudiar only at the end", async () => {
+    mockApi({ documents: [indexedDocument] });
     renderHome();
 
-    const estudiar = screen.getByRole("button", { name: "Estudiar" });
-    const requirements = await screen.findByText("Para empezar te falta:");
-    const list = requirements.parentElement!;
-    await waitFor(() =>
-      expect(within(list).getByText("No pudimos comprobar tu IA: pulsa «Reintentar» en el paso 3.")).toBeInTheDocument(),
-    );
-    expect(within(list).getByText("Sube un PDF o Markdown; en unos segundos estará listo para usar.")).toBeInTheDocument();
-    expect(within(list).getByText("Elige una plantilla o escribe tu meta.")).toBeInTheDocument();
-    expect(estudiar).toBeDisabled();
-    expect(estudiar).toHaveAttribute("aria-describedby", list.id);
+    expect(await screen.findByRole("button", { name: "Continuar" })).toBeDisabled();
+    await chooseDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    next();
+
+    expect(await screen.findByRole("heading", { name: "Paso 2 de 4: Elige tu meta" })).toHaveFocus();
+    expect(screen.queryByRole("checkbox", { name: indexedDocument.filename })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+    expect(screen.getByText("Falta tu meta.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
+    expect(screen.getByRole("textbox", { name: "Tu meta" })).toHaveValue("Aprobar el examen del curso");
+    next();
+
+    expect(await screen.findByText("Usando OpenAI")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Estudiar" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled());
+    next();
+
+    expect(await screen.findByRole("heading", { name: "Paso 4 de 4: Todo listo" })).toBeInTheDocument();
+    expect(screen.getByText(indexedDocument.filename)).toBeInTheDocument();
+    expect(screen.getByText(/Aprobar el examen del curso · Examen/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continuar" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled();
+
+    // Going back keeps the choices.
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
+    expect(await screen.findByText("Usando OpenAI")).toBeInTheDocument();
   });
 
-  it("shows the getting-started checklist first for a new learner", async () => {
-    mockApi();
+  it("only lets the learner jump back to steps that are already reachable", async () => {
+    mockApi({ documents: [indexedDocument] });
+    renderHome();
+    await reachGoalStep();
+
+    const steps = screen.getByRole("list", { name: "Pasos para preparar tu plan" });
+    const buttons = within(steps).getAllByRole("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveTextContent("Material");
+    fireEvent.click(buttons[0]);
+    expect(await screen.findByRole("checkbox", { name: indexedDocument.filename })).toBeChecked();
+  });
+
+  it("skips the AI step when the server includes a free AI, and offers a way to use another", async () => {
+    mockApi({ documents: [indexedDocument], runtime: bundledRuntime, catalog: [nvidia, openAi] });
+    renderHome();
+
+    await chooseDocument();
+    next();
+    await screen.findByRole("heading", { name: "Paso 2 de 3: Elige tu meta" });
+    expect(screen.queryByText("Conecta tu IA")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
+    next();
+
+    await screen.findByRole("heading", { name: "Paso 3 de 3: Todo listo" });
+    expect(screen.getByText(/IA incluida/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled();
+    expect(screen.queryByText(/deepseek/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cambiar ia" }));
+    await screen.findByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" });
+    expect(screen.getByRole("button", { name: "Ya tengo una API key" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Usar Ollama (gratis)" })).toBeInTheDocument();
+  });
+
+  it("keeps Continuar blocked and explains why while the AI step has nothing connected", async () => {
+    mockApi({ documents: [indexedDocument], runtime: mockRuntime });
+    renderHome();
+    await reachAiStep();
+
+    expect(await screen.findByRole("button", { name: "Ya tengo una API key" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aún no tengo API key" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Usar Ollama (gratis)" })).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "Continuar" });
+    expect(next).toBeDisabled();
+    const reason = screen.getByText("Falta conectar una IA.");
+    expect(next).toHaveAttribute("aria-describedby", reason.id);
+    expect(screen.queryByText("Modo demo")).not.toBeInTheDocument();
+  });
+
+  it("lets the learner continue in demo mode only by choosing it explicitly", async () => {
+    mockApi({ documents: [indexedDocument], runtime: mockRuntime });
+    renderHome();
+    await reachAiStep();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Seguir en modo demo" }));
+    expect(await screen.findByText("Modo demo")).toBeInTheDocument();
+    expect(screen.getByText(/contenido de ejemplo, sin IA real/i)).toBeInTheDocument();
+    expect(window.localStorage.getItem("studyai.onboarding.demo-ok")).toBe("1");
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    next();
+    expect(await screen.findByRole("button", { name: "Estudiar" })).toBeEnabled();
+  });
+
+  it("shows how to get an API key, with links that open safely in another tab", async () => {
+    mockApi({ documents: [indexedDocument], runtime: mockRuntime });
+    renderHome();
+    await reachAiStep();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Aún no tengo API key" }));
+    const sources = screen.getByRole("list", { name: "Dónde conseguir una API key" });
+    const anthropic = within(sources).getByRole("link", { name: /OpenAI/ });
+    expect(anthropic).toHaveAttribute("href", "https://platform.openai.com/api-keys");
+    expect(anthropic).toHaveAttribute("target", "_blank");
+    expect(anthropic).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText(/Crea una clave y cópiala/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ya tengo mi clave" }));
+    expect(await screen.findByRole("group", { name: "Proveedores disponibles" })).toBeInTheDocument();
+  });
+
+  it("shows the Ollama commands and copies one to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    mockApi({ documents: [indexedDocument], runtime: mockRuntime });
+    renderHome();
+    await reachAiStep();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Usar Ollama (gratis)" }));
+    expect(screen.getByText("curl -fsSL https://ollama.com/install.sh | sh")).toBeInTheDocument();
+    expect(screen.getByText("ollama pull llama3.1")).toBeInTheDocument();
+    expect(screen.getByText("ollama list")).toBeInTheDocument();
+    expect(screen.getByText(/ollama serve/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copiar comando: ollama pull llama3.1" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("ollama pull llama3.1"));
+    expect(await screen.findByText("Copiado")).toBeInTheDocument();
+    // Commands alone do not complete the step: a connected model does.
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  });
+
+  it("offers the secure provider setup for the learner's own key", async () => {
+    mockApi({ documents: [indexedDocument], runtime: mockRuntime });
+    renderHome();
+    await reachAiStep();
+
+    expect(screen.queryByLabelText("Clave de API")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /OpenAI/ }));
+    const setup = screen.getByRole("region", { name: "Configuración de OpenAI" });
+    expect(setup).toHaveAttribute("data-variant", "compact");
+    expect(within(setup).getByLabelText("Clave de API")).toHaveAttribute("type", "password");
+  });
+
+  it("blocks the AI step while the effective provider is unknown", async () => {
+    mockApi({ documents: [indexedDocument], runtime: new Error("runtime down") });
+    renderHome();
+    await reachAiStep();
+
+    expect(
+      await screen.findByText("No pudimos comprobar tu IA."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+    expect(screen.getByText("Pulsa «Reintentar».")).toBeInTheDocument();
+  });
+
+  it("shows the effective user provider confirmed by the server", async () => {
+    mockApi({ documents: [indexedDocument] });
+    renderHome();
+    await reachAiStep();
+
+    expect(await screen.findByText("Usando OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Modelo: gpt-4o-mini")).toBeInTheDocument();
+  });
+
+  it("keeps the 'Otro' template selected while the learner types a custom goal", async () => {
+    mockApi({ documents: [indexedDocument] });
+    renderHome();
+    await reachGoalStep();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Otro/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Tu meta" }), { target: { value: "M" } });
+    expect(screen.getByRole("button", { name: /Otro/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hands over to the getting-started checklist once there is a ready plan", async () => {
+    // No session completed yet: otherwise the checklist has nothing left to guide.
+    mockApi({ plans: [{ ...readyPlan, sessions: [readyPlan.sessions[1]] }], documents: [indexedDocument] });
     renderHome();
 
     const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
-    expect(checklist).toHaveTextContent("0 de 5 completados");
-    expect(document.getElementById("preparar-plan")).toBeInTheDocument();
+    expect(checklist).toHaveTextContent("de 5 completados");
   });
 
   it("puts the next real session first for a returning learner, without redirecting", async () => {
@@ -194,35 +425,6 @@ describe("HomePage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/inicio");
   });
 
-  it("shows the effective user provider confirmed by the server", async () => {
-    mockApi({
-      runtime: {
-        source: "USER",
-        provider: "OPENAI",
-        models: { topic_analysis: "gpt-4o-mini", session_plan: "gpt-4o-mini", session_content: "gpt-4o-mini" },
-        fallback_reason: null,
-      },
-    });
-    renderHome();
-
-    expect(await screen.findByText("Usando OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("Modelo: gpt-4o-mini")).toBeInTheDocument();
-  });
-
-  it("blocks studying while the effective provider is unknown", async () => {
-    mockApi({ documents: [indexedDocument], runtime: new Error("runtime down") });
-    renderHome();
-
-    expect(
-      await screen.findByText("No pudimos confirmar qué proveedor de IA usará el servidor."),
-    ).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("checkbox", { name: indexedDocument.filename }));
-    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
-
-    expect(screen.getByRole("button", { name: "Estudiar" })).toBeDisabled();
-    expect(screen.getByText("No pudimos comprobar tu IA: pulsa «Reintentar» en el paso 3.")).toBeInTheDocument();
-  });
-
   it("goes from material to a ready plan from Inicio with a single goal and plan request", async () => {
     mockApi({ documents: [indexedDocument] });
     const createGoal = vi.spyOn(api, "createGoal").mockResolvedValue({
@@ -238,9 +440,7 @@ describe("HomePage", () => {
     vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
     renderHome();
 
-    fireEvent.click(await screen.findByRole("checkbox", { name: indexedDocument.filename }));
-    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
-    expect(screen.getByRole("textbox", { name: "Tu meta" })).toHaveValue("Aprobar el examen del curso");
+    await reachLastStep();
     await waitFor(() => expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Estudiar" }));
 
@@ -259,11 +459,11 @@ describe("HomePage", () => {
     );
     expect(screen.getByRole("link", { name: "Ver todas las sesiones" })).toHaveAttribute("href", "/plan/9");
     expect(screen.getByTestId("location")).toHaveTextContent("/inicio");
-    // A ready plan is a finished request: another plan needs an explicit "Preparar otro plan".
-    expect(screen.getByRole("button", { name: "Estudiar" })).toBeDisabled();
-    expect(screen.getByText(/pulsa «Preparar otro plan»/)).toBeInTheDocument();
+    // A ready plan is a finished request: the wizard steps away until "Preparar otro plan".
+    expect(screen.queryByRole("button", { name: "Estudiar" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Preparar otro plan" }));
     expect(screen.queryByText("¡Tu plan está listo!")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled();
     expect(generatePlan).toHaveBeenCalledOnce();
   });
 
@@ -293,8 +493,7 @@ describe("HomePage", () => {
     vi.spyOn(api, "createGoal").mockRejectedValue({ isAxiosError: true, message: "Network Error" });
     renderHome();
 
-    fireEvent.click(await screen.findByRole("checkbox", { name: indexedDocument.filename }));
-    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
+    await reachLastStep();
     await waitFor(() => expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Estudiar" }));
     fireEvent.click(await screen.findByRole("button", { name: "Elegir una meta guardada" }));
@@ -302,30 +501,5 @@ describe("HomePage", () => {
     expect(await screen.findByText(/Aún no tienes metas guardadas/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Nueva meta" }));
     expect(screen.getByRole("textbox", { name: "Tu meta" })).toBeInTheDocument();
-  });
-
-  it("keeps the 'Otro' template selected while the learner types a custom goal", async () => {
-    mockApi();
-    renderHome();
-
-    const other = await screen.findByRole("button", { name: /Otro/ });
-    fireEvent.click(other);
-    fireEvent.change(screen.getByRole("textbox", { name: "Tu meta" }), { target: { value: "M" } });
-    expect(screen.getByRole("button", { name: /Otro/ })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("offers the secure provider setup inside Inicio only when asked", async () => {
-    mockApi();
-    renderHome();
-
-    const own = await screen.findByRole("button", { name: "Usar mi propia API key" });
-    expect(screen.queryByLabelText("Clave de API")).not.toBeInTheDocument();
-    await waitFor(() => expect(own).toBeEnabled());
-    fireEvent.click(own);
-    fireEvent.click(screen.getByRole("button", { name: /OpenAI/ }));
-
-    const setup = screen.getByRole("region", { name: "Configuración de OpenAI" });
-    expect(setup).toHaveAttribute("data-variant", "compact");
-    expect(within(setup).getByLabelText("Clave de API")).toHaveAttribute("type", "password");
   });
 });

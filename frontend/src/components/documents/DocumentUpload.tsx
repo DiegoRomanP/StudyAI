@@ -1,3 +1,4 @@
+import { FileUp } from "lucide-react";
 import { useId, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 
 import type { DocumentDTO, DocumentStatus } from "../../api/types";
@@ -22,6 +23,8 @@ interface DocumentUploadProps {
   documentsError?: boolean;
   /** Level of the "Subir documentos" heading, so it nests under the caller's headings. */
   headingLevel?: 2 | 3 | 4 | 5;
+  /** Drop the "Subir documentos" heading when the caller's own title already says it. */
+  hideHeading?: boolean;
 }
 
 function getUploadFeedback(
@@ -65,6 +68,7 @@ export function DocumentUpload({
   documents = [],
   documentsError = false,
   headingLevel = 2,
+  hideHeading = false,
 }: DocumentUploadProps) {
   const Heading = `h${headingLevel}` as const;
   const id = useId();
@@ -166,42 +170,52 @@ export function DocumentUpload({
   }
 
   return (
-    <section className="space-y-3" aria-labelledby={`${inputId}-title`}>
-      <Heading id={`${inputId}-title`} className="text-lg font-semibold text-text-primary">
-        Subir documentos
-      </Heading>
-      <label htmlFor={inputId} className="block text-sm font-medium text-text-primary">
-        Selecciona uno o varios documentos
-      </label>
-      <input
-        id={inputId}
-        type="file"
-        accept=".pdf,.md,.markdown"
-        multiple
-        disabled={isUploading}
-        aria-describedby={helpId}
-        onChange={handleInputChange}
-        className="block min-h-11 w-full cursor-pointer rounded-control border border-control bg-surface-paper text-sm text-text-primary file:mr-4 file:min-h-11 file:border-0 file:bg-action-subtle file:px-4 file:font-semibold file:text-action focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-      />
-      <p id={helpId} className="text-sm text-text-muted">
-        PDF o Markdown (.md o .markdown), hasta {MAX_DOCUMENT_SIZE_MB} MB. Comprobaremos el archivo al
-        subirlo.
-      </p>
-
+    <section
+      className="space-y-3"
+      aria-labelledby={hideHeading ? undefined : `${inputId}-title`}
+      aria-label={hideHeading ? "Subir documentos" : undefined}
+    >
+      {!hideHeading && (
+        <Heading id={`${inputId}-title`} className="text-lg font-semibold text-text-primary">
+          Subir documentos
+        </Heading>
+      )}
       <div
         role="region"
         aria-label="Zona de arrastre de documentos"
         onDragOver={handleDragOver}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
-        className={`rounded-surface border-2 border-dashed p-5 text-center transition-colors motion-reduce:transition-none ${
+        className={`rounded-surface border-2 border-dashed transition-colors focus-within:ring-2 focus-within:ring-action focus-within:ring-offset-2 motion-reduce:transition-none ${
           isDragging
             ? "border-action bg-action-subtle"
-            : "border-line-strong bg-surface-paper"
+            : "border-line-strong bg-surface-paper hover:border-action-hover hover:bg-surface-subtle"
         } ${isUploading ? "opacity-60" : ""}`}
       >
-        <p className="font-medium text-text-primary">Arrastra archivos aquí</p>
-        <p className="mt-1 text-sm text-text-muted">También puedes usar el selector de archivos.</p>
+        <input
+          id={inputId}
+          type="file"
+          accept=".pdf,.md,.markdown"
+          multiple
+          disabled={isUploading}
+          aria-label="Selecciona uno o varios documentos"
+          aria-describedby={helpId}
+          onChange={handleInputChange}
+          className="sr-only"
+        />
+        <label
+          htmlFor={inputId}
+          className={`flex min-h-48 flex-col items-center justify-center gap-2 p-8 text-center ${
+            isUploading ? "cursor-not-allowed" : "cursor-pointer"
+          }`}
+        >
+          <FileUp aria-hidden="true" className="h-8 w-8 text-action-hover" />
+          <span className="text-lg font-semibold text-text-primary">Arrastra tus archivos aquí</span>
+          <span className="text-sm font-medium text-action">o haz clic para elegirlos</span>
+          <span id={helpId} className="text-sm text-text-muted">
+            PDF o Markdown · máx. {MAX_DOCUMENT_SIZE_MB} MB
+          </span>
+        </label>
       </div>
 
       {isUploading && <Spinner label="Subiendo documentos…" />}

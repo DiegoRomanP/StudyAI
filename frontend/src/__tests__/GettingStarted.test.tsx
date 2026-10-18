@@ -93,7 +93,7 @@ afterEach(() => {
 });
 
 describe("GettingStarted", () => {
-  it("starts at 0 of 5 with the first step marked as next", async () => {
+  it("starts at 0 of 5 with only the first step open and marked as next", async () => {
     mockApi();
     renderChecklist();
 
@@ -102,10 +102,34 @@ describe("GettingStarted", () => {
     const first = within(checklist).getByRole("link", { name: /Sube tu material/ });
     expect(first).toHaveTextContent("Siguiente");
     expect(first).toHaveAttribute("href", "/inicio#preparar-plan");
-    expect(within(checklist).getByRole("link", { name: "Conecta tu IA (opcional)" })).toHaveAttribute(
-      "href",
-      "/settings",
-    );
+    expect(within(checklist).getAllByRole("link")).toHaveLength(1);
+    expect(within(checklist).getByText("Define tu meta")).toHaveTextContent("(bloqueado hasta completar el paso anterior)");
+    expect(within(checklist).queryByRole("button", { name: "Seguir con el modo demo" })).not.toBeInTheDocument();
+  });
+
+  it("unlocks each step when the one before it is done", async () => {
+    mockApi({ documents: [indexedDocument] });
+    renderChecklist();
+
+    const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
+    expect(checklist).toHaveTextContent("1 de 5 completados");
+    expect(within(checklist).getByText("Sube tu material")).toHaveTextContent("(hecho)");
+    const meta = within(checklist).getByRole("link", { name: /Define tu meta/ });
+    expect(meta).toHaveTextContent("Siguiente");
+    expect(within(checklist).getByText("Conecta tu IA (opcional)")).toHaveTextContent("(bloqueado");
+    expect(within(checklist).getByText("Genera tu plan")).toHaveTextContent("(bloqueado");
+  });
+
+  it("does not let the optional AI step hold back the plan", async () => {
+    mockApi({ documents: [indexedDocument], goals: [goal] });
+    renderChecklist();
+
+    const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
+    expect(within(checklist).getByRole("link", { name: /Genera tu plan/ })).toHaveTextContent("Siguiente");
+    const ia = within(checklist).getByRole("link", { name: "Conecta tu IA (opcional)" });
+    expect(ia).toHaveAttribute("href", "/settings");
+    expect(ia).not.toHaveTextContent("Siguiente");
+    expect(within(checklist).getByText("Completa tu primera sesión")).toHaveTextContent("(bloqueado");
   });
 
   it("checks the steps that real data already covers", async () => {
@@ -116,20 +140,26 @@ describe("GettingStarted", () => {
     expect(checklist).toHaveTextContent("3 de 5 completados");
     expect(within(checklist).getByText("Sube tu material")).toHaveTextContent("(hecho)");
     expect(within(checklist).getByText("Genera tu plan")).toHaveTextContent("(hecho)");
-    expect(within(checklist).getByRole("link", { name: /Conecta tu IA/ })).toHaveTextContent("Siguiente");
-    expect(within(checklist).getByRole("link", { name: "Completa tu primera sesión" })).toHaveAttribute(
-      "href",
-      "/session/71",
-    );
+    const session = within(checklist).getByRole("link", { name: /Completa tu primera sesión/ });
+    expect(session).toHaveTextContent("Siguiente");
+    expect(session).toHaveAttribute("href", "/session/71");
+  });
+
+  it("keeps a later step open when real progress already proves the earlier ones", async () => {
+    mockApi({ plans: [readyPlan] });
+    renderChecklist();
+
+    const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
+    expect(within(checklist).getByRole("link", { name: /Completa tu primera sesión/ })).toBeInTheDocument();
   });
 
   it("marks the AI step when the learner keeps the demo mode", async () => {
-    mockApi();
+    mockApi({ documents: [indexedDocument], goals: [goal] });
     renderChecklist();
 
     fireEvent.click(await screen.findByRole("button", { name: "Seguir con el modo demo" }));
     const checklist = screen.getByRole("region", { name: "Primeros pasos" });
-    expect(checklist).toHaveTextContent("1 de 5 completados");
+    expect(checklist).toHaveTextContent("3 de 5 completados");
     expect(within(checklist).getByText("Conecta tu IA (opcional)")).toHaveTextContent("(hecho)");
     expect(window.localStorage.getItem("studyai.onboarding.demo-ok")).toBe("1");
   });

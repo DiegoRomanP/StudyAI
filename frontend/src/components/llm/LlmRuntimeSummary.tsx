@@ -4,7 +4,7 @@ import { Button, Card } from "../ui";
 export type ResolvedLlmRuntime =
   | { kind: "unknown"; detail: string }
   | { kind: "mock"; fallbackReason: string | null }
-  | { kind: "env"; label: string; model: string; fallbackReason: string | null }
+  | { kind: "env"; label: string; model: string; fallbackReason: string | null; bundled: boolean }
   | {
       kind: "user";
       provider: LLMCredentialDTO["provider"];
@@ -53,7 +53,11 @@ export function resolveLlmRuntime(
     return { kind: "mock", fallbackReason };
   }
 
-  if (runtime.source === "ENV" && runtime.provider === "ANTHROPIC") {
+  const bundled = runtime.bundled === true;
+  if (
+    runtime.source === "ENV" &&
+    (bundled ? runtime.provider === "NVIDIA" || runtime.provider === "GEMINI" : runtime.provider === "ANTHROPIC")
+  ) {
     const provider = providerCatalog.find((entry) => entry.provider === runtime.provider);
     if (provider) {
       return {
@@ -61,6 +65,7 @@ export function resolveLlmRuntime(
         label: provider.label,
         model: sessionContent,
         fallbackReason,
+        bundled,
       };
     }
   }
@@ -129,6 +134,9 @@ export function LlmRuntimeSummary({
   } else if (resolved.kind === "user") {
     heading = "IA que se usa ahora · Tu clave";
     description = `${resolved.label} · ${resolved.model}`;
+  } else if (resolved.kind === "env" && resolved.bundled) {
+    heading = "IA que se usa ahora · IA incluida";
+    description = "Gratis, con uso limitado";
   } else if (resolved.kind === "env") {
     heading = "IA que se usa ahora · Clave del servidor (.env)";
     description = `${resolved.label} · ${resolved.model}`;

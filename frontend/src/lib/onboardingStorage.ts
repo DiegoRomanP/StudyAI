@@ -5,6 +5,16 @@
  */
 const PREFIX = "studyai.onboarding.";
 
+const listeners = new Set<() => void>();
+
+/** Lets several components (wizard, checklist) react to the same flag. */
+export function subscribeFlags(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function readFlag(key: string): string | null {
   try {
     return window.localStorage.getItem(PREFIX + key);
@@ -20,4 +30,5 @@ export function writeFlag(key: string, value: string | null): void {
   } catch {
     // Not persisted: the flag simply resets on the next visit.
   }
+  listeners.forEach((listener) => listener());
 }
