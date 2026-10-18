@@ -217,6 +217,14 @@ export interface LLMRuntimeDTO {
   fallback_reason: string | null;
   /** The server's included free-tier AI answers; the learner chose nothing. */
   bundled?: boolean;
+  /** Today's allowance of the included AI; present while the server offers it. */
+  free_ai?: FreeAiDTO | null;
+}
+
+export interface FreeAiDTO {
+  limit: number;
+  used: number;
+  remaining: number;
 }
 
 export type LLMProviderErrorCode =

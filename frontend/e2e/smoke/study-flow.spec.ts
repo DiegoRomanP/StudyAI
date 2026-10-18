@@ -44,7 +44,7 @@ test("a learner goes from material to a graded quiz entirely from Inicio", async
   await page.getByRole("button", { name: "Continuar" }).click();
 
   // No provider configured: the learner must connect one or pick the demo on purpose.
-  await expect(page.getByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Paso 3 de 4: Elige tu IA" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continuar" })).toBeDisabled();
   await page.getByRole("button", { name: "Seguir en modo demo" }).click();
   await page.getByRole("button", { name: "Continuar" }).click();

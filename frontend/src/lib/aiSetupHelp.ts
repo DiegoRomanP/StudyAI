@@ -44,7 +44,7 @@ export const KEY_SOURCES: KeySource[] = [
 export const KEY_STEPS = [
   "Entra a la página de tu proveedor.",
   "Crea una clave y cópiala (solo se muestra una vez).",
-  "Vuelve aquí, elige el proveedor en «Ya tengo una API key» y pégala.",
+  "Vuelve aquí, elige el proveedor en «Mi API key» y pégala.",
 ];
 
 export interface HelpCommand {

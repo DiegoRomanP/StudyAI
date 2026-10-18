@@ -47,7 +47,7 @@ type StepId = "material" | "meta" | "ia" | "listo";
 const STEPS: { id: StepId; label: string; title: string; icon: typeof FileUp }[] = [
   { id: "material", label: "Material", title: "Sube tu material", icon: FileUp },
   { id: "meta", label: "Meta", title: "Elige tu meta", icon: Target },
-  { id: "ia", label: "IA", title: "Conecta tu IA", icon: KeyRound },
+  { id: "ia", label: "IA", title: "Elige tu IA", icon: KeyRound },
   { id: "listo", label: "Listo", title: "Todo listo", icon: Sparkles },
 ];
 
@@ -72,7 +72,6 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   const movedByUser = useRef(false);
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [aiRequested, setAiRequested] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
   const [goalMode, setGoalMode] = useState<GoalMode>("new");
   const [existingGoalId, setExistingGoalId] = useState<number | "">("");
@@ -122,14 +121,13 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
           ? "Consultando el proveedor de IA…"
           : ai.status === "unknown"
             ? "Pulsa «Reintentar»."
-            : "Falta conectar una IA.",
+            : ai.status === "needs-setup" && ai.freeLimit !== undefined
+              ? `Hoy usaste tus ${ai.freeLimit} usos gratis. Conecta tu IA.`
+              : "Falta elegir una IA.",
   };
   const missing = (Object.values(reasons) as (string | null)[]).filter((item): item is string => item !== null);
 
-  // With the server's included AI there is nothing to connect: the AI step only appears
-  // when the learner asks to use their own (or when no AI is available yet).
-  const aiIncluded = ai.status === "ready" && ai.bundled;
-  const steps = aiRequested || !aiIncluded ? STEPS : STEPS.filter((item) => item.id !== "ia");
+  const steps = STEPS;
   const last = steps.length - 1;
 
   // A step is reachable once every step before it is done. Derived, so a step that
@@ -358,7 +356,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
               </div>
             )}
 
-            {step.id === "ia" && <AiStep startChanging={aiRequested && aiIncluded} />}
+            {step.id === "ia" && <AiStep />}
 
             {step.id === "listo" && (
               <dl className="divide-y divide-line rounded-surface border border-line text-sm">
@@ -383,10 +381,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                 <RecapRow
                   label="IA"
                   value={ai.status === "ready" ? `${ai.title}. ${ai.detail}` : "—"}
-                  onChange={() => {
-                    setAiRequested(true);
-                    goTo(STEPS.findIndex((item) => item.id === "ia"));
-                  }}
+                  onChange={() => goTo(STEPS.findIndex((item) => item.id === "ia"))}
                 />
               </dl>
             )}

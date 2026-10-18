@@ -49,6 +49,7 @@ const bundledRuntime: LLMRuntimeDTO = {
   },
   fallback_reason: null,
   bundled: true,
+  free_ai: { limit: 3, used: 1, remaining: 2 },
 };
 
 const mockRuntime: LLMRuntimeDTO = {
@@ -165,7 +166,7 @@ async function reachAiStep() {
   await reachGoalStep();
   fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
   next();
-  await screen.findByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" });
+  await screen.findByRole("heading", { name: "Paso 3 de 4: Elige tu IA" });
 }
 
 async function reachLastStep() {
@@ -256,26 +257,59 @@ describe("HomePage", () => {
     expect(await screen.findByRole("checkbox", { name: indexedDocument.filename })).toBeChecked();
   });
 
-  it("skips the AI step when the server includes a free AI, and offers a way to use another", async () => {
+  it("offers the free AI first, with today's uses left, next to the key and Ollama options", async () => {
     mockApi({ documents: [indexedDocument], runtime: bundledRuntime, catalog: [nvidia, openAi] });
     renderHome();
+    await reachAiStep();
 
-    await chooseDocument();
-    next();
-    await screen.findByRole("heading", { name: "Paso 2 de 3: Elige tu meta" });
-    expect(screen.queryByText("Conecta tu IA")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
-    next();
+    const options = screen.getByRole("group", { name: "Cómo usar la IA" });
+    const labels = within(options).getAllByRole("button").map((button) => button.textContent);
+    expect(labels).toEqual(["Gratis · 3 al día (en uso)", "Mi API key", "En local (Ollama)"]);
+    expect(screen.getByText("Cada plan gasta 1 uso. Te quedan 2 de 3 hoy.")).toBeInTheDocument();
+    expect(screen.getByText("En uso")).toBeInTheDocument();
+    expect(screen.queryByText(/deepseek|nemotron/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Seguir en modo demo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
 
-    await screen.findByRole("heading", { name: "Paso 3 de 3: Todo listo" });
-    expect(screen.getByText(/IA incluida/)).toBeInTheDocument();
+    next();
+    await screen.findByRole("heading", { name: "Paso 4 de 4: Todo listo" });
+    expect(screen.getByText(/IA gratuita\. Te quedan 2 de 3 usos hoy\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Estudiar" })).toBeEnabled();
-    expect(screen.queryByText(/deepseek/i)).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Cambiar ia" }));
-    await screen.findByRole("heading", { name: "Paso 3 de 4: Conecta tu IA" });
-    expect(screen.getByRole("button", { name: "Ya tengo una API key" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Usar Ollama (gratis)" })).toBeInTheDocument();
+  it("blocks Continuar once today's free uses are spent and points to the other options", async () => {
+    mockApi({
+      documents: [indexedDocument],
+      runtime: { ...bundledRuntime, free_ai: { limit: 3, used: 3, remaining: 0 } },
+      catalog: [nvidia, openAi],
+    });
+    renderHome();
+    await reachAiStep();
+
+    expect(screen.getByText("Hoy ya usaste tus 3 usos. Vuelve mañana o usa tu API key.")).toBeInTheDocument();
+    expect(screen.queryByText("En uso")).not.toBeInTheDocument();
+    const nextButton = screen.getByRole("button", { name: "Continuar" });
+    expect(nextButton).toBeDisabled();
+    const reason = screen.getByText("Hoy usaste tus 3 usos gratis. Conecta tu IA.");
+    expect(nextButton).toHaveAttribute("aria-describedby", reason.id);
+  });
+
+  it("switches back to the free AI by deactivating the learner's own key", async () => {
+    mockApi({
+      documents: [indexedDocument],
+      runtime: { ...userRuntime, free_ai: { limit: 3, used: 0, remaining: 3 } },
+      catalog: [nvidia, openAi],
+    });
+    const deactivate = vi.spyOn(api, "deactivateAllLlmCredentials").mockResolvedValue(undefined as never);
+    renderHome();
+    await reachAiStep();
+
+    const options = screen.getByRole("group", { name: "Cómo usar la IA" });
+    expect(within(options).getByRole("button", { name: "Mi API key (en uso)" })).toBeInTheDocument();
+    fireEvent.click(within(options).getByRole("button", { name: "Gratis · 3 al día" }));
+    fireEvent.click(screen.getByRole("button", { name: "Usar la IA gratuita" }));
+
+    await waitFor(() => expect(deactivate).toHaveBeenCalledTimes(1));
   });
 
   it("keeps Continuar blocked and explains why while the AI step has nothing connected", async () => {
@@ -283,12 +317,12 @@ describe("HomePage", () => {
     renderHome();
     await reachAiStep();
 
-    expect(await screen.findByRole("button", { name: "Ya tengo una API key" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aún no tengo API key" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Usar Ollama (gratis)" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Mi API key" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "En local (Ollama)" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Gratis/ })).not.toBeInTheDocument();
     const next = screen.getByRole("button", { name: "Continuar" });
     expect(next).toBeDisabled();
-    const reason = screen.getByText("Falta conectar una IA.");
+    const reason = screen.getByText("Falta elegir una IA.");
     expect(next).toHaveAttribute("aria-describedby", reason.id);
     expect(screen.queryByText("Modo demo")).not.toBeInTheDocument();
   });
@@ -312,16 +346,14 @@ describe("HomePage", () => {
     renderHome();
     await reachAiStep();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Aún no tengo API key" }));
+    fireEvent.click(await screen.findByText("¿Cómo conseguir una API key?"));
     const sources = screen.getByRole("list", { name: "Dónde conseguir una API key" });
     const anthropic = within(sources).getByRole("link", { name: /OpenAI/ });
     expect(anthropic).toHaveAttribute("href", "https://platform.openai.com/api-keys");
     expect(anthropic).toHaveAttribute("target", "_blank");
     expect(anthropic).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText(/Crea una clave y cópiala/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Ya tengo mi clave" }));
-    expect(await screen.findByRole("group", { name: "Proveedores disponibles" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Proveedores disponibles" })).toBeInTheDocument();
   });
 
   it("shows the Ollama commands and copies one to the clipboard", async () => {
@@ -331,7 +363,7 @@ describe("HomePage", () => {
     renderHome();
     await reachAiStep();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Usar Ollama (gratis)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "En local (Ollama)" }));
     expect(screen.getByText("curl -fsSL https://ollama.com/install.sh | sh")).toBeInTheDocument();
     expect(screen.getByText("ollama pull llama3.1")).toBeInTheDocument();
     expect(screen.getByText("ollama list")).toBeInTheDocument();
@@ -374,7 +406,7 @@ describe("HomePage", () => {
     await reachAiStep();
 
     expect(await screen.findByText("Usando OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("Modelo: gpt-4o-mini")).toBeInTheDocument();
+    expect(screen.getByText(/Modelo: gpt-4o-mini/)).toBeInTheDocument();
   });
 
   it("keeps the 'Otro' template selected while the learner types a custom goal", async () => {
