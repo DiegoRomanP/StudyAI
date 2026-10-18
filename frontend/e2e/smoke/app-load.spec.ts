@@ -30,5 +30,5 @@ test("the production app loads the landing and enters the StudyAI home page", as
   const response = await documentsResponse;
   expect(response.status()).toBe(200);
   expect(await response.json()).toEqual([]);
-  await expect(page.getByText("Aún no has subido documentos.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Aún no tienes documentos", { exact: true })).toBeVisible();
 });

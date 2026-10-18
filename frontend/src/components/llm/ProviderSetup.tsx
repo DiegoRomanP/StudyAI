@@ -33,6 +33,32 @@ export function ProviderSetup({
   const modelFieldVisible =
     catalogEntry.requires_model_selection && (Boolean(credential) || !catalogEntry.requires_api_key);
 
+  // Why a button is disabled, shown under the buttons and linked with aria-describedby.
+  // Transient "operation pending" states are not explained: they clear by themselves.
+  const missingModel = catalogEntry.requires_model_selection && !setup.resolvedModel;
+  const modelReason = missingModel
+    ? "Elige un modelo de la lista o escribe su ID."
+    : setup.changingKey && catalogEntry.requires_api_key
+      ? "Guarda la clave nueva antes de cambiar el modelo."
+      : null;
+  const activateReason = setup.changingKey
+    ? "Guarda la clave nueva antes de activar."
+    : setup.hasUnsupportedStoredModel
+      ? "Este modelo ya no está disponible: elige otro y guárdalo."
+      : !setup.isVerifiedForDraft
+        ? catalogEntry.requires_api_key
+          ? "Primero pulsa «Probar configuración guardada»."
+          : "Primero pulsa «Guardar y verificar modelo»."
+        : null;
+  const clearUrlReason = setup.resolvedModel
+    ? null
+    : "Elige un modelo primero: se guardará junto con la dirección predeterminada.";
+  const showsActivate = Boolean(credential) && !setup.isActive && !setup.isStoredActive;
+  const showsModelSave = !catalogEntry.requires_api_key || Boolean(credential);
+  const modelReasonId = `provider-${providerId}-model-reason`;
+  const activateReasonId = `provider-${providerId}-activate-reason`;
+  const clearUrlReasonId = `provider-${providerId}-clear-url-reason`;
+
   return (
     <section
       aria-label={`Configuración de ${catalogEntry.label}`}
@@ -211,9 +237,11 @@ export function ProviderSetup({
               type="button"
               onClick={setup.handleClearUnsupportedBaseUrl}
               disabled={setup.operationPending || !setup.resolvedModel}
+              aria-describedby={clearUrlReason ? clearUrlReasonId : undefined}
             >
               Eliminar URL personalizada
             </Button>
+            {clearUrlReason && <p id={clearUrlReasonId}>{clearUrlReason}</p>}
           </div>
         )}
 
@@ -252,6 +280,7 @@ export function ProviderSetup({
               type="button"
               onClick={setup.handleConfigureWithoutKey}
               disabled={setup.verifying || (catalogEntry.requires_model_selection && !setup.resolvedModel)}
+              aria-describedby={missingModel ? modelReasonId : undefined}
             >
               {setup.activeAction === "configure"
                 ? "Verificando…"
@@ -266,6 +295,7 @@ export function ProviderSetup({
               type="button"
               onClick={setup.handleSaveModel}
               disabled={setup.operationPending || setup.changingKey || !setup.resolvedModel && catalogEntry.requires_model_selection}
+              aria-describedby={modelReason ? modelReasonId : undefined}
             >
               {setup.activeAction === "save-model" ? "Verificando…" : "Guardar y verificar modelo"}
             </Button>
@@ -293,6 +323,7 @@ export function ProviderSetup({
                 setup.changingKey ||
                 setup.hasUnsupportedStoredModel
               }
+              aria-describedby={activateReason ? activateReasonId : undefined}
             >
               {setup.activeAction === "activate" ? "Activando…" : "Activar"}
             </Button>
@@ -337,6 +368,13 @@ export function ProviderSetup({
             </Button>
           )}
         </div>
+
+        {((showsModelSave && modelReason) || (showsActivate && activateReason)) && (
+          <div className="space-y-1 text-sm text-text-muted">
+            {showsModelSave && modelReason && <p id={modelReasonId}>{modelReason}</p>}
+            {showsActivate && activateReason && <p id={activateReasonId}>{activateReason}</p>}
+          </div>
+        )}
       </Card>
     </section>
   );

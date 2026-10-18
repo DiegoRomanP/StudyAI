@@ -416,4 +416,12 @@ describe("ProviderSetup", () => {
       screen.queryByText("La configuración cambió en otra pestaña. Tu borrador local no se sobrescribió."),
     ).not.toBeInTheDocument();
   });
+  it("explains why Activar is disabled until the saved configuration is tested", () => {
+    renderSetup({ credential: { ...openAiCredential, is_verified: false, verified_at: null } });
+
+    const activate = screen.getByRole("button", { name: "Activar" });
+    expect(activate).toBeDisabled();
+    expect(activate).toHaveAccessibleDescription("Primero pulsa «Probar configuración guardada».");
+    expect(screen.getByText("Primero pulsa «Probar configuración guardada».")).toBeVisible();
+  });
 });

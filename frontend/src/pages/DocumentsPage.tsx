@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FolderOpen } from "lucide-react";
 
 import type { DocumentDTO } from "../api/types";
 import { getApiErrorMessage } from "../api/errors";
-import { Badge, Button, Card, Spinner } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
+import { PageGuide } from "../components/help/PageGuide";
+import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { DocumentUpload } from "../components/documents/DocumentUpload";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
@@ -12,6 +15,30 @@ const STATUS_COLORS = {
   INDEXED: "green",
   FAILED: "red",
 } as const;
+
+const STATUS_LABELS = {
+  PENDING: "Preparando…",
+  INDEXED: "Listo para usar",
+  FAILED: "No se pudo leer",
+} as const;
+
+/** True once a document becomes INDEXED while this page is open (not on first load). */
+function useJustIndexed(documents: DocumentDTO[] | undefined) {
+  const previous = useRef<Map<number, DocumentDTO["status"]> | null>(null);
+  const [justIndexed, setJustIndexed] = useState(false);
+
+  useEffect(() => {
+    if (!documents) return;
+    const before = previous.current;
+    previous.current = new Map(documents.map((document) => [document.id, document.status]));
+    if (!before) return;
+    if (documents.some((document) => document.status === "INDEXED" && before.get(document.id) !== "INDEXED")) {
+      setJustIndexed(true);
+    }
+  }, [documents]);
+
+  return justIndexed;
+}
 
 export function DocumentsPage() {
   const {
@@ -24,22 +51,35 @@ export function DocumentsPage() {
   } = useDocuments();
   const upload = useUploadDocument();
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(documents);
+  const justIndexed = useJustIndexed(documents);
 
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold">Recursos</h1>
         <p className="text-text-muted">
-          Sube tus apuntes en PDF o Markdown. Se indexan automáticamente para que la IA pueda
-          usarlos al crear tus planes.
+          Tus documentos de estudio (PDF o Markdown). La IA los usa para crear tus planes.
         </p>
       </header>
+
+      <PageGuide id="recursos" />
 
       <DocumentUpload
         onUpload={(file) => upload.mutateAsync(file)}
         documents={documents ?? []}
         documentsError={isError}
       />
+
+      {justIndexed && (
+        <Alert tone="success" title="Listo. Siguiente: prepara tu plan">
+          <p>Tu documento ya se puede usar. Elige tu meta y genera el plan desde Inicio.</p>
+          <div>
+            <ButtonLink to="/inicio#preparar-plan" variant="secondary">
+              Preparar mi plan
+            </ButtonLink>
+          </div>
+        </Alert>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus documentos</h2>
@@ -48,7 +88,7 @@ export function DocumentsPage() {
             <p>
               {documents === undefined
                 ? "No se pudieron cargar los documentos."
-                : "No se pudo actualizar la lista; se conservan los últimos datos visibles, que pueden ser parciales hasta confirmar una nueva respuesta."}
+                : "No se pudo actualizar la lista. Mostramos lo último que cargó; puede que falte algo."}
             </p>
             <p>{getApiErrorMessage(error, "Comprueba la conexión e inténtalo de nuevo.")}</p>
             <Button
@@ -81,7 +121,11 @@ export function DocumentsPage() {
             )}
           </>
         ) : !isError ? (
-          <p className="text-sm text-text-muted">Aún no has subido documentos.</p>
+          <EmptyState
+            icon={FolderOpen}
+            title="Aún no tienes documentos"
+            description="Sube tus apuntes, un temario o un libro en PDF o Markdown. Es lo primero que necesita la IA para preparar tu plan."
+          />
         ) : null}
       </section>
     </div>
@@ -94,7 +138,7 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
 
   async function handleDelete() {
     const confirmed = window.confirm(
-      `¿Eliminar "${doc.filename}"? Esta acción no se puede deshacer.`
+      `¿Eliminar "${doc.filename}"? Los planes ya generados se conservan, pero no podrás usar este documento en planes nuevos. Esta acción no se puede deshacer.`
     );
     if (!confirmed) return;
     setError(null);
@@ -120,7 +164,7 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
       <div className="flex items-center gap-3">
         {doc.status === "PENDING" && <Spinner />}
         <Badge color={STATUS_COLORS[doc.status]}>
-          {doc.status === "INDEXED" ? "Indexado" : doc.status === "PENDING" ? "Procesando" : "Error"}
+          {STATUS_LABELS[doc.status]}
         </Badge>
         <Button
           variant="danger"

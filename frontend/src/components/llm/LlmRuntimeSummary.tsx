@@ -117,24 +117,23 @@ export function LlmRuntimeSummary({
   const loadingState = isLoading && !error;
   const isUnknown = Boolean(error) || (!loadingState && resolved.kind === "unknown");
 
-  let heading = "Proveedor efectivo";
+  let heading = "IA que se usa ahora";
   let description = "";
   if (loadingState) {
-    heading = "Proveedor efectivo";
     description = "Consultando la configuración del servidor…";
   } else if (isUnknown) {
-    heading = "Proveedor efectivo desconocido";
+    heading = "No sabemos qué IA se usa ahora";
     description = error || resolved.kind !== "unknown"
       ? "No se pudo consultar la configuración del servidor."
       : resolved.detail;
   } else if (resolved.kind === "user") {
-    heading = "Configuración de usuario activa";
+    heading = "IA que se usa ahora · Tu clave";
     description = `${resolved.label} · ${resolved.model}`;
   } else if (resolved.kind === "env") {
-    heading = "Configuración del servidor";
+    heading = "IA que se usa ahora · Clave del servidor (.env)";
     description = `${resolved.label} · ${resolved.model}`;
   } else {
-    description = "Modo demo (LLM simulado, sin costo)";
+    description = "Modo demo (respuestas de ejemplo, sin costo)";
   }
 
   const fallbackReason = !loadingState && !isUnknown && resolved.kind !== "unknown"
@@ -158,7 +157,7 @@ export function LlmRuntimeSummary({
             disabled={isDeactivating}
             className="shrink-0"
           >
-            {isDeactivating ? "Actualizando…" : "Usar configuración del servidor"}
+            {isDeactivating ? "Actualizando…" : "Dejar de usar mi clave"}
           </Button>
         )}
       </Card>

@@ -1,12 +1,24 @@
 import { useId, useState } from "react";
+import { Target } from "lucide-react";
 
 import type { GoalDTO, GoalType } from "../api/types";
 import { getApiErrorMessage } from "../api/errors";
 import { GoalTemplatePicker } from "../components/goals/GoalTemplatePicker";
 import { AsyncState } from "../components/AsyncState";
-import { Badge, Button, Card, Input, Select, Skeleton, Textarea } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
+import { PageGuide } from "../components/help/PageGuide";
+import { Alert, Badge, Button, ButtonLink, Card, Input, Select, Skeleton, Textarea } from "../components/ui";
 import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
-import { GOAL_TEMPLATES, GOAL_TYPE_LABELS as TYPE_LABELS, type GoalTemplate } from "../lib/goalTemplates";
+import {
+  GOAL_TEMPLATES,
+  GOAL_TYPE_DESCRIPTIONS,
+  GOAL_TYPE_LABELS as TYPE_LABELS,
+  type GoalTemplate,
+} from "../lib/goalTemplates";
+
+const TITLE_HINT = "Por ejemplo: «Examen final de Bases de datos».";
+const TITLE_REQUIRED = "Escribe un título para tu meta.";
+const DESCRIPTION_HINT = "Opcional. La IA la tiene en cuenta para enfocar el plan.";
 import { useShowMore } from "../hooks/useShowMore";
 
 export function GoalsPage() {
@@ -19,29 +31,34 @@ export function GoalsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [savedGoal, setSavedGoal] = useState<GoalDTO | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
   function applyTemplate(template: GoalTemplate) {
     setGoalType(template.type);
     setSelectedTemplateId(template.id);
     setTitle(template.title);
-    setSaved(false);
+    setSavedGoal(null);
+    setTitleError(null);
     setCreateError(null);
   }
 
   async function save() {
     const normalizedTitle = title.trim();
-    if (!normalizedTitle) return;
+    if (!normalizedTitle) {
+      setTitleError(TITLE_REQUIRED);
+      return;
+    }
 
     setCreateError(null);
     try {
-      await createGoal.mutateAsync({
+      const created = await createGoal.mutateAsync({
         goal_type: goalType,
         title: normalizedTitle,
         description,
       });
-      setSaved(true);
+      setSavedGoal(created);
       setSelectedTemplateId(null);
       setTitle("");
       setDescription("");
@@ -59,20 +76,24 @@ export function GoalsPage() {
         </p>
       </header>
 
+      <PageGuide id="metas" />
+
       <GoalTemplatePicker selectedTemplateId={selectedTemplateId} onSelect={applyTemplate} />
 
       <Card className="space-y-4">
         <Input
           id="new-goal-title"
           label="Título"
-          hint="El título no puede quedar vacío."
+          hint={TITLE_HINT}
+          error={titleError}
           value={title}
           onChange={(event) => {
             setTitle(event.target.value);
             // "Otro" has no preset title, so typing keeps it selected.
             const preset = GOAL_TEMPLATES.find((item) => item.id === selectedTemplateId)?.title;
             if (preset && preset !== event.target.value) setSelectedTemplateId(null);
-            setSaved(false);
+            setSavedGoal(null);
+            setTitleError(null);
             setCreateError(null);
           }}
           placeholder="Ej. Aprobar el parcial de Cálculo"
@@ -81,11 +102,11 @@ export function GoalsPage() {
         <Select
           id="new-goal-type"
           label="Tipo de estudio"
-          hint="Define la estrategia del plan: duración de sesiones y mezcla de preguntas."
+          hint={GOAL_TYPE_DESCRIPTIONS[goalType]}
           value={goalType}
           onChange={(event) => {
             setGoalType(event.target.value as GoalType);
-            setSaved(false);
+            setSavedGoal(null);
           }}
         >
           {(Object.keys(TYPE_LABELS) as GoalType[]).map((type) => (
@@ -97,20 +118,30 @@ export function GoalsPage() {
         <Textarea
           id="new-goal-description"
           label="Descripción"
+          hint={DESCRIPTION_HINT}
           value={description}
           onChange={(event) => {
             setDescription(event.target.value);
-            setSaved(false);
+            setSavedGoal(null);
           }}
           placeholder="Detalles: temas a cubrir, fecha, énfasis..."
           rows={3}
         />
         <div className="flex items-center gap-3">
-          <Button onClick={save} disabled={!title.trim() || createGoal.isPending}>
+          <Button onClick={save} disabled={createGoal.isPending}>
             {createGoal.isPending ? "Guardando..." : "Guardar meta"}
           </Button>
-          {saved && <span role="status" className="text-sm text-state-success">Meta guardada.</span>}
         </div>
+        {savedGoal && (
+          <Alert tone="success" title="Meta guardada.">
+            <p>Siguiente paso: genera un plan con tus documentos.</p>
+            <div>
+              <ButtonLink to={`/plan?meta=${savedGoal.id}`} variant="secondary">
+                Generar un plan con esta meta
+              </ButtonLink>
+            </div>
+          </Alert>
+        )}
         {createError && <p role="alert" className="text-sm text-state-error">{createError}</p>}
       </Card>
 
@@ -124,7 +155,13 @@ export function GoalsPage() {
           isEmpty={(items) => items.length === 0}
           loading={<Skeleton height={72} />}
           loadingLabel="Cargando metas"
-          empty={<p className="text-sm text-text-muted">Aún no tienes metas.</p>}
+          empty={
+            <EmptyState
+              icon={Target}
+              title="Aún no tienes metas"
+              description="Una meta le dice a la IA para qué estudias: un examen, aprender algo nuevo o memorizar."
+            />
+          }
           onRetry={() => void goalsQuery.refetch()}
           initialErrorMessage="No se pudieron cargar tus metas."
           updateErrorMessage="No se pudieron actualizar tus metas. Se muestran las últimas cargadas."
@@ -178,7 +215,7 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
 
   async function handleSave() {
     if (!title.trim()) {
-      setError("El título no puede estar vacío.");
+      setError(TITLE_REQUIRED);
       return;
     }
     setError(null);
@@ -212,50 +249,35 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
   if (editing) {
     return (
       <Card className="space-y-3">
-        <div>
-          <label htmlFor={typeId} className="mb-1 block text-sm font-medium text-text-primary">
-            Tipo
-          </label>
-          <select
-            id={typeId}
-            value={goalType}
-            onChange={(e) => setGoalType(e.target.value as GoalType)}
-            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
-          >
-            {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
-              <option key={t} value={t}>
-                {TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={titleId} className="mb-1 block text-sm font-medium text-text-primary">
-            Título
-          </label>
-          <input
-            id={titleId}
-            value={title}
-            maxLength={255}
-            onChange={(e) => setTitle(e.target.value)}
-            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor={descriptionId}
-            className="mb-1 block text-sm font-medium text-text-primary"
-          >
-            Descripción
-          </label>
-          <textarea
-            id={descriptionId}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="min-h-11 w-full rounded-control border border-control bg-surface-paper px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2"
-          />
-        </div>
+        <Select
+          id={typeId}
+          label="Tipo de estudio"
+          hint={GOAL_TYPE_DESCRIPTIONS[goalType]}
+          value={goalType}
+          onChange={(e) => setGoalType(e.target.value as GoalType)}
+        >
+          {(Object.keys(TYPE_LABELS) as GoalType[]).map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABELS[t]}
+            </option>
+          ))}
+        </Select>
+        <Input
+          id={titleId}
+          label="Título"
+          hint={TITLE_HINT}
+          value={title}
+          maxLength={255}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <Textarea
+          id={descriptionId}
+          label="Descripción"
+          hint={DESCRIPTION_HINT}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+        />
         {error && <p role="alert" className="text-sm text-state-error">{error}</p>}
         <div className="flex items-center gap-2">
           <Button onClick={handleSave} disabled={updateGoal.isPending}>

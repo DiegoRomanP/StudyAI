@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../api/types";
@@ -21,6 +22,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../api/endpoints", () => ({ api }));
 
 import { SettingsPage } from "../pages/SettingsPage";
+import { PAGE_GUIDES } from "../lib/pageGuides";
 
 const catalog: ProviderCatalogEntry = {
   provider: "OPENAI",
@@ -69,7 +71,9 @@ function renderSettings() {
     queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <SettingsPage />
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <SettingsPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     ),
   };
@@ -108,6 +112,15 @@ describe("SettingsPage", () => {
         config_revision: 8,
       },
     });
+  });
+
+  it("reassures that demo mode works and shows the setup guide", async () => {
+    renderSettings();
+
+    expect(screen.getByRole("heading", { level: 1, name: "Conectar IA" })).toBeInTheDocument();
+    expect(screen.getByText(/No necesitas clave para probar StudyAI/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: PAGE_GUIDES["conectar-ia"].title })).toBeInTheDocument();
+    expect(await screen.findByText("Modo demo (respuestas de ejemplo, sin costo)")).toBeInTheDocument();
   });
 
   it("persists URL B before testing the returned revision", async () => {
@@ -495,7 +508,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(api.listLlmCredentials).toHaveBeenCalledTimes(2);
       expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
-      expect(screen.getByText("Modo demo (LLM simulado, sin costo)")).toBeInTheDocument();
+      expect(screen.getByText("Modo demo (respuestas de ejemplo, sin costo)")).toBeInTheDocument();
     });
   });
 
@@ -555,7 +568,7 @@ describe("SettingsPage", () => {
     renderSettings();
 
     await screen.findByText("OpenAI");
-    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dejar de usar mi clave" }));
 
     expect(await screen.findByText("No se pudo desactivar el proveedor.")).toBeInTheDocument();
   });
@@ -585,10 +598,10 @@ describe("SettingsPage", () => {
       });
     renderSettings();
 
-    await screen.findByRole("button", { name: "Usar configuración del servidor" });
-    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+    await screen.findByRole("button", { name: "Dejar de usar mi clave" });
+    fireEvent.click(screen.getByRole("button", { name: "Dejar de usar mi clave" }));
 
-    expect(await screen.findByText("Configuración del servidor")).toBeInTheDocument();
+    expect(await screen.findByText("IA que se usa ahora · Clave del servidor (.env)")).toBeInTheDocument();
     expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
   });
 
@@ -616,10 +629,10 @@ describe("SettingsPage", () => {
       });
     renderSettings();
 
-    await screen.findByRole("button", { name: "Usar configuración del servidor" });
-    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+    await screen.findByRole("button", { name: "Dejar de usar mi clave" });
+    fireEvent.click(screen.getByRole("button", { name: "Dejar de usar mi clave" }));
 
-    expect(await screen.findByText("Modo demo (LLM simulado, sin costo)")).toBeInTheDocument();
+    expect(await screen.findByText("Modo demo (respuestas de ejemplo, sin costo)")).toBeInTheDocument();
     expect(api.getLlmRuntime).toHaveBeenCalledTimes(2);
   });
 
@@ -637,9 +650,9 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Configuración del servidor")).toBeInTheDocument();
+    expect(await screen.findByText("IA que se usa ahora · Clave del servidor (.env)")).toBeInTheDocument();
     expect(screen.getByText("Anthropic (Claude) · claude-plan")).toBeInTheDocument();
-    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (respuestas de ejemplo, sin costo)")).not.toBeInTheDocument();
   });
 
   it("renders the safe runtime fallback reason", async () => {
@@ -676,8 +689,8 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
-    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (respuestas de ejemplo, sin costo)")).not.toBeInTheDocument();
   });
 
   it("fails closed for runtime models with an incompatible value type", async () => {
@@ -711,7 +724,7 @@ describe("SettingsPage", () => {
     api.getLlmRuntime.mockResolvedValue(null);
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
     expect(screen.queryByText("Consultando la configuración del servidor…")).not.toBeInTheDocument();
   });
 
@@ -728,8 +741,8 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
-    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (respuestas de ejemplo, sin costo)")).not.toBeInTheDocument();
   });
 
   it("shows an unknown state for a mock source with inconsistent provider metadata", async () => {
@@ -745,8 +758,8 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
-    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (respuestas de ejemplo, sin costo)")).not.toBeInTheDocument();
   });
 
   it("hides cached fallback information after a runtime refetch fails", async () => {
@@ -768,10 +781,10 @@ describe("SettingsPage", () => {
       });
     renderSettings();
 
-    await screen.findByRole("button", { name: "Usar configuración del servidor" });
-    fireEvent.click(screen.getByRole("button", { name: "Usar configuración del servidor" }));
+    await screen.findByRole("button", { name: "Dejar de usar mi clave" });
+    fireEvent.click(screen.getByRole("button", { name: "Dejar de usar mi clave" }));
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
     expect(screen.queryByText("Información de fallback anterior.")).not.toBeInTheDocument();
   });
 
@@ -782,8 +795,8 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
-    expect(screen.queryByText("Modo demo (LLM simulado, sin costo)")).not.toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
+    expect(screen.queryByText("Modo demo (respuestas de ejemplo, sin costo)")).not.toBeInTheDocument();
   });
 
   it("does not mark a saved credential active unless the runtime confirms it", async () => {
@@ -808,8 +821,8 @@ describe("SettingsPage", () => {
     });
     renderSettings();
 
-    expect(await screen.findByText("Proveedor efectivo desconocido")).toBeInTheDocument();
-    expect(screen.queryByText("Configuración de usuario activa")).not.toBeInTheDocument();
+    expect(await screen.findByText("No sabemos qué IA se usa ahora")).toBeInTheDocument();
+    expect(screen.queryByText("IA que se usa ahora · Tu clave")).not.toBeInTheDocument();
   });
 
   it("exposes a labeled model control in the provider configuration", async () => {

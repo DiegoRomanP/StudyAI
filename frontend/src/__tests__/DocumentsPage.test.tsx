@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
 import type { DocumentDTO, DocumentStatus } from "../api/types";
 import { DOCUMENTS_QUERY_KEY } from "../hooks/queries";
+import { PAGE_GUIDES } from "../lib/pageGuides";
 import { DocumentsPage } from "../pages/DocumentsPage";
 
 function makeDocument(id: number, filename: string, status: DocumentStatus): DocumentDTO {
@@ -33,7 +35,9 @@ function renderDocumentsPage(queryClient = makeQueryClient()) {
     queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <DocumentsPage />
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <DocumentsPage />
+        </MemoryRouter>
       </QueryClientProvider>,
     ),
   };
@@ -55,8 +59,8 @@ async function flushAsyncTasks() {
 
 describe("DocumentsPage query failures", () => {
   it.each([
-    ["INDEXED", "Subida aceptada e indexada."],
-    ["FAILED", "La indexación falló: No se pudo indexar el archivo."],
+    ["INDEXED", "Listo: ya puedes usarlo en un plan."],
+    ["FAILED", "No se pudo preparar el archivo: No se pudo indexar el archivo."],
   ] as const)(
     "keeps polling after initial, invalidated, and first automatic GET failures until confirming %s",
     async (status, finalFeedback) => {
@@ -83,10 +87,10 @@ describe("DocumentsPage query failures", () => {
 
       expect(uploadDocument).toHaveBeenCalledOnce();
       expect(listDocuments).toHaveBeenCalledTimes(2);
-      expect(screen.getByRole("alert")).toHaveTextContent(/datos visibles.*pueden ser parciales/i);
-      expect(screen.queryByText("Aún no has subido documentos.")).not.toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent(/Mostramos lo último que cargó; puede que falte algo/i);
+      expect(screen.queryByText("Aún no tienes documentos")).not.toBeInTheDocument();
       expect(
-        screen.getByText(/estado de indexación no confirmado/i),
+        screen.getByText(/aún no sabemos si terminó de prepararse/i),
       ).toBeInTheDocument();
       expect(queryClient.getQueryData(DOCUMENTS_QUERY_KEY)).toEqual({
         documents: [pendingDocument],
@@ -101,7 +105,7 @@ describe("DocumentsPage query failures", () => {
       });
       expect(listDocuments).toHaveBeenCalledTimes(2);
       expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-      expect(screen.getByText(/estado de indexación no confirmado/i)).toBeInTheDocument();
+      expect(screen.getByText(/aún no sabemos si terminó de prepararse/i)).toBeInTheDocument();
       expect(screen.queryByText(finalFeedback)).not.toBeInTheDocument();
 
       await act(async () => {
@@ -112,7 +116,7 @@ describe("DocumentsPage query failures", () => {
       expect(listDocuments).toHaveBeenCalledTimes(3);
       expect(uploadDocument).toHaveBeenCalledOnce();
       expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-      expect(screen.getByText(/estado de indexación no confirmado/i)).toBeInTheDocument();
+      expect(screen.getByText(/aún no sabemos si terminó de prepararse/i)).toBeInTheDocument();
       expect(screen.queryByText(finalFeedback)).not.toBeInTheDocument();
 
       await act(async () => {
@@ -128,15 +132,15 @@ describe("DocumentsPage query failures", () => {
       expect(listDocuments).toHaveBeenCalledTimes(4);
       expect(uploadDocument).toHaveBeenCalledOnce();
       expect(await screen.findByText(finalFeedback)).toBeInTheDocument();
-      expect(screen.queryByText(/estado de indexación no confirmado/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/aún no sabemos si terminó de prepararse/i)).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Reintentar carga de documentos" })).not.toBeInTheDocument();
       unmount();
     },
   );
 
   it.each([
-    ["INDEXED", "Subida aceptada e indexada."],
-    ["FAILED", "La indexación falló: No se pudo indexar el archivo."],
+    ["INDEXED", "Listo: ya puedes usarlo en un plan."],
+    ["FAILED", "No se pudo preparar el archivo: No se pudo indexar el archivo."],
   ] as const)("shows the recovered %s status after a manual retry", async (status, feedback) => {
     const pendingDocument = makeDocument(21, "apuntes.md", "PENDING");
     vi.spyOn(api, "listDocuments")
@@ -147,14 +151,14 @@ describe("DocumentsPage query failures", () => {
     renderDocumentsPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudieron cargar/i);
-    expect(screen.queryByText("Aún no has subido documentos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes documentos")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Selecciona uno o varios documentos"), {
       target: { files: [new File(["study notes"], pendingDocument.filename)] },
     });
 
     expect(
-      await screen.findByText(/subida aceptada.*estado de indexación no confirmado/i),
+      await screen.findByText(/archivo subido.*aún no sabemos si terminó de prepararse/i),
     ).toBeInTheDocument();
     await waitFor(() => expect(api.listDocuments).toHaveBeenCalledTimes(2));
 
@@ -181,12 +185,40 @@ describe("DocumentsPage query failures", () => {
       target: { files: [new File(["new notes"], pendingDocument.filename)] },
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/se conservan los últimos datos/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Mostramos lo último que cargó/i);
     expect(screen.getByText(existingDocument.filename)).toBeInTheDocument();
-    expect(screen.queryByText("Aún no has subido documentos.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes documentos")).not.toBeInTheDocument();
     expect(
-      await screen.findByText(/subida aceptada.*estado de indexación no confirmado/i),
+      await screen.findByText(/archivo subido.*aún no sabemos si terminó de prepararse/i),
     ).toBeInTheDocument();
     await waitFor(() => expect(api.listDocuments).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("DocumentsPage guidance", () => {
+  it("explains an empty library and shows the page guide", async () => {
+    vi.spyOn(api, "listDocuments").mockResolvedValue([]);
+    renderDocumentsPage();
+
+    expect(screen.getByRole("region", { name: PAGE_GUIDES.recursos.title })).toBeInTheDocument();
+    expect(await screen.findByText("Aún no tienes documentos")).toBeInTheDocument();
+  });
+
+  it("suggests preparing a plan once an upload is ready", async () => {
+    const indexed = makeDocument(30, "temario.md", "INDEXED");
+    vi.spyOn(api, "listDocuments").mockResolvedValueOnce([]).mockResolvedValue([indexed]);
+    vi.spyOn(api, "uploadDocument").mockResolvedValue(indexed);
+    renderDocumentsPage();
+
+    await screen.findByText("Aún no tienes documentos");
+    fireEvent.change(screen.getByLabelText("Selecciona uno o varios documentos"), {
+      target: { files: [new File(["notes"], indexed.filename)] },
+    });
+
+    expect(await screen.findByRole("link", { name: "Preparar mi plan" })).toHaveAttribute(
+      "href",
+      "/inicio#preparar-plan",
+    );
+    expect(screen.getAllByText("Listo para usar").length).toBeGreaterThan(0);
   });
 });

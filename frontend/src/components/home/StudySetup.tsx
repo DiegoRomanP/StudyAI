@@ -156,7 +156,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
             selectedDocumentIds={selectedDocs}
             onSelectionChange={setSelectedDocs}
             showEmptyState={documentsReliable && indexedIds.size === 0}
-            emptyState={<p>Aún no hay documentos indexados. Sube un PDF o Markdown para empezar.</p>}
+            emptyState={<p>Aún no tienes documentos listos. Sube un PDF o Markdown para empezar.</p>}
           />
           {documentsQuery.isError && (
             <Button

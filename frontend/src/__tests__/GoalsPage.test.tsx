@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { PAGE_GUIDES } from "../lib/pageGuides";
 
 const goalHooks = vi.hoisted(() => ({
   createGoal: vi.fn(),
@@ -26,6 +29,14 @@ vi.mock("../hooks/queries", () => ({
 
 import { GoalsPage } from "../pages/GoalsPage";
 
+function renderPage() {
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <GoalsPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("GoalsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -39,7 +50,7 @@ describe("GoalsPage", () => {
   });
 
   it("fills a template without persisting it until explicit confirmation", async () => {
-    render(<GoalsPage />);
+    renderPage();
 
     const examTemplate = screen.getByRole("button", { name: /Universidad/i });
     expect(examTemplate).toHaveAttribute("aria-pressed", "false");
@@ -70,7 +81,7 @@ describe("GoalsPage", () => {
   });
 
   it("keeps a manually edited title unassociated with a template while retaining the default type", async () => {
-    render(<GoalsPage />);
+    renderPage();
 
     const learningTemplate = screen.getByRole("button", { name: /Aprender desde cero/i });
     fireEvent.change(screen.getByRole("textbox", { name: "Título" }), {
@@ -88,13 +99,33 @@ describe("GoalsPage", () => {
     });
   });
 
-  it("does not create a goal when the title contains only whitespace", () => {
-    render(<GoalsPage />);
+  it("does not create a goal when the title contains only whitespace and explains why", () => {
+    renderPage();
     const title = screen.getByRole("textbox", { name: "Título" });
+    expect(title).not.toHaveAccessibleDescription(/Escribe un título/);
     fireEvent.change(title, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar meta" }));
 
-    expect(screen.getByRole("button", { name: "Guardar meta" })).toBeDisabled();
     expect(goalHooks.createGoal).not.toHaveBeenCalled();
+    expect(title).toHaveAccessibleDescription(/Escribe un título para tu meta\./);
+    expect(title).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("shows the page guide and offers to generate a plan with the saved goal", async () => {
+    goalHooks.createGoal.mockResolvedValue({ id: 12 });
+    renderPage();
+
+    expect(screen.getByRole("region", { name: PAGE_GUIDES.metas.title })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Universidad/i }));
+    expect(screen.getByRole("combobox", { name: "Tipo de estudio" })).toHaveAccessibleDescription(
+      /7 de 10/,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Guardar meta" }));
+
+    expect(await screen.findByRole("link", { name: "Generar un plan con esta meta" })).toHaveAttribute(
+      "href",
+      "/plan?meta=12",
+    );
   });
 
   it("shows a server creation error instead of announcing an unconfirmed save", async () => {
@@ -104,7 +135,7 @@ describe("GoalsPage", () => {
         response: { status: 400, data: { detail: "La meta no se pudo guardar." } },
       }),
     );
-    render(<GoalsPage />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: /Universidad/i }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar meta" }));
 
@@ -125,7 +156,7 @@ describe("GoalsPage", () => {
     goalHooks.updateGoal.mockResolvedValue({ id: 4 });
     goalHooks.deleteGoal.mockResolvedValue(undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<GoalsPage />);
+    renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     const titleFields = screen.getAllByRole("textbox", { name: "Título" });
@@ -173,7 +204,7 @@ describe("GoalsPage", () => {
         },
       },
     });
-    render(<GoalsPage />);
+    renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     const titleFields = screen.getAllByRole("textbox", { name: "Título" });
@@ -186,16 +217,16 @@ describe("GoalsPage", () => {
 
   it("distinguishes a failed goal list from an empty one", () => {
     goalHooks.goalsError = true;
-    render(<GoalsPage />);
+    renderPage();
 
     expect(screen.getByText("No se pudieron cargar tus metas.")).toBeInTheDocument();
-    expect(screen.queryByText("Aún no tienes metas.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes metas")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carga" }));
     expect(goalHooks.refetchGoals).toHaveBeenCalledOnce();
   });
 
   it("selects templates by identity even when two share a study type", () => {
-    render(<GoalsPage />);
+    renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
     fireEvent.click(screen.getByRole("button", { name: /Certificaciones/ }));
@@ -205,6 +236,5 @@ describe("GoalsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Otro/ }));
     expect(screen.getByRole("textbox", { name: "Título" })).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Guardar meta" })).toBeDisabled();
   });
 });

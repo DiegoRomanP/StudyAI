@@ -48,7 +48,7 @@ describe("DocumentUpload", () => {
     const input = screen.getByLabelText("Selecciona uno o varios documentos");
     fireEvent.change(input, { target: { files: [pendingFile, rejectedFile] } });
 
-    expect(await screen.findByText(/subida aceptada\. indexación en curso/i)).toBeInTheDocument();
+    expect(await screen.findByText(/archivo subido\. lo estamos preparando/i)).toBeInTheDocument();
     const serverErrorResult = await screen.findByRole("alert");
     expect(serverErrorResult).toHaveTextContent("El servidor rechazó el archivo por su tamaño.");
     expect(serverErrorResult.closest("li")).toHaveTextContent(rejectedFile.name);
@@ -67,7 +67,7 @@ describe("DocumentUpload", () => {
       target: { files: [acceptedFile, oversizedFile] },
     });
 
-    expect(await screen.findByText(/subida aceptada e indexada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/listo: ya puedes usarlo en un plan/i)).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent(/supera el máximo de 25 mb/i);
     expect(onUpload).toHaveBeenCalledOnce();
     expect(onUpload).toHaveBeenCalledWith(acceptedFile);
@@ -108,7 +108,7 @@ describe("DocumentUpload", () => {
     fireEvent.change(input, { target: { files: [retryFile] } });
 
     await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText(/subida aceptada e indexada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/listo: ya puedes usarlo en un plan/i)).toBeInTheDocument();
   });
 
   it("supports dropping files without replacing the native file selector", async () => {
@@ -121,7 +121,7 @@ describe("DocumentUpload", () => {
     fireEvent.dragOver(dropZone, { dataTransfer });
     fireEvent.drop(dropZone, { dataTransfer });
 
-    expect(await screen.findByText(/subida aceptada e indexada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/listo: ya puedes usarlo en un plan/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Selecciona uno o varios documentos")).toBeInTheDocument();
     expect(onUpload).toHaveBeenCalledWith(file);
   });
@@ -136,7 +136,7 @@ describe("DocumentUpload", () => {
       target: { files: [file] },
     });
 
-    expect(await screen.findByText(/subida aceptada\. indexación en curso/i)).toBeInTheDocument();
+    expect(await screen.findByText(/archivo subido\. lo estamos preparando/i)).toBeInTheDocument();
     rerender(
       <DocumentUpload
         onUpload={onUpload}
@@ -144,6 +144,6 @@ describe("DocumentUpload", () => {
       />,
     );
 
-    expect(await screen.findByText(/subida aceptada e indexada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/listo: ya puedes usarlo en un plan/i)).toBeInTheDocument();
   });
 });

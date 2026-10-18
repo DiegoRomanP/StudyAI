@@ -11,9 +11,9 @@ interface DocumentPickerProps {
 }
 
 function getStatusLabel(document: DocumentDTO) {
-  if (document.status === "PENDING") return "Pendiente: indexación en curso.";
-  if (document.status === "FAILED") return "Indexación fallida.";
-  return "Indexado y disponible para generar.";
+  if (document.status === "PENDING") return "Preparando… estará listo en unos segundos.";
+  if (document.status === "FAILED") return "No se pudo leer.";
+  return "Listo para usar.";
 }
 
 export function DocumentPicker({
@@ -51,7 +51,7 @@ export function DocumentPicker({
 
       {showEmptyState && indexedCount === 0 && (
         <div role="status" className="text-sm text-state-warning">
-          {emptyState ?? "No hay documentos indexados disponibles para generar."}
+          {emptyState ?? "Aún no tienes documentos listos para usar."}
         </div>
       )}
 

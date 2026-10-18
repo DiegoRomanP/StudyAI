@@ -1,7 +1,11 @@
 import { useState } from "react";
+import { KeyRound } from "lucide-react";
 
 import { getApiErrorMessage } from "../api/errors";
 import { getConfirmedRuntimeProvider, LlmRuntimeSummary } from "../components/llm/LlmRuntimeSummary";
+import { EmptyState } from "../components/EmptyState";
+import { HelpTerm } from "../components/help/HelpTerm";
+import { PageGuide } from "../components/help/PageGuide";
 import { ProviderSetup } from "../components/llm/ProviderSetup";
 import { Button, Card, Spinner } from "../components/ui";
 import {
@@ -81,10 +85,14 @@ export function SettingsPage() {
       <header className="max-w-reading">
         <h1 className="font-display text-3xl font-bold text-text-primary">Conectar IA</h1>
         <p className="mt-2 text-text-muted">
-          Conecta tu IA: elige un proveedor compatible y confirma qué modelo usará el servidor para
-          estudiar. Sin clave, StudyAI sigue funcionando en modo demo.
+          Elige qué <HelpTerm term="proveedorIA">IA</HelpTerm> genera tus planes.{" "}
+          <strong className="font-semibold text-text-primary">
+            No necesitas clave para probar StudyAI: el modo demo ya funciona.
+          </strong>
         </p>
       </header>
+
+      <PageGuide id="conectar-ia" />
 
       <LlmRuntimeSummary
         runtime={runtime}
@@ -130,9 +138,11 @@ export function SettingsPage() {
           ))}
         </div>
       ) : (
-        <Card className="text-sm text-text-muted">
-          El catálogo de proveedores no contiene opciones configurables.
-        </Card>
+        <EmptyState
+          icon={KeyRound}
+          title="No hay proveedores para configurar"
+          description="El servidor no ofrece proveedores ahora mismo. Puedes seguir usando el modo demo."
+        />
       )}
     </div>
   );

@@ -52,8 +52,8 @@ describe("DocumentPicker", () => {
     expect(indexed).toBeEnabled();
     expect(pending).toBeDisabled();
     expect(failed).toBeDisabled();
-    expect(screen.getByText(/indexación en curso/i)).toBeInTheDocument();
-    expect(pending).toHaveAccessibleDescription("Pendiente: indexación en curso.");
+    expect(screen.getByText(/Preparando… estará listo/i)).toBeInTheDocument();
+    expect(pending).toHaveAccessibleDescription("Preparando… estará listo en unos segundos.");
     expect(failed.closest("label")).toHaveTextContent("No se pudo indexar.");
 
     fireEvent.click(indexed);
@@ -116,6 +116,6 @@ describe("DocumentPicker", () => {
     );
 
     await waitFor(() => expect(onSelectionChange).toHaveBeenCalledWith([]));
-    expect(screen.getByText("No hay documentos indexados disponibles para generar.")).toBeInTheDocument();
+    expect(screen.getByText("Aún no tienes documentos listos para usar.")).toBeInTheDocument();
   });
 });

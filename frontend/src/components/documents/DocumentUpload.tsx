@@ -39,20 +39,20 @@ function getUploadFeedback(
       return {
         status,
         message:
-          "Subida aceptada. Estado de indexación no confirmado; la última respuesta indicó que seguía pendiente.",
+          "Archivo subido. Aún no sabemos si terminó de prepararse. Recarga en unos segundos.",
       };
     }
-    return { status, message: "Subida aceptada. Indexación en curso." };
+    return { status, message: "Archivo subido. Lo estamos preparando…" };
   }
   if (status === "INDEXED") {
-    return { status, message: "Subida aceptada e indexada." };
+    return { status, message: "Listo: ya puedes usarlo en un plan." };
   }
   if (status === "FAILED" && attempt.documentId) {
     const detail =
       currentDocument?.error_message ||
       attempt.errorMessage ||
       "No se pudo procesar el documento.";
-    return { status, message: `La indexación falló: ${detail}` };
+    return { status, message: `No se pudo preparar el archivo: ${detail}` };
   }
   if (status === "UPLOADING") {
     return { status, message: attempt.message };
@@ -122,10 +122,10 @@ export function DocumentUpload({
           const uploadedDocument = await onUpload(file);
           const message =
             uploadedDocument.status === "PENDING"
-              ? "Subida aceptada. Indexación en curso."
-            : uploadedDocument.status === "INDEXED"
-                ? "Subida aceptada e indexada."
-                : `La indexación falló: ${uploadedDocument.error_message || "No se pudo procesar el documento."}`;
+              ? "Archivo subido. Lo estamos preparando…"
+              : uploadedDocument.status === "INDEXED"
+                ? "Listo: ya puedes usarlo en un plan."
+                : `No se pudo preparar el archivo: ${uploadedDocument.error_message || "No se pudo procesar el documento."}`;
           updateAttempt(attemptId, {
             status: uploadedDocument.status,
             documentId: uploadedDocument.id,
@@ -184,8 +184,8 @@ export function DocumentUpload({
         className="block min-h-11 w-full cursor-pointer rounded-control border border-control bg-surface-paper text-sm text-text-primary file:mr-4 file:min-h-11 file:border-0 file:bg-action-subtle file:px-4 file:font-semibold file:text-action focus-visible:ring-2 focus-visible:ring-action focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       />
       <p id={helpId} className="text-sm text-text-muted">
-        PDF o Markdown (.md o .markdown), hasta {MAX_DOCUMENT_SIZE_MB} MB. El servidor confirma la
-        aceptación final.
+        PDF o Markdown (.md o .markdown), hasta {MAX_DOCUMENT_SIZE_MB} MB. Comprobaremos el archivo al
+        subirlo.
       </p>
 
       <div
