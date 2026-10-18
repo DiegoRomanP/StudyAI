@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import type { PlanDTO, SessionSummaryDTO } from "../../api/types";
 import { suggestedSessionDate, toDateKey } from "../../lib/studyProgress";
 import { Badge, SegmentedControl } from "../ui";
+import { HelpTerm } from "../help/HelpTerm";
 
 type View = "calendar" | "list";
 
@@ -81,8 +82,9 @@ export function SessionTimeline({ plan }: { plan: PlanDTO }) {
         </ol>
       )}
       <p className="text-xs text-text-muted">
-        Las fechas son sugerencias del plan (día de creación + intervalo de repaso); puedes abrir
-        cualquier sesión cuando quieras, incluidas las completadas.
+        Las fechas son sugerencias del plan (día de creación + intervalo de{" "}
+        <HelpTerm term="repaso">repaso espaciado</HelpTerm>); puedes abrir cualquier sesión cuando
+        quieras, incluidas las completadas.
       </p>
     </section>
   );

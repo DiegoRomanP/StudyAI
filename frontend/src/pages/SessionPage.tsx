@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import type { QuizResultDTO, SessionDetailDTO } from "../api/types";
@@ -7,7 +7,7 @@ import { QuizPhase } from "../components/session/QuizPhase";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
-import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
+import { Alert, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { useSession } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
 import { parseApiDate } from "../lib/studyProgress";
@@ -100,6 +100,11 @@ function SessionFlow({
           Volver al plan
         </Link>
         <h1 className="mt-1 text-2xl font-bold">{session.topic_name}</h1>
+        {phase !== "done" && (
+          <p className="mt-1 max-w-reading text-sm text-text-muted">
+            Estudia el material. Cuando acabe el tiempo pasarás a un receso de 5 min y después al test.
+          </p>
+        )}
         <PhaseIndicator phase={phase} />
         {phase === "test" && (
           <Button type="button" variant="ghost" className="mt-2" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
@@ -148,7 +153,15 @@ function SessionFlow({
         (result ? (
           <SessionResult result={result} planId={session.plan_id} />
         ) : (
-          <Card>Sesión completada.</Card>
+          <Card className="space-y-3">
+            <p className="font-medium text-text-primary">Sesión completada.</p>
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink to={`/plan/${session.plan_id}`}>Volver al plan</ButtonLink>
+              <ButtonLink to="/inicio" variant="secondary">
+                Ir a Inicio
+              </ButtonLink>
+            </div>
+          </Card>
         ))}
     </div>
   );
@@ -168,13 +181,35 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
     { key: "test", label: "Test" },
   ];
   const order: Phase[] = ["study", "break", "test", "done"];
+  const current = order.indexOf(phase);
   return (
-    <div className="mt-2 flex gap-2">
-      {steps.map((step) => (
-        <Badge key={step.key} color={order.indexOf(phase) >= order.indexOf(step.key) ? "brand" : "slate"}>
-          {step.label}
-        </Badge>
-      ))}
+    <div className="mt-3 flex flex-wrap items-center gap-3">
+      <ol aria-label="Progreso de la sesión" className="flex flex-wrap gap-2">
+        {steps.map((step, index) => {
+          const isCurrent = index === current;
+          const isDone = index < current;
+          return (
+            <li
+              key={step.key}
+              aria-current={isCurrent ? "step" : undefined}
+              className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                isCurrent
+                  ? "bg-action-subtle text-action ring-2 ring-inset ring-action-hover"
+                  : isDone
+                    ? "bg-state-success-subtle text-state-success"
+                    : "bg-surface-muted text-text-muted"
+              }`}
+            >
+              {isDone && <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.5} />}
+              {step.label}
+              {isDone && <span className="sr-only"> (hecho)</span>}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="text-sm text-text-muted">
+        {phase === "done" ? "Sesión terminada" : `Paso ${current + 1} de ${steps.length}`}
+      </p>
     </div>
   );
 }

@@ -1,7 +1,9 @@
-import { ArrowLeft, ArrowRight, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Coffee, Play } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { isNotFoundError } from "../api/errors";
+import { EmptyState } from "../components/EmptyState";
+import { HelpTerm } from "../components/help/HelpTerm";
 import { SessionTimeline } from "../components/plan/SessionTimeline";
 import {
   ActivityIndicator,
@@ -12,6 +14,7 @@ import {
   Card,
   ProgressBar,
   Spinner,
+  StepChain,
 } from "../components/ui";
 import { usePlan } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
@@ -27,7 +30,7 @@ export function PlanDetailPage() {
       <section className="space-y-4" aria-labelledby="invalid-plan-title">
         <h1 id="invalid-plan-title" className="text-2xl font-bold">Enlace al plan no válido</h1>
         <Alert tone="error">
-          <p>El identificador del plan debe ser un entero decimal positivo y seguro.</p>
+          <p>Este enlace de plan no es válido.</p>
           <ButtonLink to="/plan" variant="secondary">Ir a los planes</ButtonLink>
         </Alert>
       </section>
@@ -87,15 +90,26 @@ export function PlanDetailPage() {
       <div className="space-y-4">
         {updateError}
         <BackToPlans />
-        <Card className="space-y-4 text-center">
-          <h2 className="text-lg font-semibold">Generando tu plan…</h2>
-          <div className="flex justify-center">
-            <ActivityIndicator label="Generación en curso" />
-          </div>
+        <div className="space-y-2">
+          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">{plan.title}</h1>
+          <Badge color="amber">Generando</Badge>
+        </div>
+        <Card className="space-y-4">
+          <ActivityIndicator label="Generación en curso" />
+          <section aria-labelledby="plan-generation-steps" className="space-y-2">
+            <h2 id="plan-generation-steps" className="font-display text-lg font-semibold text-text-primary">
+              Qué está haciendo la IA
+            </h2>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-text-muted marker:text-action-hover">
+              <li>Lee tu material y detecta los temas.</li>
+              <li>
+                Elige los <HelpTerm term="temasClave">temas clave</HelpTerm>.
+              </li>
+              <li>Prepara cada sesión con material y preguntas.</li>
+            </ol>
+          </section>
           <p className="text-sm text-text-muted">
-            La IA está analizando temas, seleccionando lo más relevante (Pareto) y
-            creando sesiones con material y quizzes. Esta página se actualiza sola; el servidor no
-            informa un porcentaje de avance.
+            Suele tardar unos minutos. Esta página se actualiza sola; puedes salir y volver.
           </p>
         </Card>
       </div>
@@ -146,6 +160,16 @@ export function PlanDetailPage() {
           relevantes.
         </p>
         <Badge color="green">Listo · {plan.sessions.length} sesiones</Badge>
+        <div className="pt-2">
+          <StepChain
+            label="Cómo es cada sesión"
+            steps={[
+              { label: "Estudio", detail: "Lees el material", icon: BookOpen },
+              { label: "Receso", detail: "5 min", icon: Coffee },
+              { label: "Test", detail: "Preguntas y tarjetas", icon: ClipboardCheck },
+            ]}
+          />
+        </div>
       </div>
 
       <Card variant="elevated" className="space-y-4">
@@ -178,7 +202,16 @@ export function PlanDetailPage() {
       {plan.sessions.length === 0 ? (
         <section className="space-y-2">
           <h2 className="font-display text-lg font-semibold text-text-primary">Sesiones</h2>
-          <p className="text-sm text-text-muted">Este plan no tiene sesiones disponibles.</p>
+          <EmptyState
+            icon={CalendarDays}
+            title="Este plan no tiene sesiones"
+            description="Puede pasar si el material era muy corto. Prueba a generar otro plan con más documentos."
+            action={
+              <ButtonLink to="/plan" variant="secondary">
+                Volver a Plan de estudio
+              </ButtonLink>
+            }
+          />
         </section>
       ) : (
         <SessionTimeline plan={plan} />
@@ -193,10 +226,13 @@ export function PlanDetailPage() {
             to={`/temas?plan=${plan.id}`}
             className="inline-flex min-h-11 items-center gap-1.5 text-sm text-action hover:underline"
           >
-            Ver análisis Pareto
+            Ver temas clave
             <ArrowRight aria-hidden="true" className="h-4 w-4" />
           </Link>
         </div>
+        <p className="text-sm text-text-muted">
+          El porcentaje es la <HelpTerm term="relevancia">relevancia estimada</HelpTerm> de cada tema.
+        </p>
         {topics.length === 0 ? (
           <p className="text-sm text-text-muted">Este plan no tiene temas priorizados.</p>
         ) : (

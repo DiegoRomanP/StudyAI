@@ -1,11 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { CalendarDays } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getApiErrorMessage } from "../api/errors";
 import type { PlanDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
-import { Alert, Badge, Button, Card, Select, Skeleton } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
+import { PageGuide } from "../components/help/PageGuide";
+import { Alert, Badge, Button, ButtonLink, Card, Select, Skeleton } from "../components/ui";
 import { DocumentPicker } from "../components/documents/DocumentPicker";
 import {
   getDocumentsListSnapshot,
@@ -40,6 +43,16 @@ export function PlanPage() {
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
 
   const [goalId, setGoalId] = useState<number | "">("");
+  const [searchParams] = useSearchParams();
+  const requestedGoal = Number(searchParams.get("meta"));
+  const appliedRequestedGoal = useRef(false);
+
+  // "/plan?meta=ID" (e.g. right after saving a goal) preselects that goal once it exists.
+  useEffect(() => {
+    if (appliedRequestedGoal.current || !goals) return;
+    appliedRequestedGoal.current = true;
+    if (goals.some((goal) => goal.id === requestedGoal)) setGoalId(requestedGoal);
+  }, [goals, requestedGoal]);
   const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
   const indexedDocumentIds = new Set(
     (documents ?? [])
@@ -56,6 +69,9 @@ export function PlanPage() {
     !generate.isPending &&
     documentsAreReliable &&
     selectedIndexedDocumentIds.length > 0;
+  const needsGoalChoice = goalId === "" && (goals ?? []).length > 0;
+  const showsDocumentReason = !documentsAreReliable || selectedIndexedDocumentIds.length === 0;
+  const hasRequirements = needsGoalChoice || showsDocumentReason;
 
   async function handleGenerate() {
     if (goalId === "") return;
@@ -98,9 +114,15 @@ export function PlanPage() {
       <header>
         <h1 className="font-display text-2xl font-bold sm:text-3xl">Plan de estudio</h1>
         <p className="text-text-muted">
-          Genera un plan a partir de una meta y tus documentos indexados.
+          Genera un plan a partir de una meta y tus documentos. ¿Primera vez? En{" "}
+          <Link className="text-action underline" to="/inicio#preparar-plan">
+            Inicio
+          </Link>{" "}
+          lo haces todo de una vez.
         </p>
       </header>
+
+      <PageGuide id="plan" />
 
       <Card className="space-y-4">
         <h2 className="text-lg font-semibold">Nuevo plan</h2>
@@ -138,9 +160,19 @@ export function PlanPage() {
               </div>
             </Alert>
           ) : goalsQuery.isSuccess && (goals ?? []).length === 0 ? (
-            <p className="text-sm text-state-warning">
-              Primero crea una meta en la sección <Link className="underline" to="/goals">Metas</Link>.
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-state-warning">
+                Necesitas una meta. Créala en Metas o hazlo todo de una vez en Inicio.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink to="/goals" variant="secondary">
+                  Crear una meta
+                </ButtonLink>
+                <ButtonLink to="/inicio#preparar-plan" variant="secondary">
+                  Hacerlo desde Inicio
+                </ButtonLink>
+              </div>
+            </div>
           ) : null}
         </div>
 
@@ -154,14 +186,18 @@ export function PlanPage() {
           showEmptyState={documentsAreReliable && indexedDocumentIds.size === 0}
           emptyState={
             <p>
-              No hay documentos indexados. Sube apuntes en{" "}
+              Aún no tienes documentos listos. Sube apuntes en{" "}
               <Link className="underline" to="/documents">Recursos</Link>.
             </p>
           }
         />
 
         <div className="space-y-2">
-          <Button onClick={handleGenerate} disabled={!canGeneratePlan}>
+          <Button
+            onClick={handleGenerate}
+            disabled={!canGeneratePlan}
+            aria-describedby={!canGeneratePlan && hasRequirements ? "plan-requirements" : undefined}
+          >
             {generate.isPending ? "Iniciando…" : "Generar plan"}
           </Button>
           {generateError && (
@@ -170,33 +206,42 @@ export function PlanPage() {
               <p>Puedes volver a intentarlo: no se creará un plan duplicado.</p>
             </Alert>
           )}
-          {!documentsAreReliable ? (
-            <div className="space-y-2">
-              <p
-                role={documentsQuery.isError ? "alert" : "status"}
-                className="text-sm text-state-warning"
-              >
-                {documentsQuery.isError
-                  ? "No se puede verificar la lista de documentos. Reintenta antes de generar el plan."
-                  : "Cargando y verificando la lista de documentos…"}
-              </p>
-              {documentsQuery.isError && (
-                <Button
-                  variant="secondary"
-                  onClick={() => void documentsQuery.refetch()}
-                  disabled={documentsQuery.isFetching}
-                >
-                  {documentsQuery.isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
-                </Button>
+          {hasRequirements && (
+            <div id="plan-requirements" className="space-y-2">
+              {needsGoalChoice && (
+                <p role="status" className="text-sm text-state-warning">
+                  Elige una meta.
+                </p>
               )}
+              {!documentsAreReliable ? (
+                <div className="space-y-2">
+                  <p
+                    role={documentsQuery.isError ? "alert" : "status"}
+                    className="text-sm text-state-warning"
+                  >
+                    {documentsQuery.isError
+                      ? "No se puede verificar la lista de documentos. Reintenta antes de generar el plan."
+                      : "Cargando y verificando la lista de documentos…"}
+                  </p>
+                  {documentsQuery.isError && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void documentsQuery.refetch()}
+                      disabled={documentsQuery.isFetching}
+                    >
+                      {documentsQuery.isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
+                    </Button>
+                  )}
+                </div>
+              ) : selectedIndexedDocumentIds.length === 0 ? (
+                <p role="status" className="text-sm text-state-warning">
+                  {(documents ?? []).some((document) => document.status === "INDEXED")
+                    ? "Marca al menos un documento listo para usar."
+                    : "Necesitas al menos un documento listo para usar."}
+                </p>
+              ) : null}
             </div>
-          ) : selectedIndexedDocumentIds.length === 0 ? (
-            <p role="status" className="text-sm text-state-warning">
-              {(documents ?? []).some((document) => document.status === "INDEXED")
-                ? "Selecciona al menos un documento indexado para generar el plan."
-                : "Necesitas al menos un documento indexado para generar el plan."}
-            </p>
-          ) : null}
+          )}
         </div>
       </Card>
 
@@ -210,7 +255,14 @@ export function PlanPage() {
           isEmpty={(items) => items.length === 0}
           loading={<Skeleton height={72} />}
           loadingLabel="Cargando planes"
-          empty={<p className="text-sm text-text-muted">Aún no has generado planes.</p>}
+          empty={
+            <EmptyState
+              icon={CalendarDays}
+              title="Aún no tienes planes"
+              description="Un plan reparte tu material en sesiones cortas con repasos programados."
+              action={<ButtonLink to="/inicio#preparar-plan">Preparar mi primer plan</ButtonLink>}
+            />
+          }
           onRetry={() => void plansQuery.refetch()}
           initialErrorMessage="No se pudieron cargar tus planes."
           updateErrorMessage="No se pudieron actualizar tus planes. Se muestran los últimos cargados."
@@ -267,7 +319,9 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
           <p className="text-xs text-text-muted">
             {plan.status === "READY"
               ? `${plan.sessions.filter((session) => session.status === "COMPLETED").length} de ${plan.sessions.length} sesiones completadas`
-              : `${plan.sessions.length} sesiones`}
+              : plan.status === "PROCESSING"
+                ? "Generando…"
+                : "Ver qué falló"}
           </p>
         </Link>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">

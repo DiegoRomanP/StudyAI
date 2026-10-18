@@ -39,10 +39,13 @@ export function SessionResult({ result, planId }: { result: QuizResultDTO; planI
         )}
         {ratedFlashcards > 0 && (
           <p className="text-sm text-text-muted">
-            {ratedFlashcards === 1
-              ? "1 flashcard calificada"
-              : `${ratedFlashcards} flashcards calificadas`}
-            ; sus próximos repasos se reprogramaron con SM-2.
+            {ratedFlashcards === 1 ? "1 tarjeta valorada" : `${ratedFlashcards} tarjetas valoradas`}; se
+            programaron para repasar más adelante.
+          </p>
+        )}
+        {ratedFlashcards > 0 && (
+          <p className="text-sm text-text-muted">
+            Las tarjetas no puntúan: tu valoración decide cuándo las repasarás.
           </p>
         )}
         <p className="text-sm text-text-muted">El resultado quedó guardado en tu progreso.</p>

@@ -46,7 +46,10 @@ describe("PlanDetailPage", () => {
     vi.spyOn(api, "getPlan").mockResolvedValue({ ...readyPlan, status: "PROCESSING", topics: [] });
     renderPlan();
 
-    expect(await screen.findByText("Generando tu plan…")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: readyPlan.title })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 2, name: "Qué está haciendo la IA" })).toBeInTheDocument();
+    expect(screen.getByText(/puedes salir y volver/)).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "Generación en curso" })).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
@@ -66,7 +69,9 @@ describe("PlanDetailPage", () => {
     vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
     renderPlan();
 
-    expect(await screen.findByText("Este plan no tiene sesiones disponibles.")).toBeInTheDocument();
+    expect(await screen.findByText("Este plan no tiene sesiones")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver a Plan de estudio" })).toHaveAttribute("href", "/plan");
+    expect(screen.getByRole("list", { name: "Cómo es cada sesión" })).toHaveTextContent(/Estudio.*Receso.*Test/);
   });
 
   it("offers the next pending session and lists every session by suggested day or order", async () => {
@@ -97,6 +102,6 @@ describe("PlanDetailPage", () => {
     fireEvent.click(within(sessions).getByRole("button", { name: "Lista" }));
     const links = within(sessions).getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/session/70", "/session/71", "/session/72"]);
-    expect(screen.getByRole("link", { name: /Ver análisis Pareto/ })).toHaveAttribute("href", "/temas?plan=9");
+    expect(screen.getByRole("link", { name: /Ver temas clave/ })).toHaveAttribute("href", "/temas?plan=9");
   });
 });

@@ -94,7 +94,7 @@ describe("PlanPage generation", () => {
 
     expect(generateButton).toBeDisabled();
     expect(
-      screen.getByText(/necesitas al menos un documento indexado/i),
+      screen.getByText(/necesitas al menos un documento listo/i),
     ).toBeInTheDocument();
     expect(generatePlan).not.toHaveBeenCalled();
   });
@@ -174,7 +174,7 @@ describe("PlanPage generation", () => {
     );
 
     expect(screen.getByText(/cargando y verificando la lista de documentos/i)).toBeInTheDocument();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
 
     await act(async () => {
@@ -184,13 +184,13 @@ describe("PlanPage generation", () => {
       /no se puede verificar la lista de documentos/i,
     );
     expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(generatePlan).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carga de documentos" }));
 
-    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aún no tienes documentos listos/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Reintentar carga de documentos" })).not.toBeInTheDocument();
     expect(generatePlan).not.toHaveBeenCalled();
@@ -256,7 +256,7 @@ describe("PlanPage generation", () => {
     });
     expect(screen.getByText(pendingDocument.filename)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: pendingDocument.filename })).toBeDisabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Reintentar carga de documentos" })).not.toBeInTheDocument();
 
@@ -266,13 +266,13 @@ describe("PlanPage generation", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
     expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(generatePlan).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carga de documentos" }));
 
-    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aún no tienes documentos listos/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(generatePlan).not.toHaveBeenCalled();
     upload.unmount();
@@ -345,7 +345,7 @@ describe("PlanPage generation", () => {
     expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: pendingDocument.filename })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(generatePlan).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -383,7 +383,7 @@ describe("PlanPage generation", () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByText(/no hay documentos indexados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aún no tienes documentos listos/i)).toBeInTheDocument();
 
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: ["documents"] });
@@ -391,7 +391,7 @@ describe("PlanPage generation", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
     expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
   });
 
@@ -434,7 +434,7 @@ describe("PlanPage generation", () => {
     expect(screen.getByRole("checkbox", { name: documents[0].filename })).toBeChecked();
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
     expect(screen.getByRole("button", { name: "Reintentar carga de documentos" })).toBeEnabled();
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
     expect(generatePlan).not.toHaveBeenCalled();
   });
@@ -473,7 +473,7 @@ describe("PlanPage generation", () => {
     expect(api.listDocuments).toHaveBeenCalledOnce();
     expect(screen.getByText(pendingDocument.filename)).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent(/no se puede verificar/i);
-    expect(screen.queryByText(/no hay documentos indexados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/aún no tienes documentos listos/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generar plan" })).toBeDisabled();
   });
 
@@ -544,10 +544,13 @@ describe("PlanPage errors", () => {
     created_at: "2026-09-30T00:00:00Z",
   };
 
-  function renderPage(queryClient: QueryClient) {
+  function renderPage(queryClient: QueryClient, initialEntry = "/plan") {
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MemoryRouter
+          initialEntries={[initialEntry]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
           <PlanPage />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -598,8 +601,8 @@ describe("PlanPage errors", () => {
 
     expect(await screen.findByText("No se pudieron cargar tus metas.")).toBeInTheDocument();
     expect(await screen.findByText("No se pudieron cargar tus planes.")).toBeInTheDocument();
-    expect(screen.queryByText(/Primero crea una meta/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Aún no has generado planes.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Necesitas una meta/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Aún no tienes planes")).not.toBeInTheDocument();
   });
 
   it("shows waiting, not an empty list, while offline queries are paused", async () => {
@@ -615,10 +618,45 @@ describe("PlanPage errors", () => {
       renderPage(queryClient);
 
       expect(await screen.findByRole("status", { name: "Cargando planes" })).toBeInTheDocument();
-      expect(screen.queryByText("Aún no has generado planes.")).not.toBeInTheDocument();
-      expect(screen.queryByText(/Primero crea una meta/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Aún no tienes planes")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Necesitas una meta/)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+
+  it("explains an empty plan list with a call to action", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    vi.spyOn(api, "listGoals").mockResolvedValue([goal]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    renderPage(queryClient);
+
+    expect(await screen.findByText("Aún no tienes planes")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Preparar mi primer plan" })).toHaveAttribute(
+      "href",
+      "/inicio#preparar-plan",
+    );
+    // With goals but none chosen, the disabled button says why.
+    const generateButton = screen.getByRole("button", { name: "Generar plan" });
+    expect(generateButton).toBeDisabled();
+    expect(generateButton).toHaveAccessibleDescription(/Elige una meta\./);
+  });
+
+  it("preselects the goal passed as ?meta=", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    vi.spyOn(api, "listGoals").mockResolvedValue([goal]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    renderPage(queryClient, `/plan?meta=${goal.id}`);
+
+    await waitFor(() => expect(screen.getByLabelText("Meta")).toHaveValue(String(goal.id)));
+    expect(screen.queryByText("Elige una meta.")).not.toBeInTheDocument();
   });
 });

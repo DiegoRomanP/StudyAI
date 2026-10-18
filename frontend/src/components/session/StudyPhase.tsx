@@ -40,11 +40,18 @@ export function StudyPhase({
   return (
     <div className="space-y-4">
       <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-3xl font-semibold text-action-hover">
-            {formatTime(remaining)}
-          </span>
-          <span className="text-sm text-text-muted">tiempo de estudio</span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-3xl font-semibold text-action-hover">
+              {formatTime(remaining)}
+            </span>
+            <span className="text-sm text-text-muted">tiempo de estudio</span>
+          </div>
+          {!running && remaining > 0 && (
+            <p className="max-w-reading text-xs text-text-muted">
+              El temporizador pasa solo al receso cuando termina. Puedes saltarlo con «Saltar al receso».
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {!running && remaining > 0 && (

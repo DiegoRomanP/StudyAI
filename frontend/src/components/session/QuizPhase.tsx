@@ -1,12 +1,17 @@
 import { useId, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ListChecks } from "lucide-react";
 
 import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
+import { EmptyState } from "../EmptyState";
+import { HelpTerm } from "../help/HelpTerm";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
 import { ChoiceOptions } from "./ChoiceOptions";
 import { SafeMarkdown } from "./SafeMarkdown";
+
+/** Short visible labels for the 0–5 recall scale; the long ones name each button. */
+const QUALITY_SHORT_LABELS = ["Nada", "Me sonaba", "Casi", "Con esfuerzo", "Con dudas", "Perfecto"];
 
 const QUALITY_LABELS = [
   "no la recordé",
@@ -71,7 +76,18 @@ export function QuizPhase({
 
   if (isLoading || !quiz) return <Spinner label="Cargando quiz…" />;
   if (quiz.questions.length === 0) {
-    return <Card>No hay preguntas para esta sesión.</Card>;
+    return (
+      <EmptyState
+        icon={ListChecks}
+        title="Esta sesión no tiene preguntas"
+        description="Puedes repasar el material o seguir con otra sesión del plan."
+        action={
+          <ButtonLink to={`/plan/${planId}`} variant="secondary">
+            Volver al plan
+          </ButtonLink>
+        }
+      />
+    );
   }
 
   const questions = quiz.questions;
@@ -79,6 +95,12 @@ export function QuizPhase({
   const isLast = index >= questions.length - 1;
   const currentAnswered = answers[question.id] !== undefined;
   const answeredCount = questions.filter((item) => answers[item.id] !== undefined).length;
+  const nextHintId = `quiz-next-hint-${question.id}`;
+  const nextHint = currentAnswered
+    ? null
+    : question.question_type === "FLASHCARD"
+      ? "Muestra la respuesta y valora cuánto la recordabas."
+      : "Elige una respuesta para continuar.";
 
   function record(answer: QuizAnswer) {
     setSubmitError(null);
@@ -136,11 +158,21 @@ export function QuizPhase({
         </Alert>
       )}
 
-      <div className="flex justify-end">
-        <Button type="button" onClick={next} disabled={!currentAnswered || submit.isPending}>
+      <div className="flex flex-col items-end gap-2">
+        <Button
+          type="button"
+          onClick={next}
+          disabled={!currentAnswered || submit.isPending}
+          aria-describedby={nextHint ? nextHintId : undefined}
+        >
           {submit.isPending ? "Enviando…" : isLast ? "Finalizar" : "Siguiente"}
           {!submit.isPending && !isLast && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
         </Button>
+        {nextHint && (
+          <p id={nextHintId} className="text-sm text-text-muted">
+            {nextHint}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -160,7 +192,7 @@ function FlashCard({
 
   return (
     <Card className="space-y-4">
-      <Badge>Flashcard</Badge>
+      <Badge>Tarjeta</Badge>
       <div className="flex min-h-[120px] flex-col items-center justify-center gap-3 rounded-control border border-line bg-surface-subtle p-6 text-center">
         <div className="prose-study max-w-none text-lg text-text-primary">
           <SafeMarkdown>{question.prompt}</SafeMarkdown>
@@ -189,9 +221,10 @@ function FlashCard({
       {flipped && (
         <fieldset>
           <legend className="mb-2 w-full text-center text-sm font-medium text-text-muted">
-            ¿Qué tan bien la recordaste? (SM-2)
+            ¿Qué tan bien la recordaste? Esto decide cuándo vuelve a salir (
+            <HelpTerm term="repaso">repaso espaciado</HelpTerm>).
           </legend>
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {QUALITY_LABELS.map((label, quality) => (
               <button
                 key={quality}
@@ -199,19 +232,16 @@ function FlashCard({
                 aria-pressed={rated === quality}
                 aria-label={`Calidad ${quality}: ${label}`}
                 onClick={() => onRate(quality)}
-                className={`h-11 w-11 rounded-full text-sm font-semibold transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-11 items-center justify-center gap-2 rounded-control px-3 py-2 text-sm transition-colors motion-reduce:transition-none ${
                   rated === quality
                     ? "bg-action-fill text-text-on-action"
                     : "bg-surface-muted text-text-muted hover:bg-surface-action-subtle hover:text-text-primary"
                 }`}
               >
-                {quality}
+                <span className="font-semibold">{quality}</span>
+                <span>{QUALITY_SHORT_LABELS[quality]}</span>
               </button>
             ))}
-          </div>
-          <div className="mt-1 flex justify-between px-1 text-xs text-text-muted" aria-hidden="true">
-            <span>0 · nada</span>
-            <span>5 · perfecto</span>
           </div>
         </fieldset>
       )}

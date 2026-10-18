@@ -108,6 +108,38 @@ async function answerFlashcard(prompt: string, quality: number) {
 }
 
 describe("SessionPage", () => {
+  it("shows which session step is current, with done steps checked", async () => {
+    renderSession();
+
+    const steps = await screen.findByRole("list", { name: "Progreso de la sesión" });
+    expect(within(steps).getByText("Estudio").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByText("Paso 1 de 3")).toBeInTheDocument();
+
+    await goToQuiz();
+    expect(within(steps).getByText("Test").closest("li")).toHaveAttribute("aria-current", "step");
+    expect(within(steps).getByText("Estudio").closest("li")).toHaveTextContent("(hecho)");
+    expect(screen.getByText("Paso 3 de 3")).toBeInTheDocument();
+  });
+
+  it("labels the recall scale visibly and explains why Siguiente is disabled", async () => {
+    renderSession();
+    await goToQuiz();
+
+    expect(await screen.findByText("¿Qué mide Big O?")).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: /siguiente/i });
+    expect(next).toBeDisabled();
+    expect(next).toHaveAccessibleDescription("Muestra la respuesta y valora cuánto la recordabas.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar respuesta" }));
+    expect(screen.getByRole("button", { name: /^Calidad 0/ })).toHaveTextContent("0Nada");
+    expect(screen.getByRole("button", { name: /^Calidad 5/ })).toHaveTextContent("5Perfecto");
+    expect(screen.queryByText(/SM-2/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Calidad 3/ }));
+    expect(next).toBeEnabled();
+    expect(next).not.toHaveAccessibleDescription();
+  });
+
   it("shows the server-confirmed result after the last answer", async () => {
     const submitQuiz = vi.spyOn(api, "submitQuiz").mockResolvedValue(result);
     renderSession();
@@ -124,7 +156,7 @@ describe("SessionPage", () => {
     expect(screen.getByRole("heading", { name: "Resultado del test" })).toHaveFocus();
     expect(within(summary).getByText("100%")).toBeInTheDocument();
     expect(within(summary).getByText(/1 de 1 preguntas de opción múltiple correctas/)).toBeInTheDocument();
-    expect(within(summary).getByText(/2 flashcards calificadas/)).toBeInTheDocument();
+    expect(within(summary).getByText(/2 tarjetas valoradas/)).toBeInTheDocument();
     expect(submitQuiz).toHaveBeenCalledTimes(1);
     expect(submitQuiz).toHaveBeenCalledWith(77, [
       { question_id: 1, quality: 0 },
@@ -173,7 +205,7 @@ describe("SessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
 
     const summary = await screen.findByRole("region", { name: "Resultado del test" });
-    expect(within(summary).getByText(/1 flashcard calificada/)).toBeInTheDocument();
+    expect(within(summary).getByText(/1 tarjeta valorada/)).toBeInTheDocument();
     expect(within(summary).queryByText("0%")).not.toBeInTheDocument();
   });
 

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ArrowRight, ClipboardCheck, Eye, Info, RotateCcw, Timer } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Eye, Info, ListChecks, RotateCcw, Timer } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import type { PlanDTO, QuizQuestionDTO, SessionSummaryDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
+import { EmptyState } from "../components/EmptyState";
+import { HelpTerm } from "../components/help/HelpTerm";
+import { PageGuide } from "../components/help/PageGuide";
 import { ChoiceOptions } from "../components/session/ChoiceOptions";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import {
@@ -87,11 +90,13 @@ export function PracticePage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Práctica</h1>
           <p className="mt-1 max-w-reading text-text-muted">
-            Repasa las preguntas de tus sesiones con respuesta inmediata, o haz el simulacro para
-            registrar tu resultado.
+            Repasa las preguntas de tus sesiones con respuesta inmediata, o haz el{" "}
+            <HelpTerm term="simulacro" /> para registrar tu resultado.
           </p>
         </div>
       </header>
+
+      <PageGuide id="practica" />
 
       <SegmentedControl
         label="Modo de práctica"
@@ -127,6 +132,11 @@ export function PracticePage() {
           const plan = ready.find((item) => item.id === requested) ?? ready[0];
           return (
             <div className="space-y-4">
+              {ready.length === 1 && (
+                <p className="text-sm text-text-muted">
+                  Practicando con: <span className="font-medium text-text-primary">{plan.title}</span>
+                </p>
+              )}
               {ready.length > 1 && (
                 <Select
                   id="practice-plan"
@@ -209,11 +219,18 @@ function QuestionPractice({ plan }: { plan: PlanDTO }) {
       ) : filtered.length === 0 ? (
         !pending &&
         failed.length === 0 && (
-          <Card className="text-text-muted">
-            {filter === "hard"
-              ? "Este plan no tiene preguntas de temas difíciles. Prueba con «Todas»."
-              : "Este plan todavía no tiene preguntas."}
-          </Card>
+          <EmptyState
+            icon={ListChecks}
+            title={
+              filter === "hard" ? "No hay preguntas de temas difíciles" : "Este plan todavía no tiene preguntas"
+            }
+            description={filter === "hard" ? "Prueba con «Todas»." : "Revisa las sesiones del plan."}
+            action={
+              <ButtonLink to={`/plan/${plan.id}`} variant="secondary">
+                Ver mi plan
+              </ButtonLink>
+            }
+          />
         )
       ) : (
         <PracticeRound key={filter} planId={plan.id} questions={filtered} />
@@ -320,7 +337,7 @@ function PracticeQuestionCard({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Badge color={isMultipleChoice ? "brand" : "slate"}>
-          {isMultipleChoice ? "Opción múltiple" : "Flashcard"}
+          {isMultipleChoice ? "Opción múltiple" : "Tarjeta"}
         </Badge>
         <span className="min-w-0 break-words text-sm text-text-muted">{session.topic_name}</span>
         {difficulty !== null && difficulty >= HARD_DIFFICULTY && <Badge color="amber">Difícil</Badge>}
@@ -357,11 +374,22 @@ function PracticeQuestionCard({
         </Button>
       )}
 
-      <div className="flex justify-end">
-        <Button ref={nextButton} type="button" onClick={onNext} disabled={!answered}>
+      <div className="flex flex-col items-end gap-2">
+        <Button
+          ref={nextButton}
+          type="button"
+          onClick={onNext}
+          disabled={!answered}
+          aria-describedby={answered ? undefined : `practice-next-hint-${question.id}`}
+        >
           {position === total ? "Terminar ronda" : "Siguiente pregunta"}
           <ArrowRight aria-hidden="true" className="h-4 w-4" />
         </Button>
+        {!answered && (
+          <p id={`practice-next-hint-${question.id}`} className="text-sm text-text-muted">
+            {isMultipleChoice ? "Elige una respuesta para continuar." : "Muestra la respuesta para continuar."}
+          </p>
+        )}
       </div>
     </Card>
   );
@@ -370,7 +398,17 @@ function PracticeQuestionCard({
 function ExamList({ plan }: { plan: PlanDTO }) {
   const sessions = [...plan.sessions].sort((a, b) => a.order_index - b.order_index || a.id - b.id);
   if (sessions.length === 0) {
-    return <Card className="text-text-muted">Este plan no tiene sesiones para el simulacro.</Card>;
+    return (
+      <EmptyState
+        icon={Timer}
+        title="Este plan no tiene sesiones para el simulacro"
+        action={
+          <ButtonLink to={`/plan/${plan.id}`} variant="secondary">
+            Ver mi plan
+          </ButtonLink>
+        }
+      />
+    );
   }
   return (
     <div className="space-y-3">
