@@ -161,11 +161,19 @@ order — check this chain before assuming which LLM is actually being called:
    and built via `build_provider_from_credential()`.
 2. The operator's `.env` `ANTHROPIC_API_KEY` (legacy path, unchanged, zero-migration for existing
    deployments).
-3. `MockLLMProvider`.
+3. The included free-tier AI (`app/llm/default_free_provider.py`): `NVIDIA_API_KEY` first
+   (`DEFAULT_NVIDIA_MODEL`), then `GEMINI_API_KEY` (`DEFAULT_GEMINI_MODEL`). Learners never pick
+   between them. A tier that is out of quota, rate limited, stalled or unavailable is skipped for a
+   cooldown (in-process, `reset_cooldowns()` for tests) and the next one answers; when all are out it
+   raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock. Keys exist
+   only in the environment (`backend/.env` is git-ignored): `tests/conftest.py` and the QA runner
+   (`scripts/qa-runtime.mjs`) force them empty so no test spends quota — keep that when adding env keys.
+   `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`.
+4. `MockLLMProvider`.
 
 `resolve_llm_provider()` es la única resolución compartida por la generación y
 `GET /llm-settings/runtime`. El endpoint devuelve solo `source` (`USER`, `ENV`
-o `MOCK`), proveedor, modelos por tipo de llamada y un motivo de fallback
+o `MOCK`), `bundled` (IA gratuita incluida del servidor), proveedor, modelos por tipo de llamada y un motivo de fallback
 saneado; no prueba conectividad ni expone/descifra claves hacia el navegador.
 La UI debe mostrar modo demo únicamente cuando `source` sea `MOCK` y debe
 invalidar ese estado tras guardar, probar, activar, desactivar o eliminar una
@@ -303,8 +311,8 @@ Vite + React 18 + TypeScript + Tailwind + TanStack Query + React Router + Axios.
 (`src/api/client.ts`) is the single Axios instance (`VITE_API_URL`, default
 `http://localhost:8001`). Pages under `src/pages/` map 1:1 to the routes in `App.tsx`:
 public `/` (landing) and `/demo` (simulated walkthrough with local sample data — it must never
-import the API client), and inside `AppShell` `/inicio` (home + "Estudiar" coordinator,
-`useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test),
+import the API client), and inside `AppShell` `/inicio` (home + setup wizard + "Estudiar"
+coordinator, `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test),
 `/practica` (read-only practice; never writes), `/temas` ("Temas clave"), `/documents` ("Recursos"), `/goals`,
 `/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
 UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since
@@ -321,8 +329,13 @@ con textos en `src/lib/pageGuides.ts` y `src/lib/glossary.ts`; el estado de guí
 `localStorage` vía `src/lib/onboardingStorage.ts` (siempre con try/catch). Reutilízalos en páginas
 nuevas en vez de crear otro patrón. Vacíos con explicación y CTA usan `src/components/EmptyState.tsx`;
 la checklist «Primeros pasos» de Inicio (`GettingStarted`, `useOnboardingProgress`) se deriva de datos
-reales. Un botón principal deshabilitado siempre muestra su motivo visible enlazado con
-`aria-describedby`.
+reales y se muestra como un recorrido horizontal donde cada paso se desbloquea al completar el anterior
+(el paso opcional «Conecta tu IA» nunca bloquea al siguiente). La checklist solo aparece cuando ya hay un plan listo: antes, `StudySetup` es un asistente de un
+paso a la vez (Material → Meta → IA → Listo) y «Estudiar» solo existe en el último paso. El paso de IA
+exige un proveedor real o elegir el modo demo de forma explícita (`useDemoAccepted`; si el servidor incluye IA gratuita, `runtime.bundled`, el paso de IA se omite y solo aparece desde «Cambiar» en el resumen, flag compartida
+con la checklist); sin clave muestra cómo conseguirla y los comandos de Ollama (`lib/aiSetupHelp.ts`,
+solo texto y URLs fijos, nunca generados por el LLM). Un botón principal deshabilitado siempre
+muestra su motivo visible enlazado con `aria-describedby`.
 
 **List pagination**: `useShowMore` (`src/hooks/useShowMore.ts`) caps `DocumentsPage`/`GoalsPage`/
 `PlanPage`'s "Tus ..." lists at 6 items with a "Mostrar N más" button, client-side (it slices an
