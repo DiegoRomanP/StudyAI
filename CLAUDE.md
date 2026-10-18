@@ -169,6 +169,8 @@ order — check this chain before assuming which LLM is actually being called:
    only in the environment (`backend/.env` is git-ignored): `tests/conftest.py` and the QA runner
    (`scripts/qa-runtime.mjs`) force them empty so no test spends quota — keep that when adding env keys.
    `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`.
+   A real environment variable beats `backend/.env` (pydantic-settings), so a stale `NVIDIA_API_KEY` exported in the
+   shell silently overrides the file and shows up as 403 "Authorization failed".
 4. `MockLLMProvider`.
 
 `resolve_llm_provider()` es la única resolución compartida por la generación y
