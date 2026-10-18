@@ -21,9 +21,11 @@ import {
 
 import type { DashboardDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
-import { Button, Card, IconTile, SegmentedControl, Skeleton, StatTile } from "../components/ui";
-import { useDashboard } from "../hooks/queries";
-import { parseApiDate, quizStreakDays } from "../lib/studyProgress";
+import { EmptyState } from "../components/EmptyState";
+import { HelpTerm } from "../components/help/HelpTerm";
+import { Button, ButtonLink, Card, IconTile, SegmentedControl, Skeleton, StatTile } from "../components/ui";
+import { useDashboard, usePlans } from "../hooks/queries";
+import { findNextSession, parseApiDate, quizStreakDays } from "../lib/studyProgress";
 import { accuracyTrend, averageScore, scoresInRange, type StatsRange } from "../lib/studyStats";
 
 const RANGE_LABELS: Record<StatsRange, string> = {
@@ -41,6 +43,11 @@ function scoreTone(score: number) {
   return { text: "text-state-success", bar: "bg-state-success" };
 }
 
+/** Nothing to show yet: no graded test and no completed session. */
+function hasNoProgress(data: DashboardDTO) {
+  return data.scores.length === 0 && data.sessions_completed === 0;
+}
+
 function shortDate(value: string | null) {
   const date = parseApiDate(value);
   return date ? date.toLocaleDateString("es", { day: "numeric", month: "short" }) : "Sin fecha";
@@ -49,6 +56,7 @@ function shortDate(value: string | null) {
 export function DashboardPage() {
   const { data, isPending, isError, isFetching, refetch } = useDashboard();
   const [range, setRange] = useState<StatsRange>("7d");
+  const showRange = data !== undefined && !hasNoProgress(data);
 
   return (
     <div className="space-y-6">
@@ -57,19 +65,23 @@ export function DashboardPage() {
           <IconTile icon={ChartColumn} className="h-11 w-11" />
           <div>
             <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Estadísticas</h1>
-            <p className="mt-1 text-text-muted">Tu progreso en los quizzes y tus próximos repasos (SM-2).</p>
+            <p className="mt-1 text-text-muted">
+              Tu progreso en los tests y tus próximos <HelpTerm term="repaso">repasos</HelpTerm>.
+            </p>
           </div>
         </div>
-        <SegmentedControl
-          label="Periodo"
-          value={range}
-          onChange={setRange}
-          options={[
-            { value: "7d", label: "7 días" },
-            { value: "30d", label: "30 días" },
-            { value: "all", label: "Todo" },
-          ]}
-        />
+        {showRange && (
+          <SegmentedControl
+            label="Periodo"
+            value={range}
+            onChange={setRange}
+            options={[
+              { value: "7d", label: "7 días" },
+              { value: "30d", label: "30 días" },
+              { value: "all", label: "Todo" },
+            ]}
+          />
+        )}
       </header>
       <AsyncState
         data={data}
@@ -83,9 +95,34 @@ export function DashboardPage() {
         initialErrorMessage="No se pudo cargar tu progreso."
         updateErrorMessage="No se pudo actualizar tu progreso. Se muestran los últimos datos cargados."
       >
-        {(dashboard) => <DashboardContent data={dashboard} range={range} onShowAll={() => setRange("all")} />}
+        {(dashboard) =>
+          hasNoProgress(dashboard) ? (
+            <DashboardEmpty />
+          ) : (
+            <DashboardContent data={dashboard} range={range} onShowAll={() => setRange("all")} />
+          )
+        }
       </AsyncState>
     </div>
+  );
+}
+
+function DashboardEmpty() {
+  const { data: plans } = usePlans();
+  const next = findNextSession(plans);
+  return (
+    <EmptyState
+      icon={ChartColumn}
+      title="Aquí verás tu progreso"
+      description="Cuando completes tu primera sesión aparecerán tus aciertos, tu racha y tus próximos repasos."
+      action={
+        next ? (
+          <ButtonLink to={`/session/${next.session.id}`}>Ir a mi siguiente sesión</ButtonLink>
+        ) : (
+          <ButtonLink to="/inicio#preparar-plan">Preparar mi plan</ButtonLink>
+        )
+      }
+    />
   );
 }
 
@@ -112,11 +149,11 @@ function DashboardContent({
   return (
     <div className="space-y-6">
       <section aria-label="Resumen del periodo" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile icon={ListChecks} label="Quizzes resueltos" value={scores.length} hint={RANGE_LABELS[range]} />
+        <StatTile icon={ListChecks} label="Tests resueltos" value={scores.length} hint={RANGE_LABELS[range]} />
         <StatTile
           icon={Target}
           tone="flow"
-          label="Precisión media"
+          label={<HelpTerm term="precision">Precisión media</HelpTerm>}
           value={average === null ? "—" : `${average}%`}
           hint={
             trend === null ? (
@@ -139,7 +176,7 @@ function DashboardContent({
           tone="warning"
           label="Racha actual"
           value={`${streak} ${streak === 1 ? "día" : "días"}`}
-          hint="días seguidos con quiz"
+          hint="días seguidos con test"
         />
         <StatTile
           icon={CircleCheckBig}
@@ -151,12 +188,12 @@ function DashboardContent({
       </section>
 
       <Card>
-        <h2 className="mb-3 font-display text-lg font-semibold text-text-primary">Precisión por quiz</h2>
+        <h2 className="mb-3 font-display text-lg font-semibold text-text-primary">Precisión por test</h2>
         {data.scores.length === 0 ? (
-          <p className="text-sm text-text-muted">Completa una sesión para ver tu evolución.</p>
+          <p className="text-sm text-text-muted">Completa el test de una sesión para ver tu evolución.</p>
         ) : chartData.length === 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-text-muted">No resolviste quizzes en los {RANGE_LABELS[range]}.</p>
+            <p className="text-sm text-text-muted">No resolviste tests en los {RANGE_LABELS[range]}.</p>
             <Button type="button" variant="secondary" onClick={onShowAll}>
               Ver todo el historial
             </Button>
@@ -229,9 +266,9 @@ function DashboardContent({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <h2 className="font-display text-lg font-semibold text-text-primary">Temas más débiles</h2>
-          <p className="mb-3 text-xs text-text-muted">Según todo tu historial de quizzes.</p>
+          <p className="mb-3 text-xs text-text-muted">Según todo tu historial de tests.</p>
           {data.weak_topics.length === 0 ? (
-            <p className="text-sm text-text-muted">Sin datos todavía.</p>
+            <p className="text-sm text-text-muted">Aparecerán cuando respondas preguntas de opción múltiple.</p>
           ) : (
             <ul className="space-y-3">
               {data.weak_topics.map((topic, index) => {
@@ -257,8 +294,11 @@ function DashboardContent({
             <CalendarClock aria-hidden="true" className="h-5 w-5 text-action-hover" />
             Próximas revisiones
           </h2>
+          <p className="-mt-2 mb-3 text-xs text-text-muted">
+            Las <HelpTerm term="flashcard">tarjetas</HelpTerm> que te toca repasar cada día.
+          </p>
           {data.upcoming_reviews.length === 0 ? (
-            <p className="text-sm text-text-muted">No hay revisiones programadas.</p>
+            <p className="text-sm text-text-muted">Al completar una sesión programaremos tus repasos aquí.</p>
           ) : (
             <ul className="space-y-2">
               {data.upcoming_reviews.map((review) => (

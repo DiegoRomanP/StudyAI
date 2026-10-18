@@ -119,7 +119,7 @@ export function PracticePage() {
         empty={
           <Card className="space-y-3">
             <p className="text-text-muted">Todavía no tienes un plan listo para practicar.</p>
-            <ButtonLink to="/inicio">Prepara tu plan en Inicio</ButtonLink>
+            <ButtonLink to="/inicio#preparar-plan">Prepara tu plan en Inicio</ButtonLink>
           </Card>
         }
         onRetry={() => void plansQuery.refetch()}

@@ -1,8 +1,11 @@
-import { ChartNoAxesColumnDecreasing, Info } from "lucide-react";
+import { ChartNoAxesColumnDecreasing, Info, SearchX } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import type { PlanDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
+import { EmptyState } from "../components/EmptyState";
+import { HelpTerm } from "../components/help/HelpTerm";
+import { PageGuide } from "../components/help/PageGuide";
 import { Alert, Badge, ButtonLink, Card, IconTile, Select, Skeleton } from "../components/ui";
 import { usePlans } from "../hooks/queries";
 import { rankTopics, readyPlans } from "../lib/studyProgress";
@@ -22,11 +25,14 @@ export function TopicsPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Temas clave</h1>
           <p className="mt-1 max-w-reading text-text-muted">
-            Qué temas de tu material priorizó la IA y por qué. Los porcentajes son su estimación de
-            relevancia, no una garantía de que esos temas den el 80 % del resultado.
+            Los temas de tu material que la IA considera más importantes (
+            <HelpTerm term="temasClave">regla 80/20</HelpTerm>). Los porcentajes son una estimación, no
+            una garantía.
           </p>
         </div>
       </header>
+
+      <PageGuide id="temas" />
 
       <AsyncState
         data={plansQuery.data}
@@ -39,7 +45,7 @@ export function TopicsPage() {
         empty={
           <Card className="space-y-3">
             <p className="text-text-muted">Todavía no tienes un plan listo para analizar.</p>
-            <ButtonLink to="/inicio">Prepara tu plan en Inicio</ButtonLink>
+            <ButtonLink to="/inicio#preparar-plan">Prepara tu plan en Inicio</ButtonLink>
           </Card>
         }
         onRetry={() => void plansQuery.refetch()}
@@ -90,7 +96,18 @@ function TopicAnalysis({ plan }: { plan: PlanDTO }) {
       .length;
 
   if (topics.length === 0) {
-    return <Card className="text-text-muted">Este plan no tiene un análisis de temas guardado.</Card>;
+    return (
+      <EmptyState
+        icon={SearchX}
+        title="Este plan no tiene análisis de temas"
+        description="La IA no guardó temas para este plan. Sus sesiones siguen disponibles."
+        action={
+          <ButtonLink to={`/plan/${plan.id}`} variant="secondary">
+            Ver mi plan
+          </ButtonLink>
+        }
+      />
+    );
   }
 
   return (
@@ -143,7 +160,9 @@ function TopicList({
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-sm text-text-muted">
-                    <span>Relevancia estimada</span>
+                    <span>
+                      <HelpTerm term="relevancia">Relevancia</HelpTerm> estimada
+                    </span>
                     <span className="font-medium text-text-primary">{topic.relevancePercent}%</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-surface-muted" aria-hidden="true">
@@ -154,7 +173,7 @@ function TopicList({
                   </div>
                 </div>
                 <p className="text-sm text-text-muted">
-                  Dificultad estimada: {topic.difficulty} de 5
+                  Dificultad estimada: {topic.difficulty} de 5 (5 = más difícil)
                   {sessions > 0 && ` · ${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`}
                 </p>
                 {topic.subtopics.length > 0 && (

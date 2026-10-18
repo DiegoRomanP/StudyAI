@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
-import type { DashboardDTO } from "../api/types";
+import type { DashboardDTO, PlanDTO } from "../api/types";
 import { DashboardPage } from "../pages/DashboardPage";
 
 const emptyDashboard: DashboardDTO = {
@@ -36,14 +36,15 @@ describe("DashboardPage", () => {
       .spyOn(api, "getDashboard")
       .mockRejectedValueOnce({ isAxiosError: true, response: { status: 503, data: {} } })
       .mockResolvedValueOnce(emptyDashboard);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
     renderDashboard();
 
     expect(await screen.findByText("No se pudo cargar tu progreso.")).toBeInTheDocument();
-    expect(screen.queryByText(/Completa una sesión/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Aquí verás tu progreso")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar carga" }));
 
-    expect(await screen.findByText(/Completa una sesión/)).toBeInTheDocument();
+    expect(await screen.findByText("Aquí verás tu progreso")).toBeInTheDocument();
     expect(getDashboard).toHaveBeenCalledTimes(2);
   });
 
@@ -67,14 +68,14 @@ describe("DashboardPage", () => {
 
     const summary = await screen.findByRole("region", { name: "Resumen del periodo" });
     expect(screen.getByRole("button", { name: "7 días" })).toHaveAttribute("aria-pressed", "true");
-    expect(summary).toHaveTextContent("Quizzes resueltos1");
+    expect(summary).toHaveTextContent("Tests resueltos1");
     expect(summary).toHaveTextContent("Precisión media80%");
     let table = screen.getByRole("table", { name: "Puntaje por sesión" });
     expect(table).toHaveTextContent("Grafos");
     expect(table).not.toHaveTextContent("Historia");
 
     fireEvent.click(screen.getByRole("button", { name: "Todo" }));
-    expect(summary).toHaveTextContent("Quizzes resueltos2");
+    expect(summary).toHaveTextContent("Tests resueltos2");
     expect(summary).toHaveTextContent("Precisión media60%");
     table = screen.getByRole("table", { name: "Puntaje por sesión" });
     expect(table).toHaveTextContent("Historia");
@@ -89,8 +90,46 @@ describe("DashboardPage", () => {
     });
     renderDashboard();
 
-    expect(await screen.findByText("No resolviste quizzes en los últimos 7 días.")).toBeInTheDocument();
+    expect(await screen.findByText("No resolviste tests en los últimos 7 días.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ver todo el historial" }));
     expect(screen.getByRole("table", { name: "Puntaje por sesión" })).toHaveTextContent("Grafos");
+  });
+
+  it("shows a guided empty state instead of zeroed tiles, pointing to the next session", async () => {
+    vi.spyOn(api, "getDashboard").mockResolvedValue(emptyDashboard);
+    const plan: PlanDTO = {
+      id: 9,
+      title: "Plan",
+      status: "READY",
+      goal_id: 1,
+      document_ids: [1],
+      created_at: "2026-10-15T09:00:00Z",
+      error_message: "",
+      topics: [],
+      sessions: [
+        { id: 71, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+      ],
+    };
+    vi.spyOn(api, "listPlans").mockResolvedValue([plan]);
+    renderDashboard();
+
+    expect(await screen.findByText("Aquí verás tu progreso")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Ir a mi siguiente sesión" })).toHaveAttribute(
+      "href",
+      "/session/71",
+    );
+    expect(screen.queryByRole("region", { name: "Resumen del periodo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Periodo" })).not.toBeInTheDocument();
+  });
+
+  it("sends a learner without plans to prepare one", async () => {
+    vi.spyOn(api, "getDashboard").mockResolvedValue(emptyDashboard);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    renderDashboard();
+
+    expect(await screen.findByRole("link", { name: "Preparar mi plan" })).toHaveAttribute(
+      "href",
+      "/inicio#preparar-plan",
+    );
   });
 });

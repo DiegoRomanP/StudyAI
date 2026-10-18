@@ -170,6 +170,6 @@ describe("PracticePage", () => {
   it("guides to Inicio when there is no ready plan", async () => {
     vi.spyOn(api, "listPlans").mockResolvedValue([]);
     renderPractice();
-    expect(await screen.findByRole("link", { name: "Prepara tu plan en Inicio" })).toHaveAttribute("href", "/inicio");
+    expect(await screen.findByRole("link", { name: "Prepara tu plan en Inicio" })).toHaveAttribute("href", "/inicio#preparar-plan");
   });
 });

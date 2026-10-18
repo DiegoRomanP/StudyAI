@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
 import type { PlanDTO } from "../api/types";
+import { PAGE_GUIDES } from "../lib/pageGuides";
 import { TopicsPage } from "../pages/TopicsPage";
 
 const plan = (overrides: Partial<PlanDTO>): PlanDTO => ({
@@ -50,10 +51,20 @@ describe("TopicsPage", () => {
     const prioritized = await screen.findByRole("region", { name: "Priorizados" });
     const grafos = within(prioritized).getByRole("heading", { name: "Grafos" }).closest("li")!;
     expect(grafos).toHaveTextContent("Relevancia estimada95%");
-    expect(grafos).toHaveTextContent("Dificultad estimada: 4 de 5 · 1 sesión");
+    expect(grafos).toHaveTextContent("Dificultad estimada: 4 de 5 (5 = más difícil) · 1 sesión");
     expect(within(grafos).getByRole("list", { name: "Subtemas de Grafos" })).toHaveTextContent("BFSDFS");
     expect(screen.getByRole("region", { name: "Fuera de la selección" })).toHaveTextContent("Historia");
-    expect(screen.getByText(/no una garantía/)).toBeInTheDocument();
+    expect(screen.getByText(/no una\s+garantía/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Temas clave" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: PAGE_GUIDES.temas.title })).toBeInTheDocument();
+  });
+
+  it("offers a way back to the plan when there is no topic analysis", async () => {
+    vi.spyOn(api, "listPlans").mockResolvedValue([plan({ topics: [] })]);
+    renderTopics();
+
+    expect(await screen.findByText("Este plan no tiene análisis de temas")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver mi plan" })).toHaveAttribute("href", "/plan/9");
   });
 
   it("selects the plan from the URL and lets the learner switch plans", async () => {
@@ -76,7 +87,7 @@ describe("TopicsPage", () => {
   it("guides to Inicio when there is no ready plan and separates failures from empty", async () => {
     vi.spyOn(api, "listPlans").mockResolvedValue([plan({ status: "PROCESSING" })]);
     renderTopics();
-    expect(await screen.findByRole("link", { name: "Prepara tu plan en Inicio" })).toHaveAttribute("href", "/inicio");
+    expect(await screen.findByRole("link", { name: "Prepara tu plan en Inicio" })).toHaveAttribute("href", "/inicio#preparar-plan");
   });
 
   it("reports a load failure instead of an empty analysis", async () => {
