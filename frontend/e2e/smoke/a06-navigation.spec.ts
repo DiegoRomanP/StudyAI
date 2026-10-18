@@ -279,7 +279,7 @@ async function assertMobileLayout(
     const isVisible = (element: HTMLElement) =>
       element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden";
     const controls = Array.from(
-      main.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea"),
+      main.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, summary"),
     ).filter(isVisible);
     const measuredControls = controls.map((element) => {
       const bounds = element.getBoundingClientRect();
@@ -302,6 +302,8 @@ async function assertMobileLayout(
     const overflowingContent = [main, ...Array.from(main.querySelectorAll<HTMLElement>("*"))]
       .filter(isVisible)
       .filter((element) => !element.classList.contains("truncate"))
+      // Screen-reader-only text is clipped to 1px on purpose.
+      .filter((element) => !element.classList.contains("sr-only"))
       .filter((element) => element.scrollWidth > element.clientWidth + 8)
       .map((element) => ({
         tag: element.tagName.toLowerCase(),
