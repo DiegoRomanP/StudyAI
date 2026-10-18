@@ -160,3 +160,108 @@ def test_an_operator_anthropic_key_wins_over_the_included_ai(monkeypatch):
 def test_no_keys_still_means_demo_mode(monkeypatch):
     runtime = _runtime_with(monkeypatch, Settings(NVIDIA_API_KEY="", GEMINI_API_KEY=""))
     assert runtime["source"] == "MOCK"
+
+
+# --- Daily limit on the included AI ------------------------------------------------------
+
+
+def _free_ai_client(monkeypatch, limit=3):
+    from app.api.v1.routes import llm_settings as llm_routes
+    from app.core import config as config_module
+    from app.services import free_ai_quota
+
+    settings = Settings(NVIDIA_API_KEY="nvapi-test", GEMINI_API_KEY="gem-test", FREE_AI_DAILY_LIMIT=limit)
+    for module in (factory, llm_routes, free_ai_quota):
+        monkeypatch.setattr(module, "get_settings", lambda: settings)
+    monkeypatch.setattr(config_module, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.v1.routes.plans.generate_plan_task", lambda plan_id: None)
+    return TestClient(main.app)
+
+
+def _goal(client):
+    response = client.post("/goals", json={"goal_type": "LEARNING", "title": "Límite", "description": ""})
+    return response.json()["id"]
+
+
+def _reset_usage():
+    from app.db.session import SessionLocal
+    from app.models.free_ai_usage import FreeAiUsage
+
+    with SessionLocal() as db:
+        db.query(FreeAiUsage).delete()
+        db.commit()
+
+
+def test_runtime_reports_what_is_left_of_the_daily_allowance(monkeypatch):
+    _reset_usage()
+    with _free_ai_client(monkeypatch) as client:
+        client.post("/llm-settings/deactivate-all")
+        runtime = client.get("/llm-settings/runtime").json()
+        assert runtime["free_ai"] == {"limit": 3, "used": 0, "remaining": 3}
+
+        client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []})
+        assert client.get("/llm-settings/runtime").json()["free_ai"] == {"limit": 3, "used": 1, "remaining": 2}
+
+
+def test_the_plan_after_the_daily_limit_is_refused_without_creating_it(monkeypatch):
+    _reset_usage()
+    with _free_ai_client(monkeypatch, limit=2) as client:
+        client.post("/llm-settings/deactivate-all")
+        goal_id = _goal(client)
+        before = len(client.get("/plans").json())
+        for _ in range(2):
+            assert client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []}).status_code == 202
+
+        refused = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+
+        assert refused.status_code == 429
+        assert refused.json()["code"] == "FREE_AI_DAILY_LIMIT"
+        assert "Conecta tu propia IA" in refused.json()["detail"]
+        assert len(client.get("/plans").json()) == before + 2
+
+
+def test_an_idempotent_replay_does_not_spend_another_use(monkeypatch):
+    _reset_usage()
+    with _free_ai_client(monkeypatch) as client:
+        client.post("/llm-settings/deactivate-all")
+        goal_id = _goal(client)
+        for _ in range(2):
+            client.post(
+                "/plans/generate",
+                json={"goal_id": goal_id, "document_ids": []},
+                headers={"Idempotency-Key": "same-request"},
+            )
+        assert client.get("/llm-settings/runtime").json()["free_ai"]["used"] == 1
+
+
+def test_a_failed_generation_gives_the_use_back(monkeypatch):
+    from app.db.session import SessionLocal
+    from app.services import plan_service
+    from app.services.free_ai_quota import FreeAiQuota
+
+    _reset_usage()
+    with _free_ai_client(monkeypatch) as client:
+        client.post("/llm-settings/deactivate-all")
+        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).json()["id"]
+        monkeypatch.setattr(
+            plan_service,
+            "get_llm_provider",
+            lambda *_: _Scripted(LLMError("sin cuota", code="LLM_QUOTA_EXHAUSTED")),
+        )
+        plan_service.generate_plan_task(plan_id)
+
+        with SessionLocal() as db:
+            assert FreeAiQuota(db).status(1).used == 0
+        assert client.get(f"/plans/{plan_id}").json()["status"] == "FAILED"
+
+
+def test_the_learners_own_key_or_demo_mode_never_spend_the_allowance(monkeypatch):
+    _reset_usage()
+    settings = Settings(NVIDIA_API_KEY="", GEMINI_API_KEY="")
+    monkeypatch.setattr(factory, "get_settings", lambda: settings)
+    monkeypatch.setattr("app.api.v1.routes.plans.generate_plan_task", lambda plan_id: None)
+    with TestClient(main.app) as client:
+        client.post("/llm-settings/deactivate-all")
+        for _ in range(5):
+            assert client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).status_code == 202
+        assert client.get("/llm-settings/runtime").json()["free_ai"] is None

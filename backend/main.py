@@ -15,6 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import (
     ConflictError,
+    DailyLimitError,
     LLMError,
     NotFoundError,
     StudyAIError,
@@ -82,6 +83,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConflictError)
     async def _conflict(_: Request, exc: ConflictError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(DailyLimitError)
+    async def _daily_limit(_: Request, exc: DailyLimitError) -> JSONResponse:
+        return JSONResponse(status_code=429, content={"detail": str(exc), "code": exc.code})
 
     @app.exception_handler(UnsupportedFileTypeError)
     async def _unsupported(_: Request, exc: UnsupportedFileTypeError) -> JSONResponse:

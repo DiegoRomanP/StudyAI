@@ -108,6 +108,7 @@ def test_runtime_reports_mock_only_when_no_user_or_server_provider():
         },
         "fallback_reason": None,
         "bundled": False,
+        "free_ai": None,
     }
 
 
@@ -135,6 +136,7 @@ def test_runtime_reports_env_anthropic_after_user_credentials_are_deactivated(mo
         },
         "fallback_reason": None,
         "bundled": False,
+        "free_ai": None,
     }
 
 

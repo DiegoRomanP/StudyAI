@@ -168,7 +168,12 @@ order — check this chain before assuming which LLM is actually being called:
    raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock. Keys exist
    only in the environment (`backend/.env` is git-ignored): `tests/conftest.py` and the QA runner
    (`scripts/qa-runtime.mjs`) force them empty so no test spends quota — keep that when adding env keys.
-   `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`.
+   `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`, and `free_ai` (`limit`/`used`/`remaining`,
+   null when the server has no free keys or an Anthropic `.env` key).
+   **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) plan generations per user and UTC day, counted in `free_ai_usage`
+   (`app/services/free_ai_quota.py`). `PlanService.create_plan` spends one use *only when the resolved provider is bundled*
+   (429 `FREE_AI_DAILY_LIMIT`, no plan row, when it is spent) and `_Generator` gives it back if generation fails; the learner's own key,
+   Ollama and the mock never count. Idempotent replays do not spend another use.
    A real environment variable beats `backend/.env` (pydantic-settings), so a stale `NVIDIA_API_KEY` exported in the
    shell silently overrides the file and shows up as 403 "Authorization failed".
 4. `MockLLMProvider`.
@@ -334,9 +339,11 @@ la checklist «Primeros pasos» de Inicio (`GettingStarted`, `useOnboardingProgr
 reales y se muestra como un recorrido horizontal donde cada paso se desbloquea al completar el anterior
 (el paso opcional «Conecta tu IA» nunca bloquea al siguiente). La checklist solo aparece cuando ya hay un plan listo: antes, `StudySetup` es un asistente de un
 paso a la vez (Material → Meta → IA → Listo) y «Estudiar» solo existe en el último paso. El paso de IA
-exige un proveedor real o elegir el modo demo de forma explícita (`useDemoAccepted`; si el servidor incluye IA gratuita, `runtime.bundled`, el paso de IA se omite y solo aparece desde «Cambiar» en el resumen, flag compartida
-con la checklist); sin clave muestra cómo conseguirla y los comandos de Ollama (`lib/aiSetupHelp.ts`,
-solo texto y URLs fijos, nunca generados por el LLM). Un botón principal deshabilitado siempre
+siempre se muestra («Elige tu IA») con tres opciones: «Gratis · N al día» (solo si `runtime.free_ai` existe; «Usar la IA
+gratuita» desactiva las credenciales propias), «Mi API key» (con «¿Cómo conseguir una API key?» desplegable) y «En local (Ollama)». Exige un
+proveedor real, la IA gratuita con usos disponibles, o elegir el modo demo de forma explícita (`useDemoAccepted`, flag compartida
+con la checklist). Los comandos de Ollama y las fuentes de claves viven en `lib/aiSetupHelp.ts`
+(solo texto y URLs fijos, nunca generados por el LLM). Un botón principal deshabilitado siempre
 muestra su motivo visible enlazado con `aria-describedby`.
 
 **List pagination**: `useShowMore` (`src/hooks/useShowMore.ts`) caps `DocumentsPage`/`GoalsPage`/

@@ -31,7 +31,7 @@ from app.core.exceptions import ConflictError, LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.pareto import select_top_by_relevance
-from app.llm.factory import get_llm_provider
+from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.output_parsers import parse_llm_json
 from app.llm.prompts import plan_generation, session_content, topic_analysis
@@ -43,10 +43,18 @@ from app.models.session import Session as StudySession
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
+from app.services.free_ai_quota import FreeAiQuota
 from app.strategies.goal_strategies import GoalStrategyFactory
 from app.utils.text import extract_keywords
 
 logger = get_logger(__name__)
+
+
+def _uses_free_ai(db: Session, user_id: int) -> bool:
+    """Whether the next generation for this learner runs on the included free-tier AI."""
+    resolution = resolve_llm_provider(db, user_id)
+    resolution.provider.close()
+    return resolution.runtime.bundled
 
 
 class PlanService:
@@ -71,6 +79,11 @@ class PlanService:
             if existing is not None:
                 return self._check_idempotency_payload(existing, request_hash), False
 
+        # Spent before the plan exists, so a learner over the daily limit gets a 429 and no row.
+        spent_free_use = _uses_free_ai(self.db, user_id)
+        if spent_free_use:
+            FreeAiQuota(self.db).consume(user_id)
+
         plan = Plan(
             user_id=user_id,
             goal_id=goal_id,
@@ -90,6 +103,8 @@ class PlanService:
             return plan, True
         except IntegrityError:
             self.db.rollback()
+            if spent_free_use:
+                FreeAiQuota(self.db).refund(user_id)
             winner = self._find_idempotent_plan(user_id, idempotency_key)
             if winner is None:
                 raise
@@ -193,10 +208,19 @@ class _Generator:
             )
             plan.status = PlanStatus.FAILED
             plan.error_message = error_message
+            self._refund_free_use(plan.user_id)
         finally:
             self.llm.close()
         self.db.add(plan)
         self.db.commit()
+
+    def _refund_free_use(self, user_id: int) -> None:
+        """A failed plan gives back the free use it spent; never let bookkeeping hide the failure."""
+        try:
+            if _uses_free_ai(self.db, user_id):
+                FreeAiQuota(self.db).refund(user_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not refund the free AI use for user %s", user_id)
 
     def _generate(self, plan: Plan) -> None:
         goal = self.db.get(Goal, plan.goal_id)

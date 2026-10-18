@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
     DEFAULT_GEMINI_MODEL: str = "gemma-4-26b-a4b-it"
+    # Plan generations per learner and day on the included AI; their own key has no limit.
+    FREE_AI_DAILY_LIMIT: int = Field(default=3, ge=1)
     # Free tiers get a short leash so a stalled provider hands over to the next one quickly.
     DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
     DEFAULT_AI_TOTAL_BUDGET_SECONDS: float = Field(default=120.0, gt=0, allow_inf_nan=False)
@@ -161,6 +163,10 @@ class Settings(BaseSettings):
     @property
     def has_default_gemini_key(self) -> bool:
         return bool(self.GEMINI_API_KEY.strip())
+
+    @property
+    def has_free_ai(self) -> bool:
+        return self.has_default_nvidia_key or self.has_default_gemini_key
 
     @property
     def default_ai_policy(self) -> LLMCallPolicy:

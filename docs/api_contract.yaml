@@ -167,6 +167,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanStatus" }
+        "429":
+          description: Se agotó el cupo diario de la IA gratuita incluida (code FREE_AI_DAILY_LIMIT); no se crea el plan
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: FREE_AI_DAILY_LIMIT }
         "409":
           description: La clave de idempotencia ya se utilizó con una solicitud diferente
           content:
@@ -582,6 +592,15 @@ components:
           type: boolean
           default: false
           description: Verdadero cuando responde la IA gratuita incluida del servidor (NVIDIA y luego Gemini); el usuario no elige modelo.
+        free_ai:
+          type: object
+          nullable: true
+          required: [limit, used, remaining]
+          description: Cupo del día (UTC) de la IA gratuita incluida; nulo si el servidor no la ofrece. Cada generación de plan gasta un uso y se devuelve si falla.
+          properties:
+            limit: { type: integer, minimum: 1 }
+            used: { type: integer, minimum: 0 }
+            remaining: { type: integer, minimum: 0 }
     LLMProviderError:
       type: object
       required: [detail, code, retryable]

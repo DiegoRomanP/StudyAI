@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.providers_catalog import PROVIDER_CATALOG
 from app.models.llm_credential import LLMProviderName
 from app.models.user import User
 from app.schemas.llm_settings import (
+    FreeAiInfo,
     LLMCredentialModelUpdate,
     LLMCredentialResponse,
     LLMCredentialUpsert,
@@ -23,6 +25,7 @@ from app.schemas.llm_settings import (
     OllamaModelResponse,
     ProviderCatalogEntry,
 )
+from app.services.free_ai_quota import FreeAiQuota
 from app.services.llm_settings_service import LLMSettingsService
 
 LLM_ERROR_RESPONSE = {502: {"model": LLMProviderErrorResponse, "description": "Fallo seguro de un proveedor de IA."}}
@@ -58,7 +61,12 @@ def get_llm_runtime(
     user: User = Depends(get_current_user),
 ) -> LLMRuntimeResponse:
     runtime = LLMSettingsService(db).get_runtime(user.id)
-    return LLMRuntimeResponse(**runtime.__dict__)
+    settings = get_settings()
+    free_ai = None
+    if settings.has_free_ai and not settings.has_llm_key:
+        quota = FreeAiQuota(db).status(user.id)
+        free_ai = FreeAiInfo(limit=quota.limit, used=quota.used, remaining=quota.remaining)
+    return LLMRuntimeResponse(**runtime.__dict__, free_ai=free_ai)
 
 
 @router.get("", response_model=list[LLMCredentialResponse])

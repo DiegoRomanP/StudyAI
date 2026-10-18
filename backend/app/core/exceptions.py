@@ -27,6 +27,14 @@ class ConflictError(StudyAIError):
         self.code = code
 
 
+class DailyLimitError(StudyAIError):
+    """The learner spent today's included free-tier AI uses."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 class UnsupportedFileTypeError(StudyAIError):
     """No processor is registered for the given file extension."""
 

@@ -132,6 +132,14 @@ class LLMRuntimeModels(BaseModel):
         return model
 
 
+class FreeAiInfo(BaseModel):
+    """Today's allowance of the server's included free-tier AI for the current learner."""
+
+    limit: int = Field(ge=1)
+    used: int = Field(ge=0)
+    remaining: int = Field(ge=0)
+
+
 class LLMRuntimeResponse(BaseModel):
     """Effective LLM source, without credentials or a connectivity guarantee."""
 
@@ -140,6 +148,8 @@ class LLMRuntimeResponse(BaseModel):
     models: LLMRuntimeModels
     fallback_reason: str | None
     bundled: bool = False
+    # Present when the server offers the included AI, even while the learner uses their own.
+    free_ai: FreeAiInfo | None = None
 
     @model_validator(mode="after")
     def _validate_provider_for_source(self) -> "LLMRuntimeResponse":
