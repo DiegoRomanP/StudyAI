@@ -116,7 +116,7 @@ def test_builds_tiers_in_priority_order_from_the_environment():
     tiers = build_free_tiers(settings)
 
     assert [tier.name for tier in tiers] == ["nvidia", "gemini"]
-    assert tiers[0].model == "deepseek-ai/deepseek-v4.1-flash"
+    assert tiers[0].model == "nvidia/nemotron-3-super-120b-a12b"
     assert tiers[1].model == "gemma-4-26b-a4b-it"
     # Construction is lazy-cheap: building the clients performs no network I/O.
     for tier in tiers:
@@ -142,7 +142,7 @@ def test_runtime_reports_the_included_ai_when_the_server_has_free_keys(monkeypat
     assert runtime["source"] == "ENV"
     assert runtime["provider"] == "NVIDIA"
     assert runtime["bundled"] is True
-    assert runtime["models"]["session_content"] == "deepseek-ai/deepseek-v4.1-flash"
+    assert runtime["models"]["session_content"] == "nvidia/nemotron-3-super-120b-a12b"
     assert "nvapi" not in str(runtime) and "gem-test" not in str(runtime)
 
 

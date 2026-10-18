@@ -54,15 +54,6 @@ class NvidiaModelSpec:
 
 _SPECS = (
     NvidiaModelSpec(
-        model_id="deepseek-ai/deepseek-v4.1-flash",
-        contract_id="nvidia-standard-chat",
-        contract_version="v1",
-        message_mode=NvidiaMessageMode.SYSTEM_USER,
-        max_output_tokens=8192,
-        request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
-        docs_url="https://build.nvidia.com/deepseek-ai/deepseek-v4.1-flash",
-    ),
-    NvidiaModelSpec(
         model_id="nvidia/nemotron-3-super-120b-a12b",
         contract_id="nvidia-reasoning-chat",
         contract_version="v2",

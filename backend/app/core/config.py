@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     # NVIDIA first, Google once NVIDIA's quota is gone. Keys live only in the environment.
     NVIDIA_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
-    DEFAULT_NVIDIA_MODEL: str = "deepseek-ai/deepseek-v4.1-flash"
+    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
     DEFAULT_GEMINI_MODEL: str = "gemma-4-26b-a4b-it"
     # Free tiers get a short leash so a stalled provider hands over to the next one quickly.
     DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
