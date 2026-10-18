@@ -65,18 +65,21 @@ en Tailwind), iconos Lucide y transiciones que respetan `prefers-reduced-motion`
 |---|---|---|
 | `/` | Landing | Presentación pública, «Comenzar gratis» y «Ver demo». |
 | `/demo` | Demostración simulada | Recorrido del mockup con datos de ejemplo y un aviso fijo; no llama a la API ni pide claves. |
-| `/inicio` | Inicio | Sesión de hoy, progreso, repasos SM-2 y enfoque Pareto. Para empezar: material → meta (5 plantillas) → IA → **Estudiar**, todo en la misma pantalla. |
+| `/inicio` | Inicio | Checklist «Primeros pasos» con el progreso real, sesión de hoy, progreso, repaso espaciado y temas clave. Para empezar: material → meta (5 plantillas) → IA → **Estudiar**, todo en la misma pantalla. |
 | `/plan`, `/plan/:id` | Plan de estudio | Planes y su detalle con vista Calendario/Lista por fecha sugerida. |
-| `/session/:id` | Sesión | Estudio → receso → quiz → resultado confirmado. `?fase=test` abre directamente el test. |
+| `/session/:id` | Sesión | Estudio → receso → test → resultado confirmado, con «Paso X de 3». `?fase=test` abre directamente el test. |
 | `/practica` | Práctica | «Preguntas»: práctica local con corrección inmediata que **no guarda nada**. «Simulacro»: abre el test real de una sesión. |
 | `/temas` | Temas clave | Relevancia y dificultad estimadas por la IA, y la selección Pareto. |
 | `/documents` | Recursos | Subida (PDF/Markdown) e indexación. |
 | `/goals` | Metas | Crear, editar y borrar metas. |
-| `/dashboard` | Estadísticas | Precisión por quiz con filtro 7 días/30 días/Todo, racha, temas débiles y próximas revisiones. |
+| `/dashboard` | Estadísticas | Precisión por test con filtro 7 días/30 días/Todo, racha, temas débiles y próximas revisiones. Sin datos, explica qué aparecerá y lleva a tu siguiente sesión. |
 | `/settings` | Conectar IA | Proveedor de IA propio (ver abajo). |
 
 En móvil, la barra inferior muestra Inicio, Plan, Práctica y Estadísticas; el
-resto está en «Más». Las rutas pesadas (Estadísticas, Sesión, Práctica y la demo)
+resto está en «Más». Cada página de preparación y estudio incluye una guía
+«¿Cómo funciona esta página?» que se puede cerrar (se recuerda en el navegador)
+y la jerga (temas clave, repaso espaciado, simulacro…) lleva una definición al
+pulsarla. Las rutas pesadas (Estadísticas, Sesión, Práctica y la demo)
 se cargan bajo demanda.
 
 Criterios que la interfaz mantiene:

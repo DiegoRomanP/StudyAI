@@ -305,7 +305,7 @@ Vite + React 18 + TypeScript + Tailwind + TanStack Query + React Router + Axios.
 public `/` (landing) and `/demo` (simulated walkthrough with local sample data — it must never
 import the API client), and inside `AppShell` `/inicio` (home + "Estudiar" coordinator,
 `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test),
-`/practica` (read-only practice; never writes), `/temas`, `/documents` ("Recursos"), `/goals`,
+`/practica` (read-only practice; never writes), `/temas` ("Temas clave"), `/documents` ("Recursos"), `/goals`,
 `/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
 UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since
 generation is async on the backend. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
@@ -315,6 +315,14 @@ generation is async on the backend. `SettingsPage` renders one card per `PROVIDE
 
 **Security-relevant, don't regress**: YouTube resource links are always built as a *search URL*
 from LLM-provided keywords (`src/lib/youtube.ts`) — an LLM-generated URL is never rendered directly.
+
+**In-app guidance**: La ayuda contextual vive en `src/components/help/` (`PageGuide`, `HelpTerm`)
+con textos en `src/lib/pageGuides.ts` y `src/lib/glossary.ts`; el estado de guías cerradas va en
+`localStorage` vía `src/lib/onboardingStorage.ts` (siempre con try/catch). Reutilízalos en páginas
+nuevas en vez de crear otro patrón. Vacíos con explicación y CTA usan `src/components/EmptyState.tsx`;
+la checklist «Primeros pasos» de Inicio (`GettingStarted`, `useOnboardingProgress`) se deriva de datos
+reales. Un botón principal deshabilitado siempre muestra su motivo visible enlazado con
+`aria-describedby`.
 
 **List pagination**: `useShowMore` (`src/hooks/useShowMore.ts`) caps `DocumentsPage`/`GoalsPage`/
 `PlanPage`'s "Tus ..." lists at 6 items with a "Mostrar N más" button, client-side (it slices an
