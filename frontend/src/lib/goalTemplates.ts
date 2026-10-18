@@ -64,3 +64,10 @@ export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
   LEARNING: "Aprender",
   MEMORIZATION: "Memorizar",
 };
+
+/** What each study type changes in a session's test (backend `goal_strategies.py`). */
+export const GOAL_TYPE_DESCRIPTIONS: Record<GoalType, string> = {
+  EXAM: "Más preguntas tipo test (7 de 10) para practicar como en el examen.",
+  LEARNING: "Mitad preguntas y mitad tarjetas: entender y recordar a la vez.",
+  MEMORIZATION: "Sobre todo tarjetas de memoria (8 de 10) para fijar datos.",
+};

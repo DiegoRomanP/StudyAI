@@ -195,7 +195,7 @@ async function openMobileOverflow(page: Page) {
   return { moreButton, navigation };
 }
 
-const OVERFLOW_LABELS = ["Temas (Pareto)", "Recursos", "Metas", "API Keys"];
+const OVERFLOW_LABELS = ["Temas clave", "Recursos", "Metas", "Conectar IA"];
 
 async function navigateByKeyboard(
   page: Page,
@@ -484,7 +484,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   const bottomNavigation = page.getByRole("navigation", { name: "Navegación inferior" });
   const menuLabels = ["Inicio", "Plan", "Práctica", "Estadísticas"];
   expect(await bottomNavigation.getByRole("link").allTextContents()).toEqual(menuLabels);
-  await expect(bottomNavigation.getByRole("link", { name: "API Keys" })).toHaveCount(0);
+  await expect(bottomNavigation.getByRole("link", { name: "Conectar IA" })).toHaveCount(0);
 
   const menuBounds = [];
   for (const label of menuLabels) {
@@ -517,10 +517,10 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
 
   const destinations = [
     {
-      label: "Temas (Pareto)",
+      label: "Temas clave",
       path: "/temas",
-      heading: "Temas (Pareto)",
-      title: "Temas (Pareto) | StudyAI",
+      heading: "Temas clave",
+      title: "Temas clave | StudyAI",
       index: 0,
       expectedControls: [{ tag: "a", href: "/plan/27" }],
       readinessEvidence: [`prioritized topic: ${plan.topics[0].name}`, "plan link: /plan/27"],
@@ -613,10 +613,10 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       },
     },
     {
-      label: "API Keys",
+      label: "Conectar IA",
       path: "/settings",
-      heading: "API Keys",
-      title: "API Keys | StudyAI",
+      heading: "Conectar IA",
+      title: "Conectar IA | StudyAI",
       index: 3,
       expectedControls: [
         { tag: "input", label: "sk-openai-test" },
@@ -738,7 +738,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   const unknownRouteOverflow = await openMobileOverflow(page);
   await expect(unknownRouteOverflow.moreButton).not.toHaveAttribute("aria-current", "page");
   await expect(
-    unknownRouteOverflow.navigation.getByRole("link", { name: "API Keys", exact: true }),
+    unknownRouteOverflow.navigation.getByRole("link", { name: "Conectar IA", exact: true }),
   ).not.toHaveAttribute("aria-current", "page");
   await page.keyboard.press("Escape");
   await expect(unknownRouteOverflow.moreButton).toBeFocused();

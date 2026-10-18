@@ -469,7 +469,7 @@ function DemoProvider() {
           nunca vuelve al navegador; sin clave, StudyAI funciona en modo demo con un LLM simulado.
         </p>
         <ButtonLink to="/settings" variant="secondary">
-          Configurar en API Keys
+          Ir a Conectar IA
         </ButtonLink>
       </Card>
     </div>

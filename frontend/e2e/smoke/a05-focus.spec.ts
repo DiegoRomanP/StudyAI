@@ -146,7 +146,7 @@ test("legacy controls retain visible keyboard focus without calling a real provi
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("Detalles: temas a cubrir, fecha, énfasis..."));
 
     await page.goto("/settings");
-    await expect(page.getByRole("heading", { name: "API Keys" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Conectar IA" })).toBeVisible();
     await expectVisibleKeyboardFocus(page, page.locator("select").first());
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("https://api.openai.com/v1"));
     await expectVisibleKeyboardFocus(page, page.getByPlaceholder("sk-ant-test"));

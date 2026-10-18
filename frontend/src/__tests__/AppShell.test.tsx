@@ -40,10 +40,10 @@ describe("AppShell", () => {
       "Inicio",
       "Plan de estudio",
       "Práctica",
-      "Temas (Pareto)",
+      "Temas clave",
       "Recursos",
       "Metas",
-      "API Keys",
+      "Conectar IA",
       "Estadísticas",
     ]);
     expect(
@@ -66,7 +66,7 @@ describe("AppShell", () => {
       within(bottomNavigation).getAllByRole("link").length +
         within(bottomNavigation).getAllByRole("button").length,
     ).toBeLessThanOrEqual(5);
-    expect(within(bottomNavigation).queryByRole("link", { name: "API Keys" })).not.toBeInTheDocument();
+    expect(within(bottomNavigation).queryByRole("link", { name: "Conectar IA" })).not.toBeInTheDocument();
     expect(within(bottomNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -177,16 +177,16 @@ describe("AppShell", () => {
     expect(bottomNavigation).not.toContainElement(overflowNavigation);
   });
 
-  it("marks API Keys on the Más trigger and restores focus when its current route is chosen", () => {
+  it("marks Conectar IA on the Más trigger and restores focus when its current route is chosen", () => {
     renderShell("/settings");
     const moreButton = screen.getByRole("button", { name: /Más/ });
     expect(moreButton).toHaveAttribute("aria-current", "page");
-    expect(moreButton).toHaveTextContent("API Keys actual");
+    expect(moreButton).toHaveTextContent("Conectar IA actual");
     fireEvent.click(moreButton);
 
     const currentLink = within(
       screen.getByRole("navigation", { name: "Más destinos" }),
-    ).getByRole("link", { name: "API Keys" });
+    ).getByRole("link", { name: "Conectar IA" });
     expect(currentLink).toHaveAttribute("aria-current", "page");
     currentLink.focus();
     fireEvent.click(currentLink);

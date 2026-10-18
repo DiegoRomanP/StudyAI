@@ -69,11 +69,11 @@ en Tailwind), iconos Lucide y transiciones que respetan `prefers-reduced-motion`
 | `/plan`, `/plan/:id` | Plan de estudio | Planes y su detalle con vista Calendario/Lista por fecha sugerida. |
 | `/session/:id` | Sesión | Estudio → receso → quiz → resultado confirmado. `?fase=test` abre directamente el test. |
 | `/practica` | Práctica | «Preguntas»: práctica local con corrección inmediata que **no guarda nada**. «Simulacro»: abre el test real de una sesión. |
-| `/temas` | Temas (Pareto) | Relevancia y dificultad estimadas por la IA, y la selección Pareto. |
+| `/temas` | Temas clave | Relevancia y dificultad estimadas por la IA, y la selección Pareto. |
 | `/documents` | Recursos | Subida (PDF/Markdown) e indexación. |
 | `/goals` | Metas | Crear, editar y borrar metas. |
 | `/dashboard` | Estadísticas | Precisión por quiz con filtro 7 días/30 días/Todo, racha, temas débiles y próximas revisiones. |
-| `/settings` | API Keys | Proveedor de IA propio (ver abajo). |
+| `/settings` | Conectar IA | Proveedor de IA propio (ver abajo). |
 
 En móvil, la barra inferior muestra Inicio, Plan, Práctica y Estadísticas; el
 resto está en «Más». Las rutas pesadas (Estadísticas, Sesión, Práctica y la demo)
@@ -204,9 +204,9 @@ Frontend (`frontend/.env`): `VITE_API_URL` (por defecto `http://localhost:8001`)
 > `ANTHROPIC_API_KEY` activa Claude, parseo real de PDF y RAG semántico de forma
 > transparente (detección automática en tiempo de ejecución).
 
-### Configurar tu propia clave de API (sección "API Keys" en la UI)
+### Configurar tu propia clave de API (sección "Conectar IA" en la UI)
 
-En vez de (o además de) editar `backend/.env`, la sección **API Keys** del
+En vez de (o además de) editar `backend/.env`, la sección **Conectar IA** del
 frontend (`/settings`; también en versión compacta desde Inicio) permite guardar
 tu propia clave para **Anthropic (Claude), OpenAI (ChatGPT), Google Gemini,
 Zhipu GLM, OpenRouter, NVIDIA NIM o Hugging Face**. También permite
@@ -449,7 +449,7 @@ npm run build
 
 La cobertura incluye errores de la API, la coordinación de «Estudiar»
 (`useStudyStart`), Inicio, Plan, Temas, Sesión, Práctica (que no escribe nada),
-Estadísticas, la demo (que no llama a la API), API Keys y la navegación.
+Estadísticas, la demo (que no llama a la API), Conectar IA y la navegación.
 
 QA aislado contra el backend real en modo demo (Bruno + Playwright):
 
@@ -467,7 +467,7 @@ quiz → Estadísticas) y la navegación con teclado a 320 px.
 - La subida valida extensión (`.pdf` / `.md`) y tamaño máximo (`MAX_UPLOAD_MB`).
 - Acceso a datos siempre vía SQLAlchemy ORM parametrizado (sin SQL crudo).
 - La API key de operador se lee del entorno; `.env` está en `.gitignore`.
-- Las claves que el usuario guarda desde **API Keys** se cifran en
+- Las claves que el usuario guarda desde **Conectar IA** se cifran en
   reposo (Fernet) y nunca se devuelven completas por la API — ver sección
   "Configurar tu propia clave de API" más arriba.
 - Los overrides compatibles de `base_url` (URL base personalizada) se validan para evitar

@@ -8,7 +8,7 @@ import { usePlans } from "../hooks/queries";
 import { rankTopics, readyPlans } from "../lib/studyProgress";
 
 /**
- * "Temas (Pareto)": the AI's topic analysis for one plan, exactly as the backend
+ * "Temas clave": the AI's topic analysis for one plan, exactly as the backend
  * stored it (relevance 0–1, difficulty 1–5, subtopics, Pareto selection).
  */
 export function TopicsPage() {
@@ -20,7 +20,7 @@ export function TopicsPage() {
       <header className="flex items-start gap-3">
         <IconTile icon={ChartNoAxesColumnDecreasing} className="h-11 w-11" />
         <div>
-          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Temas (Pareto)</h1>
+          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Temas clave</h1>
           <p className="mt-1 max-w-reading text-text-muted">
             Qué temas de tu material priorizó la IA y por qué. Los porcentajes son su estimación de
             relevancia, no una garantía de que esos temas den el 80 % del resultado.

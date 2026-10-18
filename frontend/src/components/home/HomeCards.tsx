@@ -25,6 +25,7 @@ import {
   upcomingReviewCount,
   type SessionProgress,
 } from "../../lib/studyProgress";
+import { HelpTerm } from "../help/HelpTerm";
 import { Badge, ButtonLink, Card, IconTile, ProgressRing, StepChain } from "../ui";
 
 const BREAK_MINUTES = 5;
@@ -70,8 +71,8 @@ export function TodaySessionCard({ plan, session }: { plan: PlanDTO; session: Se
           steps={[
             { label: "Estudio", detail: `${session.duration_minutes} min`, icon: BookOpen },
             { label: "Receso", detail: `${BREAK_MINUTES} min`, icon: Coffee },
-            { label: "Quiz", detail: "Flashcards y opción múltiple", icon: ListChecks },
-            { label: "Resultado", detail: "Repasos SM-2", icon: Trophy },
+            { label: "Test", detail: "Tarjetas y opción múltiple", icon: ListChecks },
+            { label: "Resultado", detail: "Repaso espaciado", icon: Trophy },
           ]}
         />
       </Card>
@@ -135,7 +136,7 @@ export function ProgressOverviewCard({
               value={due}
               hint={scheduled > due ? `${scheduled} próximas programadas` : undefined}
             />
-            <ProgressRow icon={Flame} label="Racha de días con quiz" value={streak} />
+            <ProgressRow icon={Flame} label="Racha de días con test" value={streak} />
           </dl>
         </div>
       </Card>
@@ -177,7 +178,8 @@ export function ParetoFocusCard({ plan, limit = 5 }: { plan: PlanDTO; limit?: nu
             Enfoque Pareto (80/20)
           </h2>
           <p className="mt-0.5 text-sm text-text-muted">
-            Prioridad estimada por la IA para tu material. Es una heurística, no una garantía.
+            <HelpTerm term="relevancia">Relevancia</HelpTerm> estimada por la IA para tu material. Es una
+            heurística, no una garantía.
           </p>
         </div>
         {topics.length === 0 ? (
@@ -243,7 +245,11 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
                 <span className="line-clamp-2 font-medium text-text-primary">{plan.title}</span>
                 <span className="mt-auto flex items-center justify-between gap-2 text-xs text-text-muted">
                   <span>
-                    {completed} de {plan.sessions.length} sesiones
+                    {plan.status === "FAILED"
+                      ? "Ver qué falló →"
+                      : plan.status === "PROCESSING"
+                        ? "Generando…"
+                        : `${completed} de ${plan.sessions.length} sesiones`}
                   </span>
                   <Badge color={status.color}>{status.label}</Badge>
                 </span>
@@ -269,13 +275,15 @@ export function StudyStreakCard() {
           <>
             <p className="font-medium text-text-primary">Estás en racha</p>
             <p className="text-xs text-text-muted">
-              {streak === 1 ? "1 día con quiz" : `${streak} días seguidos con quiz`}
+              {streak === 1 ? "1 día con test" : `${streak} días seguidos con test`}
             </p>
           </>
         ) : (
           <>
             <p className="font-medium text-text-primary">Empieza tu racha</p>
-            <p className="text-xs text-text-muted">Completa un quiz hoy.</p>
+            <p className="text-xs text-text-muted">
+              {data.scores.length === 0 ? "Tu racha empieza con tu primera sesión." : "Completa un test hoy."}
+            </p>
           </>
         )}
       </div>

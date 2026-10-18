@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, FileUp, KeyRound, Play, RotateCcw, Sparkles, Target } from "lucide-react";
+import { ArrowRight, Check, FileUp, KeyRound, Play, RotateCcw, Sparkles, Target } from "lucide-react";
 
 import type { GoalType } from "../../api/types";
 import {
@@ -10,7 +10,12 @@ import {
   useUploadDocument,
 } from "../../hooks/queries";
 import { useStudyStart, type StudyStartInput } from "../../hooks/useStudyStart";
-import { GOAL_TEMPLATES, GOAL_TYPE_LABELS, type GoalTemplate } from "../../lib/goalTemplates";
+import {
+  GOAL_TEMPLATES,
+  GOAL_TYPE_DESCRIPTIONS,
+  GOAL_TYPE_LABELS,
+  type GoalTemplate,
+} from "../../lib/goalTemplates";
 import { DocumentPicker } from "../documents/DocumentPicker";
 import { DocumentUpload } from "../documents/DocumentUpload";
 import { GoalTemplatePicker } from "../goals/GoalTemplatePicker";
@@ -75,14 +80,14 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   } else if (selectedIndexed.length === 0) {
     missing.push(
       indexedIds.size === 0
-        ? "Sube un documento y espera a que termine de indexarse."
-        : "Selecciona al menos un documento indexado.",
+        ? "Sube un PDF o Markdown; en unos segundos estará listo para usar."
+        : "Marca al menos un documento listo para usar.",
     );
   }
   if (!goalReady) {
     missing.push(goalMode === "existing" ? "Elige una de tus metas." : "Elige una plantilla o escribe tu meta.");
   }
-  if (runtime === "unknown") missing.push("Confirma el proveedor de IA (Reintentar en el paso 3).");
+  if (runtime === "unknown") missing.push("No pudimos comprobar tu IA: pulsa «Reintentar» en el paso 3.");
   if (runtime === "pending") missing.push("Consultando el proveedor de IA…");
 
   const flowActive = study.phase !== "idle" && study.phase !== "error" && study.phase !== "uncertain";
@@ -95,6 +100,8 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
     study.phase !== "processing" &&
     study.phase !== "ready" &&
     !goalUncertain;
+
+  const requirementsShown = flowActive ? !study.isBusy : missing.length > 0;
 
   function applyTemplate(template: GoalTemplate) {
     setTemplateId(template.id);
@@ -131,8 +138,15 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
 
       <ol className="space-y-6">
         <li className="space-y-3">
-          <StepTitle as={StepHeading} number={1} icon={FileUp} title="Tu material" />
+          <StepTitle
+            as={StepHeading}
+            number={1}
+            icon={FileUp}
+            title="Tu material"
+            done={selectedIndexed.length > 0}
+          />
           <DocumentUpload
+            headingLevel={headingLevel === 2 ? 4 : 5}
             onUpload={(file) => upload.mutateAsync(file)}
             documents={documents ?? []}
             documentsError={documentsQuery.isError}
@@ -157,7 +171,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
         </li>
 
         <li className="space-y-3">
-          <StepTitle as={StepHeading} number={2} icon={Target} title="Elige tu meta" />
+          <StepTitle as={StepHeading} number={2} icon={Target} title="Elige tu meta" done={goalReady} />
           {(goals.length > 0 || goalMode === "existing") && (
             <SegmentedControl
               label="Origen de la meta"
@@ -215,6 +229,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                 <Select
                   id="study-goal-type"
                   label="Tipo de estudio"
+                  hint={GOAL_TYPE_DESCRIPTIONS[goalType]}
                   value={goalType}
                   onChange={(event) => setGoalType(event.target.value as GoalType)}
                 >
@@ -230,32 +245,47 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
         </li>
 
         <li className="space-y-3">
-          <StepTitle as={StepHeading} number={3} icon={KeyRound} title="Conecta tu IA" />
+          <StepTitle
+            as={StepHeading}
+            number={3}
+            icon={KeyRound}
+            title="Conecta tu IA"
+            done={runtime === "confirmed"}
+          />
           <ProviderQuickSetup />
         </li>
       </ol>
 
       <div className="space-y-3 border-t border-line pt-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" onClick={handleStart} disabled={!canStart} className="px-6">
+          <Button
+            type="button"
+            onClick={handleStart}
+            disabled={!canStart}
+            aria-describedby={!canStart && requirementsShown ? "study-requirements" : undefined}
+            className="px-6"
+          >
             {study.isBusy ? "Preparando…" : "Estudiar"}
             {!study.isBusy && <ArrowRight aria-hidden="true" className="h-4 w-4" />}
           </Button>
-          {flowActive && !study.isBusy ? (
+          {flowActive && !study.isBusy && (
             <p className="text-sm text-text-muted" id="study-requirements">
               {study.phase === "ready"
                 ? "Tu plan ya está listo. Para otro material, pulsa «Preparar otro plan»."
                 : "Espera a que termine este plan o deja de seguirlo para preparar otro."}
             </p>
-          ) : (
-            missing.length > 0 &&
-            !flowActive && (
-              <p className="text-sm text-text-muted" id="study-requirements">
-                {missing[0]}
-              </p>
-            )
           )}
         </div>
+        {!flowActive && missing.length > 0 && (
+          <div id="study-requirements" className="text-sm text-text-muted">
+            <p className="font-medium text-text-primary">Para empezar te falta:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {missing.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <StudyStatus
           study={study}
           onRetry={() => lastInput.current && void study.start(lastInput.current)}
@@ -274,25 +304,34 @@ function StepTitle({
   number,
   icon: Icon,
   title,
+  done = false,
 }: {
   as: "h3" | "h4";
   number: number;
   icon: typeof FileUp;
   title: string;
+  done?: boolean;
 }) {
   return (
     <Tag
-      aria-label={`Paso ${number}: ${title}`}
+      aria-label={`Paso ${number}: ${title}${done ? " (hecho)" : ""}`}
       className="flex items-center gap-2 font-display text-base font-semibold text-text-primary"
     >
       <span
         aria-hidden="true"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-flow text-xs font-bold text-text-on-action"
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+          done ? "bg-state-success-subtle text-state-success" : "bg-flow text-text-on-action"
+        }`}
       >
-        {number}
+        {done ? <Check className="h-4 w-4" strokeWidth={2.5} /> : number}
       </span>
       <Icon aria-hidden="true" className="h-4 w-4 text-action-hover" />
       <span>{title}</span>
+      {done && (
+        <span aria-hidden="true" className="text-xs font-medium text-state-success">
+          Hecho
+        </span>
+      )}
     </Tag>
   );
 }
@@ -368,7 +407,7 @@ function StudyStatus({
             ) : study.planId !== null && (
               <>
                 <ButtonLink to="/settings" variant="secondary">
-                  Revisar API Keys
+                  Revisar mi IA
                 </ButtonLink>
                 <Button type="button" variant="ghost" onClick={study.reset}>
                   Empezar de nuevo

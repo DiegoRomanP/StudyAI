@@ -44,10 +44,10 @@ export const NAVIGATION: NavigationItem[] = [
     title: "Plan de estudio",
   },
   { to: "/practica", label: "Práctica", icon: ClipboardCheck, primary: true, title: "Práctica" },
-  { to: "/temas", label: "Temas (Pareto)", shortLabel: "Temas", icon: ChartNoAxesColumnDecreasing, title: "Temas (Pareto)" },
+  { to: "/temas", label: "Temas clave", shortLabel: "Temas", icon: ChartNoAxesColumnDecreasing, title: "Temas clave" },
   { to: "/documents", label: "Recursos", icon: FolderOpen, title: "Recursos" },
   { to: "/goals", label: "Metas", icon: Target, title: "Metas" },
-  { to: "/settings", label: "API Keys", icon: KeyRound, title: "API Keys" },
+  { to: "/settings", label: "Conectar IA", icon: KeyRound, title: "Conectar IA" },
   { to: "/dashboard", label: "Estadísticas", icon: ChartColumn, primary: true, title: "Estadísticas" },
 ];
 

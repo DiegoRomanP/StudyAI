@@ -20,6 +20,8 @@ interface DocumentUploadProps {
   onUpload: (file: File) => Promise<DocumentDTO>;
   documents?: DocumentDTO[];
   documentsError?: boolean;
+  /** Level of the "Subir documentos" heading, so it nests under the caller's headings. */
+  headingLevel?: 2 | 3 | 4 | 5;
 }
 
 function getUploadFeedback(
@@ -62,7 +64,9 @@ export function DocumentUpload({
   onUpload,
   documents = [],
   documentsError = false,
+  headingLevel = 2,
 }: DocumentUploadProps) {
+  const Heading = `h${headingLevel}` as const;
   const id = useId();
   const inputId = `document-upload-${id}`;
   const helpId = `${inputId}-help`;
@@ -163,9 +167,9 @@ export function DocumentUpload({
 
   return (
     <section className="space-y-3" aria-labelledby={`${inputId}-title`}>
-      <h2 id={`${inputId}-title`} className="text-lg font-semibold text-text-primary">
+      <Heading id={`${inputId}-title`} className="text-lg font-semibold text-text-primary">
         Subir documentos
-      </h2>
+      </Heading>
       <label htmlFor={inputId} className="block text-sm font-medium text-text-primary">
         Selecciona uno o varios documentos
       </label>

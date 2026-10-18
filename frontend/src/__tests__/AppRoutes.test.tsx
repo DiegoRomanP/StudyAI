@@ -124,9 +124,9 @@ describe("App routes", () => {
   it("serves the Pareto topic analysis at /temas with its title", async () => {
     renderApp("/temas");
 
-    expect(screen.getByRole("heading", { level: 1, name: "Temas (Pareto)" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Temas (Pareto)" })).toHaveAttribute("aria-current", "page");
-    await waitFor(() => expect(document.title).toBe("Temas (Pareto) | StudyAI"));
+    expect(screen.getByRole("heading", { level: 1, name: "Temas clave" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Temas clave" })).toHaveAttribute("aria-current", "page");
+    await waitFor(() => expect(document.title).toBe("Temas clave | StudyAI"));
   });
 
   it("shows a useful not-found page with a link back to Inicio", () => {
@@ -233,15 +233,15 @@ describe("App routes", () => {
     expect(screen.getByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
   });
 
-  it("opens API Keys from Más and focuses the deep-linked page after navigation", async () => {
+  it("opens Conectar IA from Más and focuses the deep-linked page after navigation", async () => {
     renderApp("/inicio");
 
     fireEvent.click(screen.getByRole("button", { name: "Más" }));
     const overflowNavigation = screen.getByRole("navigation", { name: "Más destinos" });
-    fireEvent.click(within(overflowNavigation).getByRole("link", { name: "API Keys" }));
+    fireEvent.click(within(overflowNavigation).getByRole("link", { name: "Conectar IA" }));
 
-    expect(await screen.findByRole("heading", { name: "API Keys" })).toBeInTheDocument();
-    await waitFor(() => expect(document.title).toBe("API Keys | StudyAI"));
+    expect(await screen.findByRole("heading", { name: "Conectar IA" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Conectar IA | StudyAI"));
     expect(screen.getByRole("main")).toHaveFocus();
     expect(screen.queryByRole("navigation", { name: "Más destinos" })).not.toBeInTheDocument();
   });

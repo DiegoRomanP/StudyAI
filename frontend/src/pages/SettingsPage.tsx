@@ -79,7 +79,7 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <header className="max-w-reading">
-        <h1 className="font-display text-3xl font-bold text-text-primary">API Keys</h1>
+        <h1 className="font-display text-3xl font-bold text-text-primary">Conectar IA</h1>
         <p className="mt-2 text-text-muted">
           Conecta tu IA: elige un proveedor compatible y confirma qué modelo usará el servidor para
           estudiar. Sin clave, StudyAI sigue funcionando en modo demo.

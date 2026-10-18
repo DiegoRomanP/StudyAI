@@ -1,6 +1,10 @@
+import { useEffect } from "react";
 import { Quote } from "lucide-react";
+import { useLocation } from "react-router-dom";
 
 import { AsyncState } from "../components/AsyncState";
+import { HelpTerm } from "../components/help/HelpTerm";
+import { GettingStarted } from "../components/home/GettingStarted";
 import {
   AllSessionsDoneCard,
   ParetoFocusCard,
@@ -21,6 +25,19 @@ export function HomePage() {
   const plansQuery = usePlans();
   const dashboardQuery = useDashboard();
   const hasReadyPlan = readyPlans(plansQuery.data).length > 0;
+  const { hash } = useLocation();
+
+  // "/inicio#preparar-plan" (checklist, empty states) jumps to the setup flow. Deferred a
+  // frame so it runs after AppShell moves focus to <main> on navigation.
+  useEffect(() => {
+    if (hash !== "#preparar-plan") return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById("preparar-plan");
+      target?.scrollIntoView?.({ block: "start" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hash]);
 
   return (
     <div className="space-y-8">
@@ -31,8 +48,8 @@ export function HomePage() {
             Tu camino de estudio de hoy
           </h1>
           <p className="max-w-reading text-text-muted">
-            Enfócate en lo que realmente importa. La IA analiza tu material y te guía con el método
-            Pareto.
+            Enfócate en lo que realmente importa. La IA analiza tu material y te guía con los{" "}
+            <HelpTerm term="temasClave">temas clave</HelpTerm>.
           </p>
         </div>
         <Card
@@ -43,6 +60,8 @@ export function HomePage() {
           <p>Pequeños pasos constantes crean grandes resultados.</p>
         </Card>
       </header>
+
+      <GettingStarted />
 
       <AsyncState
         data={plansQuery.data}
@@ -80,7 +99,12 @@ export function HomePage() {
         }}
       </AsyncState>
 
-      <section aria-label="Nuevo plan de estudio" className="space-y-3">
+      <section
+        id="preparar-plan"
+        tabIndex={-1}
+        aria-label="Nuevo plan de estudio"
+        className="scroll-mt-6 space-y-3"
+      >
         {hasReadyPlan && (
           <h2 className="font-display text-lg font-semibold text-text-primary">¿Material nuevo?</h2>
         )}

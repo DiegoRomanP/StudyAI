@@ -306,7 +306,7 @@ public `/` (landing) and `/demo` (simulated walkthrough with local sample data �
 import the API client), and inside `AppShell` `/inicio` (home + "Estudiar" coordinator,
 `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test),
 `/practica` (read-only practice; never writes), `/temas`, `/documents` ("Recursos"), `/goals`,
-`/dashboard` ("Estadísticas") and `/settings` ("API Keys"). Backend datetimes arrive as naive
+`/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
 UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since
 generation is async on the backend. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
 (fetched from the backend, not hardcoded) so the provider list/model suggestions never drift from

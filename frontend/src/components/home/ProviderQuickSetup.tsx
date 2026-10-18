@@ -11,7 +11,7 @@ import { Button, IconTile, OptionCard, Spinner } from "../ui";
 /**
  * "Conecta tu IA" inside Inicio: shows the provider the server will actually use and,
  * only if the learner wants their own key, the same secure save → draft → test →
- * activate flow as API Keys (compact variant). Mock and Ollama need no key.
+ * activate flow as Conectar IA (compact variant). Mock and Ollama need no key.
  */
 export function ProviderQuickSetup() {
   const catalogQuery = useProviderCatalog();
@@ -112,7 +112,7 @@ export function ProviderQuickSetup() {
           )}
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <Link to="/settings" className="inline-flex min-h-11 items-center text-action hover:underline">
-              Configuración avanzada en API Keys
+              Configuración avanzada en Conectar IA
             </Link>
             <Button type="button" variant="ghost" onClick={() => setConfiguring(false)}>
               Cerrar

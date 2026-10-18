@@ -135,9 +135,34 @@ describe("HomePage", () => {
     expect(await screen.findByText("Modo demo activo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Estudiar" })).toBeDisabled();
     expect(
-      await screen.findByText("Sube un documento y espera a que termine de indexarse."),
+      await screen.findByText("Sube un PDF o Markdown; en unos segundos estará listo para usar."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Sesión de hoy" })).not.toBeInTheDocument();
+  });
+
+  it("lists every missing requirement and links it to the disabled Estudiar button", async () => {
+    mockApi({ runtime: new Error("runtime down") });
+    renderHome();
+
+    const estudiar = screen.getByRole("button", { name: "Estudiar" });
+    const requirements = await screen.findByText("Para empezar te falta:");
+    const list = requirements.parentElement!;
+    await waitFor(() =>
+      expect(within(list).getByText("No pudimos comprobar tu IA: pulsa «Reintentar» en el paso 3.")).toBeInTheDocument(),
+    );
+    expect(within(list).getByText("Sube un PDF o Markdown; en unos segundos estará listo para usar.")).toBeInTheDocument();
+    expect(within(list).getByText("Elige una plantilla o escribe tu meta.")).toBeInTheDocument();
+    expect(estudiar).toBeDisabled();
+    expect(estudiar).toHaveAttribute("aria-describedby", list.id);
+  });
+
+  it("shows the getting-started checklist first for a new learner", async () => {
+    mockApi();
+    renderHome();
+
+    const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
+    expect(checklist).toHaveTextContent("0 de 5 completados");
+    expect(document.getElementById("preparar-plan")).toBeInTheDocument();
   });
 
   it("puts the next real session first for a returning learner, without redirecting", async () => {
@@ -154,7 +179,7 @@ describe("HomePage", () => {
     expect(within(today).getByText(/Árboles/)).toBeInTheDocument();
     expect(within(today).getByRole("link", { name: "Comenzar sesión" })).toHaveAttribute("href", "/session/71");
     expect(within(today).getByRole("list", { name: "Pasos de la sesión" })).toHaveTextContent(
-      /Estudio.*25 min.*Receso.*5 min.*Quiz.*Resultado/,
+      /Estudio.*25 min.*Receso.*5 min.*Test.*Resultado/,
     );
 
     expect(screen.getByRole("img", { name: "Sesiones completadas: 50%" })).toBeInTheDocument();
@@ -195,7 +220,7 @@ describe("HomePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Universidad/ }));
 
     expect(screen.getByRole("button", { name: "Estudiar" })).toBeDisabled();
-    expect(screen.getByText("Confirma el proveedor de IA (Reintentar en el paso 3).")).toBeInTheDocument();
+    expect(screen.getByText("No pudimos comprobar tu IA: pulsa «Reintentar» en el paso 3.")).toBeInTheDocument();
   });
 
   it("goes from material to a ready plan from Inicio with a single goal and plan request", async () => {

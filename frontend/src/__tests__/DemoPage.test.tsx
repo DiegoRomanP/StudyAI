@@ -55,6 +55,6 @@ describe("DemoPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /Anthropic/ }));
     expect(screen.queryByLabelText(/clave/i)).not.toBeInTheDocument();
     expect(document.querySelector("input")).toBeNull();
-    expect(screen.getByRole("link", { name: "Configurar en API Keys" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Ir a Conectar IA" })).toHaveAttribute("href", "/settings");
   });
 });
