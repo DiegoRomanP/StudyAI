@@ -12,6 +12,7 @@ from app.llm import default_free_provider as free
 from app.llm import factory
 from app.llm.base import LLMProvider
 from app.llm.default_free_provider import FreeTier, FreeTierProvider, build_free_tiers
+from app.llm.providers.gemini import GEMINI_REQUEST_PROFILE
 from app.models.llm_credential import LLMProviderName
 
 
@@ -121,6 +122,15 @@ def test_builds_tiers_in_priority_order_from_the_environment():
     # Construction is lazy-cheap: building the clients performs no network I/O.
     for tier in tiers:
         tier.build().close()
+
+
+def test_the_free_gemma_tier_keeps_the_base_profile():
+    settings = Settings(GEMINI_API_KEY="gem-test", DEFAULT_GEMINI_MODEL="gemma-4-26b-a4b-it")
+    provider = build_free_tiers(settings)[0].build()
+    try:
+        assert provider._request_profile == GEMINI_REQUEST_PROFILE
+    finally:
+        provider.close()
 
 
 def test_ignores_missing_keys_and_unregistered_nvidia_models():

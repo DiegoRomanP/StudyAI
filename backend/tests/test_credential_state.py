@@ -65,3 +65,14 @@ def test_nvidia_verification_contract_survives_reasoning_changes():
     )
 
     assert contract == ("v1:nvidia-reasoning-chat:v2", "v1", "nvidia-standard-chat", "v1")
+
+
+def test_gemma_verification_contract_survives_the_gemini_3_profiles():
+    definition = get_provider_definition(LLMProviderName.GEMINI)
+
+    assert definition.verification_contract("gemma-4-26b-a4b-it") == (
+        "v1",
+        "gemini-generate-content",
+        "v1",
+    )
+    assert "gemini-generate-content" not in definition.verification_contract("gemini-3.8-flash")

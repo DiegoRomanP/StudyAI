@@ -87,16 +87,27 @@ def test_gemini_owns_a_native_fixed_endpoint_contract():
     assert meta.allows_custom_model is True
 
     profile = definition.request_profile(meta.default_model)
-    assert profile.identifier == "gemini-generate-content"
+    assert profile.identifier == "gemini-3-generate-content"
     assert profile.token_limit_parameter == "maxOutputTokens"
     assert profile.requires_usage is False
     assert profile.json_response_kinds == frozenset(
         {"topic_analysis", "session_plan", "session_content"}
     )
     assert profile.payload_parameters("topic_analysis", 80) == {
+        "thinkingConfig": {"thinkingLevel": "minimal"},
         "maxOutputTokens": 80,
         "response_format": {"type": "json_object"},
     }
+    assert definition.request_profile("gemini-3.1-pro-preview").identifier == (
+        "gemini-3-pro-generate-content"
+    )
+    for base_model in ("gemma-4-26b-a4b-it", "gemini-2.5-flash", "tunedModels/biology-v2"):
+        base_profile = definition.request_profile(base_model)
+        assert base_profile.identifier == "gemini-generate-content"
+        assert base_profile.payload_parameters("topic_analysis", 80) == {
+            "maxOutputTokens": 80,
+            "response_format": {"type": "json_object"},
+        }
     definition.validate_model("tunedModels/biology-v2")
 
     credential = LLMCredential(

@@ -20,7 +20,7 @@ from app.llm.base import LLMProvider
 from app.llm.gemini_provider import GeminiProvider
 from app.llm.nvidia_models import get_nvidia_model_spec
 from app.llm.nvidia_provider import NvidiaNimProvider
-from app.llm.providers.gemini import GEMINI_REQUEST_PROFILE
+from app.llm.providers.gemini import definition as gemini_definition
 from app.models.llm_credential import LLMProviderName
 
 logger = get_logger(__name__)
@@ -111,7 +111,7 @@ def build_free_tiers(settings: Settings) -> list[FreeTier]:
                 build=lambda: GeminiProvider(
                     api_key=settings.GEMINI_API_KEY.strip(),
                     model=model,
-                    request_profile=GEMINI_REQUEST_PROFILE,
+                    request_profile=gemini_definition.request_profile(model),
                     generation_policy=policy,
                     test_policy=policy,
                 ),

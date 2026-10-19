@@ -98,10 +98,11 @@ class GeminiProvider(LLMProvider):
     def _build_payload(self, kind: str, system: str, prompt: str, max_tokens: int) -> dict:
         profile_parameters = self._request_profile.payload_parameters(kind, max_tokens)
         generation_config: dict[str, object] = {
-            "maxOutputTokens": profile_parameters["maxOutputTokens"]
+            "maxOutputTokens": profile_parameters.pop("maxOutputTokens")
         }
-        if "response_format" in profile_parameters:
+        if profile_parameters.pop("response_format", None) is not None:
             generation_config["responseMimeType"] = "application/json"
+        generation_config.update(profile_parameters)  # fixed profile fields such as thinkingConfig
 
         payload: dict[str, object] = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],

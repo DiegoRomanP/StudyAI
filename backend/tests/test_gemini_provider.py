@@ -105,6 +105,7 @@ def test_gemini_posts_native_request_and_returns_only_final_text():
         "generationConfig": {
             "maxOutputTokens": 123,
             "responseMimeType": "application/json",
+            "thinkingConfig": {"thinkingLevel": "minimal"},
         },
     }
 
@@ -121,8 +122,60 @@ def test_gemini_connection_test_uses_its_profile_smoke_budget():
         provider.close()
 
     payload = json.loads(route.calls[0].request.content)
-    assert payload["generationConfig"] == {"maxOutputTokens": 32}
+    assert payload["generationConfig"] == {
+        "maxOutputTokens": 256,
+        "thinkingConfig": {"thinkingLevel": "minimal"},
+    }
     assert "responseMimeType" not in payload["generationConfig"]
+
+
+@respx.mock
+def test_gemini_3_profile_sends_minimal_thinking_inside_generation_config():
+    route = respx.post(GENERATE_URL).mock(return_value=httpx.Response(200, json=_candidate("{}")))
+    provider = _provider()
+    try:
+        provider.complete(kind="session_content", system="sys", prompt="prompt", max_tokens=4096)
+    finally:
+        provider.close()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
+    assert "thinkingConfig" not in payload
+
+
+@respx.mock
+def test_gemini_3_pro_profile_sends_low_thinking():
+    model = "gemini-3.1-pro-preview"
+    route = respx.post(f"{BASE_URL}/models/{model}:generateContent").mock(
+        return_value=httpx.Response(200, json=_candidate("ok"))
+    )
+    provider = _provider(model=model)
+    try:
+        provider.test_connection()
+    finally:
+        provider.close()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+
+
+@pytest.mark.parametrize("model", ["gemma-4-26b-a4b-it", "gemini-2.5-flash"])
+@respx.mock
+def test_base_profile_sends_no_thinking_config(model):
+    route = respx.post(f"{BASE_URL}/models/{model}:generateContent").mock(
+        return_value=httpx.Response(200, json=_candidate("{}"))
+    )
+    provider = _provider(model=model)
+    try:
+        provider.complete(kind="topic_analysis", system="sys", prompt="prompt", max_tokens=2048)
+    finally:
+        provider.close()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["generationConfig"] == {
+        "maxOutputTokens": 2048,
+        "responseMimeType": "application/json",
+    }
 
 
 @respx.mock

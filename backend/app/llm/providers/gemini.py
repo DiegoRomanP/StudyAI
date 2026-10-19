@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from app.core.config import get_settings
 from app.llm.gemini_provider import GeminiProvider, validate_gemini_model_id
 from app.llm.providers.base import ModelOption, ProviderDefinition, ProviderMeta
@@ -17,6 +19,27 @@ GEMINI_REQUEST_PROFILE = RequestProfile(
     json_response_kinds=frozenset(
         {"topic_analysis", "session_plan", "session_content"}
     ),
+)
+# Gemini 3 thinks at "high" by default and those tokens count inside maxOutputTokens.
+# "minimal" still may think a little, so the connection probe gets more room.
+GEMINI_3_REQUEST_PROFILE = RequestProfile(
+    identifier="gemini-3-generate-content",
+    version="v1",
+    token_limit_parameter="maxOutputTokens",
+    test_max_tokens=256,
+    requires_usage=False,
+    json_response_kinds=GEMINI_REQUEST_PROFILE.json_response_kinds,
+    extra_parameters=MappingProxyType({"thinkingConfig": {"thinkingLevel": "minimal"}}),
+)
+# Gemini 3 Pro does not accept "minimal".
+GEMINI_3_PRO_REQUEST_PROFILE = RequestProfile(
+    identifier="gemini-3-pro-generate-content",
+    version="v1",
+    token_limit_parameter="maxOutputTokens",
+    test_max_tokens=256,
+    requires_usage=False,
+    json_response_kinds=GEMINI_REQUEST_PROFILE.json_response_kinds,
+    extra_parameters=MappingProxyType({"thinkingConfig": {"thinkingLevel": "low"}}),
 )
 
 
@@ -36,6 +59,9 @@ class GeminiDefinition(ProviderDefinition):
     )
 
     def request_profile(self, model: str) -> RequestProfile:
+        name = model.rsplit("/", 1)[-1].casefold()
+        if name.startswith("gemini-3"):
+            return GEMINI_3_PRO_REQUEST_PROFILE if "-pro" in name else GEMINI_3_REQUEST_PROFILE
         return GEMINI_REQUEST_PROFILE
 
     def validate_model(self, model: str) -> None:
