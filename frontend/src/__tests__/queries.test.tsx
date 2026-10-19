@@ -10,11 +10,13 @@ const api = vi.hoisted(() => ({
   deleteGoal: vi.fn(),
   submitQuiz: vi.fn(),
   getPlan: vi.fn(),
+  getSession: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
 
 import type { DocumentDTO } from "../api/types";
+import { REINFORCE_ALWAYS_FLAG, useReinforceAlways } from "../lib/reinforcePreference";
 import {
   DOCUMENTS_QUERY_KEY,
   getDocumentsListSnapshot,
@@ -23,6 +25,7 @@ import {
   useDocuments,
   useGeneratePlan,
   usePlan,
+  useSession,
   useSubmitQuiz,
   useUploadDocument,
 } from "../hooks/queries";
@@ -260,5 +263,75 @@ describe("useUploadDocument cache", () => {
       expect(documentsHook.result.current.data).toEqual([previousDocument, pendingUpload]);
     });
     documentsHook.unmount();
+  });
+});
+
+
+describe("session reinforcement", () => {
+  it("session polling stops when reinforcement is READY and refreshes the quiz", async () => {
+    vi.useFakeTimers();
+    try {
+      api.getSession
+        .mockResolvedValueOnce({ id: 5, reinforcement_status: "PROCESSING" })
+        .mockResolvedValue({ id: 5, reinforcement_status: "READY" });
+      const queryClient = createClient();
+      const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+      const { result } = renderHook(
+        () => {
+          const { data } = useSession(5);
+          return { data };
+        },
+        { wrapper: createWrapper(queryClient) },
+      );
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.data?.reinforcement_status).toBe("PROCESSING");
+      expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["quiz", 5] });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3010);
+      });
+      expect(result.current.data?.reinforcement_status).toBe("READY");
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["quiz", 5] });
+      const calls = api.getSession.mock.calls.length;
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9000);
+      });
+      expect(api.getSession).toHaveBeenCalledTimes(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preference survives a throwing localStorage", () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      const { result } = renderHook(() => useReinforceAlways());
+      expect(result.current.always).toBe(false);
+      expect(() => act(() => result.current.setAlways(true))).not.toThrow();
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
+  });
+
+  it("remembers the preference in localStorage", () => {
+    window.localStorage.clear();
+    const { result } = renderHook(() => useReinforceAlways());
+
+    act(() => result.current.setAlways(true));
+    expect(result.current.always).toBe(true);
+    expect(window.localStorage.getItem(`studyai.onboarding.${REINFORCE_ALWAYS_FLAG}`)).toBe("1");
+
+    act(() => result.current.setAlways(false));
+    expect(result.current.always).toBe(false);
   });
 });

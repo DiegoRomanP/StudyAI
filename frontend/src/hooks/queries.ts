@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   useMutation,
   useQueries,
@@ -243,10 +244,42 @@ export function usePlan(planId: number | null) {
 
 // --- Sessions & Quizzes ----------------------------------------------------
 export function useSession(sessionId: number | null) {
-  return useQuery({
+  const qc = useQueryClient();
+  const query = useQuery({
     queryKey: ["session", sessionId],
     queryFn: () => api.getSession(sessionId as number),
     enabled: sessionId != null,
+    // The AI reinforcement runs in the background: follow it until it settles.
+    refetchInterval: (current) => (current.state.data?.reinforcement_status === "PROCESSING" ? 3000 : false),
+  });
+
+  // When the reinforcement lands, its new quiz (and the plan's session list) must reload.
+  const status = query.data?.reinforcement_status;
+  const previous = useRef(status);
+  useEffect(() => {
+    if (previous.current === "PROCESSING" && status === "READY") {
+      qc.invalidateQueries({ queryKey: ["quiz", sessionId] });
+      qc.invalidateQueries({ queryKey: ["plan"] });
+    }
+    previous.current = status;
+  }, [status, sessionId, qc]);
+
+  return query;
+}
+
+export function useStartReinforcement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: number) => api.startReinforcement(sessionId),
+    onSuccess: (session) => qc.setQueryData(["session", session.id], session),
+  });
+}
+
+export function useCancelReinforcement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: number) => api.cancelReinforcement(sessionId),
+    onSuccess: (session) => qc.setQueryData(["session", session.id], session),
   });
 }
 
