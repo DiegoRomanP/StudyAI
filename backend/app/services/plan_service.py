@@ -28,7 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import ConflictError, LLMError, NotFoundError
+from app.core.exceptions import ConflictError, DailyLimitError, LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.adaptive_route import normalize
@@ -144,6 +144,42 @@ class PlanService:
         if plan is None or plan.user_id != user_id:
             raise NotFoundError("Plan no encontrado.")
         return plan
+
+    def resume_plan(self, user_id: int, plan_id: int) -> tuple[Plan, bool]:
+        """FAILED → PROCESSING; returns ``(plan, start_task)``. The generator does only what is missing."""
+        plan = self.get_plan(user_id, plan_id)
+        # Claim the plan before touching the quota (FreeAiQuota commits on its own),
+        # so a double POST starts one task and spends one use.
+        claimed = self.db.execute(
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.status == PlanStatus.FAILED)
+            .values(status=PlanStatus.PROCESSING)
+        )
+        self.db.commit()
+        if claimed.rowcount == 0:
+            self.db.refresh(plan)
+            if plan.status == PlanStatus.PROCESSING:
+                return plan, False  # idempotent replay
+            raise ConflictError(
+                "Solo se puede continuar un plan cuya generación quedó incompleta.",
+                "PLAN_NOT_RESUMABLE",
+            )
+
+        if _uses_free_ai(self.db, user_id):
+            try:
+                FreeAiQuota(self.db).consume(user_id)
+            except DailyLimitError:
+                self.db.execute(
+                    update(Plan)
+                    .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
+                    .values(status=PlanStatus.FAILED)
+                )
+                self.db.commit()
+                raise
+            self.db.execute(update(Plan).where(Plan.id == plan_id).values(free_ai_use_date=utc_today()))
+            self.db.commit()
+        self.db.refresh(plan)
+        return plan, True
 
     def list_plans(self, user_id: int) -> list[Plan]:
         return self.repo.list_for_user(user_id)

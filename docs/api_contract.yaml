@@ -144,6 +144,8 @@ paths:
         payload devuelve 409. Sin clave, conserva el comportamiento anterior y
         crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
         actual; no es una cola durable ni garantiza recuperación tras un cierre.
+        Si la generación falla o se interrumpe, el plan queda FAILED conservando
+        lo generado y se puede continuar con `/plans/{plan_id}/resume`.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -187,6 +189,47 @@ paths:
                 properties:
                   detail: { type: string }
                   code: { type: string, example: IDEMPOTENCY_KEY_REUSED }
+
+  /plans/{plan_id}/resume:
+    post:
+      summary: Continúa una generación incompleta (FAILED) sin repetir lo ya generado
+      description: >-
+        Pasa el plan de FAILED a PROCESSING y genera solo lo que falta (temas,
+        sesiones o el contenido de las sesiones sin material). Repetir la
+        petición mientras está en PROCESSING devuelve el mismo estado sin lanzar
+        otra tarea. Con la IA gratuita incluida gasta un uso, que se devuelve si
+        vuelve a fallar; con la IA propia, Ollama o el modo demo no cuenta.
+        Repetir `/plans/generate` con la misma Idempotency-Key no reanuda.
+      parameters:
+        - { name: plan_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "202":
+          description: Aceptado; el plan queda en PROCESSING
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanStatus" }
+        "404":
+          description: Plan no encontrado
+        "409":
+          description: El plan no está FAILED (code PLAN_NOT_RESUMABLE)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: PLAN_NOT_RESUMABLE }
+        "429":
+          description: Se agotó el cupo diario de la IA gratuita incluida (code FREE_AI_DAILY_LIMIT); el plan sigue FAILED con su mensaje
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [detail, code]
+                properties:
+                  detail: { type: string }
+                  code: { type: string, example: FREE_AI_DAILY_LIMIT }
 
   /plans/{plan_id}/status:
     get:
@@ -530,6 +573,13 @@ components:
         id: { type: integer }
         status: { type: string, enum: [PROCESSING, READY, FAILED] }
         error_message: { type: string }
+        progress_stage:
+          type: string
+          nullable: true
+          enum: [TOPICS, SESSIONS, CONTENT]
+          description: Etapa de la generación; null si aún no empezó.
+        progress_done: { type: integer, description: Sesiones con material preparado (etapa CONTENT). }
+        progress_total: { type: integer, description: Sesiones del plan (etapa CONTENT); 0 antes. }
     Plan:
       type: object
       properties:
@@ -543,6 +593,13 @@ components:
         error_message:
           type: string
           description: Mensaje saneado del fallo, vacío si status != FAILED.
+        progress_stage:
+          type: string
+          nullable: true
+          enum: [TOPICS, SESSIONS, CONTENT]
+          description: Etapa de la generación; null si aún no empezó.
+        progress_done: { type: integer, description: Sesiones con material preparado (etapa CONTENT). }
+        progress_total: { type: integer, description: Sesiones del plan (etapa CONTENT); 0 antes. }
         topics:
           type: array
           items: { $ref: "#/components/schemas/PlanTopic" }

@@ -64,6 +64,49 @@ def generate_plan(
     return PlanStatusResponse.model_validate(plan)
 
 
+def _error_response(description: str, code: str) -> dict:
+    return {
+        "description": description,
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "required": ["detail", "code"],
+                    "properties": {
+                        "detail": {"type": "string"},
+                        "code": {"type": "string", "example": code},
+                    },
+                }
+            }
+        },
+    }
+
+
+@router.post(
+    "/{plan_id}/resume",
+    response_model=PlanStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        404: {"description": "Plan no encontrado."},
+        409: _error_response(
+            "Solo se puede continuar un plan cuya generación quedó incompleta.", "PLAN_NOT_RESUMABLE"
+        ),
+        429: _error_response("Se agotaron los usos gratis de hoy.", "FREE_AI_DAILY_LIMIT"),
+    },
+)
+def resume_plan(
+    plan_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> PlanStatusResponse:
+    """Continue an incomplete (FAILED) generation, keeping what was already generated."""
+    plan, start_task = PlanService(db).resume_plan(user.id, plan_id)
+    if start_task:
+        background_tasks.add_task(generate_plan_task, plan.id)
+    return PlanStatusResponse.model_validate(plan)
+
+
 @router.get("", response_model=list[PlanResponse])
 def list_plans(
     db: Session = Depends(get_db),
