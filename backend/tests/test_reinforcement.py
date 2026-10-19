@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -130,7 +131,7 @@ def test_bundled_reinforcement_spends_one_use(client, created_plans, monkeypatch
 
     assert client.post(f"/sessions/{review_id}/reinforcement").status_code == 202
     assert len(tasks) == 1
-    assert tasks[0][2] is True  # spent
+    assert tasks[0][2] == free_ai_quota.utc_today()  # the day the use was spent
     generate_reinforcement_task(*tasks[0])
 
     assert _uses() == 1
@@ -146,10 +147,50 @@ def test_own_key_never_spends(client, created_plans, monkeypatch, tasks):
     _use_provider(monkeypatch, _Scripted())
 
     assert client.post(f"/sessions/{review_id}/reinforcement").status_code == 202
-    assert tasks[0][2] is False
+    assert tasks[0][2] is None
     generate_reinforcement_task(*tasks[0])
 
     assert _uses() == 0
+
+
+def _usage_on(day) -> int:
+    with SessionLocal() as db:
+        row = db.query(FreeAiUsage).filter_by(user_id=USER_ID, usage_date=day).one_or_none()
+        return row.uses if row else 0
+
+
+def test_a_failed_reinforcement_refunds_the_day_it_was_spent_after_midnight(
+    client, created_plans, monkeypatch, tasks
+):
+    _, review_id = _review(client, created_plans, "Refuerzo medianoche")
+    _reset_usage()
+    _bundled(monkeypatch)
+    client.post("/llm-settings/deactivate-all")
+    _use_provider(monkeypatch, _Scripted(error=LLMError("caído", code="LLM_PROVIDER_UNAVAILABLE")))
+    spent = free_ai_quota.utc_today()
+    client.post(f"/sessions/{review_id}/reinforcement")
+
+    monkeypatch.setattr(free_ai_quota, "utc_today", lambda: spent + timedelta(days=1))
+    generate_reinforcement_task(*tasks[0])
+
+    assert _usage_on(spent) == 0
+    assert _usage_on(spent + timedelta(days=1)) == 0
+
+
+def test_an_unexpected_quota_error_releases_the_claim(client, created_plans, monkeypatch, tasks):
+    _, review_id = _review(client, created_plans, "Refuerzo error inesperado")
+    _bundled(monkeypatch)
+    client.post("/llm-settings/deactivate-all")
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(free_ai_quota.FreeAiQuota, "consume", broken)
+    with pytest.raises(RuntimeError):
+        client.post(f"/sessions/{review_id}/reinforcement")
+
+    assert tasks == []
+    assert _detail(client, review_id)["reinforcement_status"] == "NONE"
 
 
 def test_reinforcement_rejected_for_new_completed_or_ready_session(client, created_plans):

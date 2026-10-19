@@ -32,7 +32,6 @@ SCHEMA_TEMPLATE = """{
   ]
 }"""
 
-_SCHEMA_TEMPLATE = SCHEMA_TEMPLATE  # backwards-compatible alias
 
 # An unescaped double quote ends the JSON string early; under a JSON grammar (Ollama)
 # the model then loops until the server aborts with "token repeat limit reached".

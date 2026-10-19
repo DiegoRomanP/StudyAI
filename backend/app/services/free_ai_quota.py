@@ -63,11 +63,15 @@ class FreeAiQuota:
         row = self._row(user_id)
         return FreeAiStatus(limit=self.limit, used=row.uses if row else 0)
 
-    def consume(self, user_id: int) -> None:
-        """Spend one use or raise ``DailyLimitError``; the increment is atomic in SQL."""
+    def consume(self, user_id: int) -> date:
+        """Spend one use or raise ``DailyLimitError``; returns the UTC day it was spent on.
+
+        The increment is atomic in SQL. Keep the returned day to refund that same day.
+        """
+        today = utc_today()
         if self._row(user_id) is None:
             try:
-                self.db.add(FreeAiUsage(user_id=user_id, usage_date=utc_today(), uses=0))
+                self.db.add(FreeAiUsage(user_id=user_id, usage_date=today, uses=0))
                 self.db.commit()
             except IntegrityError:  # a concurrent request created today's row first
                 self.db.rollback()
@@ -75,7 +79,7 @@ class FreeAiQuota:
             update(FreeAiUsage)
             .where(
                 FreeAiUsage.user_id == user_id,
-                FreeAiUsage.usage_date == utc_today(),
+                FreeAiUsage.usage_date == today,
                 FreeAiUsage.uses < self.limit,
             )
             .values(uses=FreeAiUsage.uses + 1)
@@ -83,6 +87,7 @@ class FreeAiQuota:
         self.db.commit()
         if spent.rowcount == 0:
             raise DailyLimitError(_LIMIT_MESSAGE.format(limit=self.limit), code="FREE_AI_DAILY_LIMIT")
+        return today
 
     def refund(self, user_id: int, day: date | None = None) -> None:
         """Give one use back on ``day`` (today by default), the day it was spent."""

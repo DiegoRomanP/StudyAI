@@ -1,8 +1,10 @@
 """Free-tier AI that ships with the server, so a learner can generate a plan without a key.
 
 A chain of tiers (today a single one: DeepSeek) behind the ordinary ``LLMProvider``
-interface. A tier that runs out of quota, is rate limited, stalls or is unavailable is
+interface. A tier whose server key stops working (out of quota, rejected, model gone) is
 skipped for a cooldown; when none is left the learner is asked to connect their own AI.
+A temporary failure (timeout, rate limit, connection) belongs to that one call: the next
+tier is tried, but the tier stays in line for everyone else and its real error is reported.
 The key comes from the operator's environment and is used only to build the provider
 client, never logged.
 """
@@ -24,8 +26,10 @@ from app.models.llm_credential import LLMProviderName
 
 logger = get_logger(__name__)
 
-# Seconds a tier is skipped after failing, by error code. Anything not listed is a problem
-# with one response (bad JSON, refusal): the next tier is tried but this one stays in line.
+# Seconds a tier is skipped after failing, by error code: only failures of the server key
+# itself, which would fail every learner's call alike. Anything else (a slow or rate-limited
+# response, bad JSON, a refusal) is about one call: the next tier is tried but this one stays
+# in line, so one learner's timeout never turns the free AI off for everybody.
 _COOLDOWN_SECONDS = {
     "LLM_QUOTA_EXHAUSTED": 30 * 60,
     "LLM_AUTHENTICATION_FAILED": 30 * 60,
@@ -33,11 +37,6 @@ _COOLDOWN_SECONDS = {
     "LLM_MODEL_UNAVAILABLE": 30 * 60,
     "LLM_ENDPOINT_OR_MODEL_UNAVAILABLE": 30 * 60,
     "LLM_UNSUPPORTED_CONFIGURATION": 30 * 60,
-    "LLM_RATE_LIMITED": 60,
-    "LLM_TIMEOUT": 2 * 60,
-    "LLM_CONNECTION_FAILED": 2 * 60,
-    "LLM_PROVIDER_UNAVAILABLE": 2 * 60,
-    "LLM_ASYNC_RESULT_UNAVAILABLE": 2 * 60,
 }
 _EXHAUSTED_MESSAGE = (
     "El uso gratuito de IA se agotó por ahora. Conecta tu propia IA en «Conectar IA» "
@@ -61,8 +60,6 @@ def _cooling_down(tier: str) -> bool:
 
 def _start_cooldown(tier: str, error: LLMError) -> None:
     seconds = _COOLDOWN_SECONDS.get(error.code)
-    if error.code == "LLM_RATE_LIMITED" and error.retry_after_seconds:
-        seconds = max(seconds or 0, error.retry_after_seconds)
     if seconds is None:
         return
     with _lock:

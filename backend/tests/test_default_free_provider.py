@@ -60,9 +60,7 @@ def test_uses_the_first_tier_while_it_answers():
     assert second_provider.calls == 0
 
 
-@pytest.mark.parametrize(
-    "code", ["LLM_QUOTA_EXHAUSTED", "LLM_RATE_LIMITED", "LLM_TIMEOUT", "LLM_AUTHENTICATION_FAILED"]
-)
+@pytest.mark.parametrize("code", ["LLM_QUOTA_EXHAUSTED", "LLM_AUTHENTICATION_FAILED", "LLM_MODEL_UNAVAILABLE"])
 def test_hands_over_to_the_next_tier_and_keeps_skipping_the_failed_one(code):
     first, first_provider = _tier("nvidia", LLMProviderName.NVIDIA, LLMError("x", code=code))
     second, second_provider = _tier("gemini", LLMProviderName.GEMINI, "from gemini")
@@ -72,6 +70,22 @@ def test_hands_over_to_the_next_tier_and_keeps_skipping_the_failed_one(code):
     assert _call(chain) == "from gemini"
     assert first_provider.calls == 1  # second call skipped it during the cooldown
     assert second_provider.calls == 2
+
+
+@pytest.mark.parametrize(
+    "code", ["LLM_TIMEOUT", "LLM_RATE_LIMITED", "LLM_CONNECTION_FAILED", "LLM_PROVIDER_UNAVAILABLE"]
+)
+def test_a_temporary_failure_is_reported_as_is_and_never_benches_the_tier(code):
+    only, provider = _tier("deepseek", LLMProviderName.DEEPSEEK, LLMError("lento", code=code))
+    chain = FreeTierProvider([only])
+
+    for _ in range(2):
+        with pytest.raises(LLMError) as failure:
+            _call(chain)
+        # The learner sees what happened, not a misleading "free use ran out".
+        assert failure.value.code == code
+    assert provider.calls == 2  # the next call (any learner's) still reaches the tier
+    assert not free._cooling_down("deepseek")
 
 
 def test_a_bad_single_response_tries_the_next_tier_without_benching_the_first():
@@ -86,7 +100,7 @@ def test_a_bad_single_response_tries_the_next_tier_without_benching_the_first():
 
 def test_reports_exhausted_free_use_when_every_tier_is_out():
     first, _ = _tier("nvidia", LLMProviderName.NVIDIA, LLMError("x", code="LLM_QUOTA_EXHAUSTED"))
-    second, _ = _tier("gemini", LLMProviderName.GEMINI, LLMError("y", code="LLM_RATE_LIMITED"))
+    second, _ = _tier("gemini", LLMProviderName.GEMINI, LLMError("y", code="LLM_AUTHENTICATION_FAILED"))
     chain = FreeTierProvider([first, second])
 
     with pytest.raises(LLMError) as first_failure:

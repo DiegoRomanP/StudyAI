@@ -14,6 +14,7 @@ from app.db.session import SessionLocal
 from app.llm.mock_provider import MockLLMProvider
 from app.models.plan import Plan, PlanStatus
 from app.services import plan_service
+from app.services.free_ai_quota import FreeAiQuota
 from tests.test_default_free_provider import _free_ai_client, _goal, _reset_usage
 from tests.test_free_ai_refund import _uses
 
@@ -165,6 +166,23 @@ def test_resume_over_the_daily_limit_is_429_and_keeps_the_plan_failed_with_its_m
 
         assert refused.status_code == 429
         assert refused.json()["code"] == "FREE_AI_DAILY_LIMIT"
+        assert started == []
+        status = client.get(f"/plans/{plan_id}/status").json()
+        assert (status["status"], status["error_message"]) == ("FAILED", "Mensaje anterior")
+
+
+def test_an_unexpected_quota_error_hands_the_plan_back_failed(monkeypatch):
+    with _free_ai_client(monkeypatch) as client:
+        plan_id = _free_failed_plan(client, "Mensaje anterior")
+        started = _record_resume_tasks(monkeypatch)
+
+        def broken(*_args, **_kwargs):
+            raise RuntimeError("database is locked")
+
+        monkeypatch.setattr(FreeAiQuota, "consume", broken)
+        with pytest.raises(RuntimeError):
+            client.post(f"/plans/{plan_id}/resume")
+
         assert started == []
         status = client.get(f"/plans/{plan_id}/status").json()
         assert (status["status"], status["error_message"]) == ("FAILED", "Mensaje anterior")

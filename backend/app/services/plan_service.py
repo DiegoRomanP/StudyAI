@@ -28,14 +28,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import ConflictError, DailyLimitError, LLMError, NotFoundError
+from app.core.exceptions import ConflictError, LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.adaptive_route import normalize
 from app.algorithms.pareto import select_top_by_relevance
 from app.llm.base import LLMProvider
 from app.llm.factory import get_llm_provider, resolve_llm_provider
-from app.llm.mock_provider import MockLLMProvider
 from app.llm.output_budget import complete_within_budget
 from app.llm.output_parsers import parse_llm_json
 from app.services.session_content_builder import build_session_content
@@ -48,15 +47,11 @@ from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
-from app.services.free_ai_quota import FreeAiQuota, utc_today, uses_free_ai
+from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
 from app.strategies.goal_strategies import GoalStrategyFactory
 from app.utils.text import extract_keywords
 
 logger = get_logger(__name__)
-
-
-# Kept as a module-level name for existing imports and monkeypatches.
-_uses_free_ai = uses_free_ai
 
 
 class PlanService:
@@ -82,9 +77,7 @@ class PlanService:
                 return self._check_idempotency_payload(existing, request_hash), False
 
         # Spent before the plan exists, so a learner over the daily limit gets a 429 and no row.
-        spent_free_use = _uses_free_ai(self.db, user_id)
-        if spent_free_use:
-            FreeAiQuota(self.db).consume(user_id)
+        spent_day = FreeAiQuota(self.db).consume(user_id) if uses_free_ai(self.db, user_id) else None
 
         plan = Plan(
             user_id=user_id,
@@ -94,24 +87,23 @@ class PlanService:
             document_ids=list(document_ids),
             idempotency_key=idempotency_key,
             idempotency_request_hash=request_hash if idempotency_key is not None else None,
-            free_ai_use_date=utc_today() if spent_free_use else None,
+            free_ai_use_date=spent_day,
         )
-        if idempotency_key is None:
-            return self.repo.save(plan), True
-
         self.db.add(plan)
         try:
             self.db.commit()
-            self.db.refresh(plan)
-            return plan, True
-        except IntegrityError:
+        except Exception as exc:
             self.db.rollback()
-            if spent_free_use:
-                FreeAiQuota(self.db).refund(user_id)
+            if spent_day is not None:  # no plan row holds the use: give it back now
+                _refund_use(self.db, user_id, spent_day)
+            if idempotency_key is None or not isinstance(exc, IntegrityError):
+                raise
             winner = self._find_idempotent_plan(user_id, idempotency_key)
             if winner is None:
                 raise
             return self._check_idempotency_payload(winner, request_hash), False
+        self.db.refresh(plan)
+        return plan, True
 
     @staticmethod
     def _idempotency_request_hash(goal_id: int, document_ids: list[int]) -> str:
@@ -165,19 +157,28 @@ class PlanService:
                 "PLAN_NOT_RESUMABLE",
             )
 
-        if _uses_free_ai(self.db, user_id):
+        spent_day = None
+        try:
+            if uses_free_ai(self.db, user_id):
+                spent_day = FreeAiQuota(self.db).consume(user_id)
+                self.db.execute(update(Plan).where(Plan.id == plan_id).values(free_ai_use_date=spent_day))
+                self.db.commit()
+        except Exception:
+            # No task will run: hand the plan back as it was (FAILED, same message) and the use too.
+            self.db.rollback()
+            if spent_day is not None:
+                _refund_use(self.db, user_id, spent_day)
             try:
-                FreeAiQuota(self.db).consume(user_id)
-            except DailyLimitError:
                 self.db.execute(
                     update(Plan)
                     .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
-                    .values(status=PlanStatus.FAILED)
+                    .values(status=PlanStatus.FAILED, free_ai_use_date=None)
                 )
                 self.db.commit()
-                raise
-            self.db.execute(update(Plan).where(Plan.id == plan_id).values(free_ai_use_date=utc_today()))
-            self.db.commit()
+            except Exception:  # noqa: BLE001 - startup recovery fails it if even this cannot be written
+                self.db.rollback()
+                logger.warning("Could not hand plan %s back as FAILED after a refused resume", plan_id)
+            raise
         self.db.refresh(plan)
         return plan, True
 
@@ -202,6 +203,15 @@ class PlanService:
                 delete(FlashcardReview).where(FlashcardReview.question_id.in_(question_ids))
             )
         self.repo.delete(plan)
+
+
+def _refund_use(db: Session, user_id: int, day: date) -> None:
+    """Give back a use that no plan row holds (the request failed before or while saving it)."""
+    try:
+        FreeAiQuota(db).refund(user_id, day)
+    except Exception:  # noqa: BLE001 - bookkeeping must never hide the real outcome
+        db.rollback()
+        logger.warning("Could not refund the free AI use for user %s", user_id)
 
 
 def _refund_plan_use(db: Session, plan_id: int, user_id: int, fallback_day: date | None) -> None:
@@ -346,7 +356,6 @@ class _Generator:
                 raise LLMError("La IA no devolvió temas para tu material.", code="LLM_INVALID_RESPONSE")
             topics = self._persist_topics(plan, topics_data)
             self._select(topics)
-            self._set_progress(plan.id, GenerationStage.SESSIONS, 0, 0)
         elif not any(topic.selected for topic in topics):
             self._select(topics)
         selected = [topic for topic in topics if topic.selected]

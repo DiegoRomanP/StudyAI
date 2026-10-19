@@ -181,9 +181,11 @@ order — check this chain before assuming which LLM is actually being called:
 3. The included free-tier AI (`app/llm/default_free_provider.py`): DeepSeek via `DEEPSEEK_API_KEY`
    (`DEFAULT_DEEPSEEK_MODEL`, default `deepseek-flash`, thinking disabled through its request profile).
    NVIDIA NIM and Gemini are no longer free tiers (they remain as bring-your-own-key providers). The
-   chain shape is kept with a single tier: one that is out of quota (DeepSeek's 402 "saldo"), rate
-   limited, stalled or unavailable is skipped for a cooldown (in-process, `reset_cooldowns()` for tests)
-   and then it raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock.
+   chain shape is kept with a single tier: one whose server key stops working (out of quota — DeepSeek's
+   402 "saldo" —, rejected key, model gone) is skipped for a cooldown (in-process, `reset_cooldowns()` for
+   tests) and then it raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock.
+   A temporary failure (timeout, 429, connection, 5xx) never benches the tier: it concerns one call, so its
+   real error is reported to that learner and everyone else keeps the free AI.
    The key exists only in the environment: `Settings` reads the **repo-root `.env`** and then
    `backend/.env` (the latter wins; both git-ignored). `tests/conftest.py` and the QA runner
    (`scripts/qa-runtime.mjs`) force it empty as an environment variable (which beats both files) so no

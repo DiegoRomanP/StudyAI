@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import event, select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session as OrmSession
 
 from app.db.session import SessionLocal
 from app.llm.mock_provider import MockLLMProvider
@@ -110,4 +113,23 @@ def test_a_plan_deleted_mid_generation_gives_its_use_back(monkeypatch):
 
         assert provider.deleted
         assert client.get(f"/plans/{plan_id}").status_code == 404
+        assert _uses() == 0
+
+
+def test_a_plan_that_cannot_be_saved_gives_its_use_back(monkeypatch):
+    def refuse_plans(session, _flush_context, _instances):
+        if any(isinstance(obj, Plan) for obj in session.new):
+            raise OperationalError("INSERT INTO plans", {}, Exception("database is locked"))
+
+    with _free_ai_client(monkeypatch) as client:
+        _reset_usage()
+        client.post("/llm-settings/deactivate-all")
+        goal_id = _goal(client)
+        event.listen(OrmSession, "before_flush", refuse_plans)
+        try:
+            with pytest.raises(OperationalError):
+                client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+        finally:
+            event.remove(OrmSession, "before_flush", refuse_plans)
+
         assert _uses() == 0
