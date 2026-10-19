@@ -66,6 +66,7 @@ const result: QuizResultDTO = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -94,8 +95,9 @@ function renderSession(
 }
 
 async function goToQuiz() {
-  fireEvent.click(await screen.findByRole("button", { name: /saltar al receso/i }));
-  fireEvent.click(await screen.findByRole("button", { name: /ir al test/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Terminé" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Ir al test" }));
 }
 
 async function answerFlashcard(prompt: string, quality: number) {
@@ -111,23 +113,98 @@ describe("SessionPage", () => {
   it("material headings never add a second h1", async () => {
     renderSession();
 
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
     await screen.findByText(/Lee/);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 1, name: "Algoritmos" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2, name: "Algoritmos" })).toHaveLength(1);
   });
 
-  it("shows which session step is current, with done steps checked", async () => {
+  it("pre-start shows only exit, heading, 25:00 and Empezar", async () => {
     renderSession();
 
-    const steps = await screen.findByRole("list", { name: "Progreso de la sesión" });
-    expect(within(steps).getByText("Estudio").closest("li")).toHaveAttribute("aria-current", "step");
-    expect(screen.getByText("Paso 1 de 3")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Algoritmos" })).toBeInTheDocument();
+    expect(screen.getByRole("timer", { name: "Tiempo restante" })).toHaveTextContent("25:00");
+    expect(screen.getByRole("button", { name: "Empezar" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Salir de la sesión" })).toHaveAttribute("href", "/plan/9");
+    expect(screen.queryByText(/Lee/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Terminé" })).not.toBeInTheDocument();
+  });
 
+  it("Empezar reveals the material and focuses Terminé", async () => {
+    renderSession();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+    expect(await screen.findByText(/Lee/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Terminé" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Empezar" })).not.toBeInTheDocument();
+  });
+
+  it("Terminé starts the break automatically", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    renderSession();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Terminé" }));
+    const heading = await screen.findByRole("heading", { name: "Descanso" });
+    expect(heading).toHaveFocus();
+    expect(screen.getByRole("timer")).toHaveTextContent("05:00");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(screen.getByRole("timer")).toHaveTextContent("04:57");
+  });
+
+  it("study moves to the break at 0", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    renderSession();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+    await vi.advanceTimersByTimeAsync(25 * 60 * 1000);
+    expect(await screen.findByRole("heading", { name: "Descanso" })).toBeInTheDocument();
+  });
+
+  it("the break moves to the test at 0", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    renderSession();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Terminé" }));
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(await screen.findByText("¿Qué mide Big O?")).toBeInTheDocument();
+  });
+
+  it("Ir al test skips the break", async () => {
+    renderSession();
     await goToQuiz();
-    expect(within(steps).getByText("Test").closest("li")).toHaveAttribute("aria-current", "step");
-    expect(within(steps).getByText("Estudio").closest("li")).toHaveTextContent("(hecho)");
-    expect(screen.getByText("Paso 3 de 3")).toBeInTheDocument();
+
+    expect(await screen.findByText("¿Qué mide Big O?")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Descanso" })).not.toBeInTheDocument();
+  });
+
+  it("removed copy is gone", async () => {
+    renderSession();
+
+    await screen.findByRole("button", { name: "Empezar" });
+    fireEvent.click(screen.getByRole("button", { name: "Empezar" }));
+    await screen.findByText(/Lee/);
+    const removed = [
+      "Saltar al receso",
+      "Iniciar",
+      "Receso activo",
+      "Paso ",
+      "tiempo de estudio",
+      "Camina 5 minutos",
+      "Volver al plan",
+      "Buscar videos relacionados",
+    ];
+    for (const text of removed) expect(screen.queryByText(new RegExp(text))).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Progreso de la sesión" })).not.toBeInTheDocument();
+  });
+
+  it("Repasar el material only with ?fase=test", async () => {
+    renderSession();
+    await goToQuiz();
+    await screen.findByText("¿Qué mide Big O?");
+    expect(screen.queryByRole("button", { name: "Repasar el material" })).not.toBeInTheDocument();
   });
 
   it("labels the recall scale visibly and explains why Siguiente is disabled", async () => {
@@ -275,7 +352,6 @@ describe("SessionPage", () => {
       session: { ...session, status: "COMPLETED", completed_at: "2026-10-10T12:00:00Z" },
     });
 
-    expect(await screen.findByText(/Ya completaste esta sesión/)).toBeInTheDocument();
     await goToQuiz();
     expect(screen.queryByText("¿Qué mide Big O?")).not.toBeInTheDocument();
 
@@ -290,7 +366,6 @@ describe("SessionPage", () => {
       session: { ...session, status: "COMPLETED", completed_at: "2026-10-10T12:00:00Z" },
     });
 
-    expect(await screen.findByText(/Ya completaste esta sesión/)).toBeInTheDocument();
     await goToQuiz();
     expect(await screen.findByRole("button", { name: "Registrar un nuevo intento" })).toBeInTheDocument();
     expect(screen.queryByText("¿Qué mide Big O?")).not.toBeInTheDocument();
@@ -299,14 +374,10 @@ describe("SessionPage", () => {
   it("renders study material without LLM-provided links or remote images", async () => {
     renderSession();
 
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
     expect(await screen.findByText("esta fuente")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "esta fuente" })).not.toBeInTheDocument();
     expect(document.querySelector('img[src="https://evil.example/pixel.png"]')).toBeNull();
-    const videoLinks = screen.getAllByRole("link", { name: /big o/i });
-    expect(videoLinks).toHaveLength(2);
-    for (const link of videoLinks) {
-      expect(link.getAttribute("href")).toMatch(/^https:\/\/www\.youtube\.com\/results\?search_query=/);
-    }
   });
 
   it("does not submit twice when the final button is activated repeatedly", async () => {

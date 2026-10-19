@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Check } from "lucide-react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { X } from "lucide-react";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import type { QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { QuizPhase } from "../components/session/QuizPhase";
@@ -10,7 +10,6 @@ import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { useSession } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
-import { parseApiDate } from "../lib/studyProgress";
 
 type Phase = "study" | "break" | "test" | "done";
 
@@ -88,54 +87,46 @@ function SessionFlow({
     setPhase("done");
   }
 
+  const fromPractice = searchParams.get("fase") === "test";
+  const material = session.material?.content_markdown || "_Sin material._";
+  const exit = (
+    <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost" aria-label="Salir de la sesión">
+      <X aria-hidden="true" className="h-5 w-5" />
+    </ButtonLink>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {updateError}
-      <div>
-        <Link
-          to={`/plan/${session.plan_id}`}
-          className="inline-flex min-h-11 items-center gap-1.5 text-sm text-action hover:underline"
-        >
-          <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-          Volver al plan
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">{session.topic_name}</h1>
-        {phase !== "done" && (
-          <p className="mt-1 max-w-reading text-sm text-text-muted">
-            Estudia el material. Cuando acabe el tiempo pasarás a un receso de 5 min y después al test.
-          </p>
-        )}
-        <PhaseIndicator phase={phase} />
-        {phase === "test" && (
-          <Button type="button" variant="ghost" className="mt-2" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
-            {reviewing ? "Volver al test" : "Repasar el material"}
-          </Button>
-        )}
-      </div>
 
-      {alreadyCompleted && phase !== "done" && (
-        <Alert tone="info">
-          <p>
-            Ya completaste esta sesión
-            {session.completed_at ? ` el ${formatDate(session.completed_at)}` : ""}. Puedes repasar
-            el material; responder el test de nuevo registrará otro intento.
-          </p>
-        </Alert>
-      )}
-
-      {phase === "study" && (
+      {phase === "study" ? (
         <StudyPhase
+          topic={session.topic_name}
           durationMinutes={session.duration_minutes}
-          markdown={session.material?.content_markdown ?? ""}
-          keywords={session.material?.youtube_keywords ?? []}
+          exit={exit}
           onDone={() => setPhase("break")}
-        />
+        >
+          <SafeMarkdown>{material}</SafeMarkdown>
+        </StudyPhase>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 pt-2">
+            {exit}
+            {phase === "test" && fromPractice && (
+              <Button type="button" variant="ghost" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
+                {reviewing ? "Volver al test" : "Repasar el material"}
+              </Button>
+            )}
+          </div>
+          <h1 className="sr-only">{session.topic_name}</h1>
+        </>
       )}
+
       {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
       {phase === "test" && reviewing && (
         <Card>
           <div className="prose-study mx-auto max-w-reading">
-            <SafeMarkdown>{session.material?.content_markdown || "_Sin material._"}</SafeMarkdown>
+            <SafeMarkdown>{material}</SafeMarkdown>
           </div>
         </Card>
       )}
@@ -163,53 +154,6 @@ function SessionFlow({
             </div>
           </Card>
         ))}
-    </div>
-  );
-}
-
-function formatDate(value: string) {
-  const date = parseApiDate(value);
-  return !date
-    ? value
-    : date.toLocaleDateString("es", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function PhaseIndicator({ phase }: { phase: Phase }) {
-  const steps: { key: Phase; label: string }[] = [
-    { key: "study", label: "Estudio" },
-    { key: "break", label: "Receso" },
-    { key: "test", label: "Test" },
-  ];
-  const order: Phase[] = ["study", "break", "test", "done"];
-  const current = order.indexOf(phase);
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-3">
-      <ol aria-label="Progreso de la sesión" className="flex flex-wrap gap-2">
-        {steps.map((step, index) => {
-          const isCurrent = index === current;
-          const isDone = index < current;
-          return (
-            <li
-              key={step.key}
-              aria-current={isCurrent ? "step" : undefined}
-              className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-                isCurrent
-                  ? "bg-action-subtle text-action ring-2 ring-inset ring-action-hover"
-                  : isDone
-                    ? "bg-state-success-subtle text-state-success"
-                    : "bg-surface-muted text-text-muted"
-              }`}
-            >
-              {isDone && <Check aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.5} />}
-              {step.label}
-              {isDone && <span className="sr-only"> (hecho)</span>}
-            </li>
-          );
-        })}
-      </ol>
-      <p className="text-sm text-text-muted">
-        {phase === "done" ? "Sesión terminada" : `Paso ${current + 1} de ${steps.length}`}
-      </p>
     </div>
   );
 }

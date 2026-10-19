@@ -5,7 +5,6 @@ import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
 import { EmptyState } from "../EmptyState";
-import { HelpTerm } from "../help/HelpTerm";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
 import { ChoiceOptions } from "./ChoiceOptions";
 import { SafeMarkdown } from "./SafeMarkdown";
@@ -45,10 +44,6 @@ export function QuizPhase({
   if (alreadyCompleted && !retakeConfirmed) {
     return (
       <Alert tone="warning" title="Esta sesión ya tiene un resultado guardado">
-        <p>
-          Si respondes el test de nuevo, se registrará como un nuevo intento y actualizará tus
-          estadísticas y repasos.
-        </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => setRetakeConfirmed(true)}>
             Registrar un nuevo intento
@@ -221,8 +216,7 @@ function FlashCard({
       {flipped && (
         <fieldset>
           <legend className="mb-2 w-full text-center text-sm font-medium text-text-muted">
-            ¿Qué tan bien la recordaste? Esto decide cuándo vuelve a salir (
-            <HelpTerm term="repaso">repaso espaciado</HelpTerm>).
+            ¿Qué tan bien la recordaste?
           </legend>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {QUALITY_LABELS.map((label, quality) => (

@@ -4,9 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Countdown timer that computes remaining time from a target timestamp, so it
  * does not drift even if the interval callback is delayed or the tab throttles.
  */
-export function useTimer(durationSeconds: number, onComplete?: () => void) {
+export function useTimer(
+  durationSeconds: number,
+  onComplete?: () => void,
+  options: { autoStart?: boolean } = {},
+) {
   const [remaining, setRemaining] = useState(durationSeconds);
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState(options.autoStart ?? false);
   const targetRef = useRef<number>(Date.now() + durationSeconds * 1000);
   const completedRef = useRef(false);
 
