@@ -2,7 +2,7 @@
 
 Decouples "a session was completed" from its side effects (updating SM-2
 schedules, future: analytics, notifications). Handlers run synchronously within
-the caller's DB transaction, which the event carries.
+the caller's DB transaction, which the event carries; each one inside its own SAVEPOINT.
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ class SessionCompletedEvent:
     db: "DBSession"
     # question_id -> SM-2 quality rating (0..5), for flashcards only.
     flashcard_qualities: dict[int, int] = field(default_factory=dict)
+    # Set when the completion comes from a graded quiz (not from POST /complete).
+    quiz_result_id: int | None = None
+    # False for a retake of a session that was already completed.
+    first_completion: bool = True
 
 
 Handler = Callable[[SessionCompletedEvent], None]
@@ -38,12 +42,17 @@ class EventBus:
         self._handlers: dict[str, list[Handler]] = {}
 
     def subscribe(self, event_type: str, handler: Handler) -> None:
-        self._handlers.setdefault(event_type, []).append(handler)
+        handlers = self._handlers.setdefault(event_type, [])
+        if handler not in handlers:
+            handlers.append(handler)
 
     def publish(self, event_type: str, event: SessionCompletedEvent) -> None:
-        for handler in self._handlers.get(event_type, []):
+        for handler in list(self._handlers.get(event_type, [])):
             try:
-                handler(event)
+                # A SAVEPOINT per handler: a failure rolls back only its own writes and
+                # leaves the caller's transaction usable for the final commit.
+                with event.db.begin_nested():
+                    handler(event)
             except Exception:  # noqa: BLE001 - one handler must not break others
                 logger.exception("Handler for '%s' failed", event_type)
 
