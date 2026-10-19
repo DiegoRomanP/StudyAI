@@ -17,23 +17,26 @@ SYSTEM = (
     "fences de markdown."
 )
 
-SCHEMA_TEMPLATE = """{{
+SCHEMA_TEMPLATE = """{
   "summary_markdown": "string (markdown: resumen, explicación y punto clave)",
   "youtube_keywords": ["string", "..."],
   "flashcards": [
-    {{ "question": "string", "answer": "string" }}
+    { "question": "string", "answer": "string" }
   ],
   "multiple_choice": [
-    {{
+    {
       "question": "string",
       "options": ["string", "string", "string", "string"],
       "answer": "string (debe coincidir EXACTAMENTE con una opción)"
-    }}
+    }
   ]
-}}"""
+}"""
 
 _SCHEMA_TEMPLATE = SCHEMA_TEMPLATE  # backwards-compatible alias
 
+# An unescaped double quote ends the JSON string early; under a JSON grammar (Ollama)
+# the model then loops until the server aborts with "token repeat limit reached".
+NO_DOUBLE_QUOTES = "Dentro de los textos no uses comillas dobles: usa «comillas angulares» o comillas simples."
 # Bounded lengths keep each session near 1.6-1.9k output tokens.
 QUIZ_LENGTH_LIMITS = (
     "Cada flashcard: pregunta de 20 palabras como máximo y respuesta de 30 como máximo. "
@@ -62,6 +65,6 @@ def build_session_content_prompt(
         f"con una de las 'options'.\n\n"
         "Extensión: 'summary_markdown' entre 250 y 400 palabras en total (resumen de 80 palabras como máximo, "
         "explicación en 3 a 5 apartados breves y punto clave en 1 o 2 frases). "
-        f"{QUIZ_LENGTH_LIMITS}\n\n"
+        f"{QUIZ_LENGTH_LIMITS} {NO_DOUBLE_QUOTES}\n\n"
         f"Devuelve exactamente este esquema JSON:\n{SCHEMA_TEMPLATE}"
     )

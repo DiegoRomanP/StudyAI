@@ -29,3 +29,16 @@ def test_topic_analysis_prompt_bounds_topic_names():
 
     assert "6 palabras como máximo" in prompt
     assert "sin descripciones" in prompt
+
+
+def test_content_prompts_forbid_inner_double_quotes_and_show_a_valid_schema():
+    points = [{"prompt": "¿Qué es X?", "answer": "Y"}]
+    prompts = [
+        build_session_content_prompt("Tema", "Meta", ["fragmento"], 5, 5),
+        build_reinforcement_prompt("Tema", "Meta", points, "extracto", 5, 5),
+    ]
+
+    for prompt in prompts:
+        assert "no uses comillas dobles" in prompt
+        assert "{{" not in prompt and "}}" not in prompt
+        assert '"summary_markdown"' in prompt

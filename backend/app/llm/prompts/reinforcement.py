@@ -6,7 +6,7 @@ call, so model routing and the runtime report need no new entry.
 
 from __future__ import annotations
 
-from app.llm.prompts.session_content import QUIZ_LENGTH_LIMITS, SCHEMA_TEMPLATE
+from app.llm.prompts.session_content import NO_DOUBLE_QUOTES, QUIZ_LENGTH_LIMITS, SCHEMA_TEMPLATE
 
 MAX_POINTS = 12
 
@@ -33,6 +33,6 @@ def build_reinforcement_prompt(
         f"Crea EXACTAMENTE {flashcards} flashcards y {multiple_choice} preguntas de opción múltiple (4 opciones) "
         "NUEVAS sobre esos puntos; no copies las preguntas originales. 'answer' debe coincidir exactamente con una opción.\n\n"
         "Extensión: 80 palabras como máximo por punto y 600 palabras como máximo en total. "
-        f"{QUIZ_LENGTH_LIMITS}\n\n"
+        f"{QUIZ_LENGTH_LIMITS} {NO_DOUBLE_QUOTES}\n\n"
         f"Devuelve exactamente este esquema JSON:\n{SCHEMA_TEMPLATE}"
     )
