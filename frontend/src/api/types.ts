@@ -35,6 +35,15 @@ export interface GoalUpdate {
   description?: string;
 }
 
+export type SessionKind = "NEW" | "REVIEW";
+export type ReinforcementStatus = "NONE" | "PROCESSING" | "READY" | "FAILED";
+export type MasteryState = "SIN_DATOS" | "REFORZAR" | "EN_PROGRESO" | "DOMINADO";
+
+export interface ReviewPoint {
+  prompt: string;
+  answer: string;
+}
+
 export interface PlanTopicDTO {
   id: number;
   name: string;
@@ -42,6 +51,10 @@ export interface PlanTopicDTO {
   difficulty: number;
   relevance: number;
   selected: boolean;
+  mastery: number | null;
+  review_box: number;
+  mastery_state: MasteryState;
+  priority: number;
 }
 
 export type SessionStatus = "PENDING" | "COMPLETED";
@@ -53,6 +66,11 @@ export interface SessionSummaryDTO {
   duration_minutes: number;
   review_offset_days: number;
   status: SessionStatus;
+  kind: SessionKind;
+  topic_id: number | null;
+  /** `YYYY-MM-DD`; null on sessions created before the adaptive route. */
+  scheduled_date: string | null;
+  reinforcement_status: ReinforcementStatus;
 }
 
 export interface PlanStatusDTO {
@@ -88,6 +106,12 @@ export interface SessionDetailDTO {
   status: SessionStatus;
   completed_at: string | null;
   material: SessionMaterialDTO | null;
+  kind: SessionKind;
+  topic_id: number | null;
+  scheduled_date: string | null;
+  review_points: ReviewPoint[];
+  reinforcement_status: ReinforcementStatus;
+  reinforcement_error: string;
 }
 
 export interface QuizQuestionDTO {

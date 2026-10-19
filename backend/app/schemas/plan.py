@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.algorithms.adaptive_route import priority as topic_priority
+from app.algorithms.adaptive_route import topic_state
 from app.models.plan import PlanStatus
 
 
@@ -23,6 +25,18 @@ class PlanTopicResponse(BaseModel):
     difficulty: int
     relevance: float
     selected: bool
+    mastery: float | None = None
+    review_box: int = 0
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def mastery_state(self) -> str:
+        return topic_state(self.mastery, self.review_box)
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def priority(self) -> float:
+        return topic_priority(self.relevance, self.mastery)
 
 
 class SessionSummary(BaseModel):
@@ -34,6 +48,10 @@ class SessionSummary(BaseModel):
     duration_minutes: int
     review_offset_days: int
     status: str
+    kind: str = "NEW"
+    topic_id: int | None = None
+    scheduled_date: date | None = None
+    reinforcement_status: str = "NONE"
 
 
 class PlanStatusResponse(BaseModel):

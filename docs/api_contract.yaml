@@ -229,6 +229,9 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionDetail" }
 
   /sessions/{session_id}/complete:
     post:
@@ -510,10 +513,75 @@ components:
           description: Mensaje saneado del fallo, vacío si status != FAILED.
         topics:
           type: array
-          items: { type: object }
+          items: { $ref: "#/components/schemas/PlanTopic" }
         sessions:
           type: array
-          items: { type: object }
+          items: { $ref: "#/components/schemas/SessionSummary" }
+    PlanTopic:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        subtopics:
+          type: array
+          items: { type: string }
+        difficulty: { type: integer, minimum: 1, maximum: 5 }
+        relevance: { type: number }
+        selected: { type: boolean }
+        mastery:
+          type: number
+          nullable: true
+          description: Dominio 0..1 (media móvil de los exámenes); null = sin datos (cuenta como 0.5).
+        review_box:
+          type: integer
+          description: Escalón de la escalera de repasos (REVIEW_INTERVALS_DAYS).
+        mastery_state:
+          type: string
+          enum: [SIN_DATOS, REFORZAR, EN_PROGRESO, DOMINADO]
+        priority:
+          type: number
+          description: relevance × (1 − dominio); decide qué repaso va primero.
+    SessionSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        order_index: { type: integer }
+        topic_name: { type: string }
+        duration_minutes: { type: integer }
+        review_offset_days: { type: integer }
+        status: { type: string, enum: [PENDING, COMPLETED] }
+        kind: { type: string, enum: [NEW, REVIEW] }
+        topic_id: { type: integer, nullable: true }
+        scheduled_date:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha sugerida (UTC). Null en sesiones anteriores a la ruta adaptativa.
+        reinforcement_status: { type: string, enum: [NONE, PROCESSING, READY, FAILED] }
+    SessionDetail:
+      allOf:
+        - $ref: "#/components/schemas/SessionSummary"
+        - type: object
+          properties:
+            plan_id: { type: integer }
+            completed_at: { type: string, format: date-time, nullable: true }
+            material:
+              type: object
+              nullable: true
+              properties:
+                content_markdown: { type: string }
+                youtube_keywords:
+                  type: array
+                  items: { type: string }
+            review_points:
+              type: array
+              description: Preguntas falladas del examen que creó este repaso.
+              items:
+                type: object
+                properties:
+                  prompt: { type: string }
+                  answer: { type: string }
+            reinforcement_error: { type: string }
     ProviderCatalogEntry:
       type: object
       properties:

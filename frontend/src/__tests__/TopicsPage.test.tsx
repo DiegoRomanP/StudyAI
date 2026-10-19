@@ -7,6 +7,7 @@ import { api } from "../api/endpoints";
 import type { PlanDTO } from "../api/types";
 import { PAGE_GUIDES } from "../lib/pageGuides";
 import { TopicsPage } from "../pages/TopicsPage";
+import { makeTopic, makeSessionSummary } from "../test/fixtures";
 
 const plan = (overrides: Partial<PlanDTO>): PlanDTO => ({
   id: 9,
@@ -17,11 +18,11 @@ const plan = (overrides: Partial<PlanDTO>): PlanDTO => ({
   created_at: "2026-10-12T10:00:00Z",
   error_message: "",
   topics: [
-    { id: 1, name: "Grafos", subtopics: ["BFS", "DFS"], difficulty: 4, relevance: 0.95, selected: true },
-    { id: 2, name: "Historia", subtopics: [], difficulty: 1, relevance: 0.2, selected: false },
+    makeTopic({ id: 1, name: "Grafos", subtopics: ["BFS", "DFS"], difficulty: 4, relevance: 0.95, selected: true }),
+    makeTopic({ id: 2, name: "Historia", subtopics: [], difficulty: 1, relevance: 0.2, selected: false }),
   ],
   sessions: [
-    { id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+    makeSessionSummary({ id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" }),
   ],
   ...overrides,
 });
@@ -74,7 +75,7 @@ describe("TopicsPage", () => {
         id: 10,
         title: "Plan de redes",
         created_at: "2026-10-13T10:00:00Z",
-        topics: [{ id: 3, name: "TCP", subtopics: [], difficulty: 3, relevance: 0.8, selected: true }],
+        topics: [makeTopic({ id: 3, name: "TCP", subtopics: [], difficulty: 3, relevance: 0.8, selected: true })],
       }),
     ]);
     renderTopics("/temas?plan=9");

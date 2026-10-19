@@ -7,6 +7,7 @@ import { apiClient } from "../api/client";
 import { api } from "../api/endpoints";
 import type { PlanDTO, QuizDTO } from "../api/types";
 import { PracticePage } from "../pages/PracticePage";
+import { makeTopic, makeSessionSummary } from "../test/fixtures";
 
 const plan: PlanDTO = {
   id: 9,
@@ -17,12 +18,12 @@ const plan: PlanDTO = {
   created_at: "2026-10-12T10:00:00",
   error_message: "",
   topics: [
-    { id: 1, name: "Grafos", subtopics: [], difficulty: 5, relevance: 0.9, selected: true },
-    { id: 2, name: "Listas", subtopics: [], difficulty: 2, relevance: 0.7, selected: true },
+    makeTopic({ id: 1, name: "Grafos", subtopics: [], difficulty: 5, relevance: 0.9, selected: true }),
+    makeTopic({ id: 2, name: "Listas", subtopics: [], difficulty: 2, relevance: 0.7, selected: true }),
   ],
   sessions: [
-    { id: 70, order_index: 0, topic_name: "Listas", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" },
-    { id: 71, order_index: 1, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 1, status: "PENDING" },
+    makeSessionSummary({ id: 70, order_index: 0, topic_name: "Listas", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" }),
+    makeSessionSummary({ id: 71, order_index: 1, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 1, status: "PENDING" }),
   ],
 };
 

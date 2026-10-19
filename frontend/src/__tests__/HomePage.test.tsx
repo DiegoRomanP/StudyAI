@@ -12,6 +12,7 @@ import type {
   ProviderCatalogEntry,
 } from "../api/types";
 import { HomePage } from "../pages/HomePage";
+import { makeTopic, makeSessionSummary } from "../test/fixtures";
 
 const openAi: ProviderCatalogEntry = {
   provider: "OPENAI",
@@ -93,13 +94,13 @@ const readyPlan: PlanDTO = {
   created_at: "2026-10-15T09:00:00Z",
   error_message: "",
   topics: [
-    { id: 1, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.95, selected: true },
-    { id: 2, name: "Árboles", subtopics: [], difficulty: 3, relevance: 0.72, selected: true },
-    { id: 3, name: "Historia", subtopics: [], difficulty: 1, relevance: 0.1, selected: false },
+    makeTopic({ id: 1, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.95, selected: true }),
+    makeTopic({ id: 2, name: "Árboles", subtopics: [], difficulty: 3, relevance: 0.72, selected: true }),
+    makeTopic({ id: 3, name: "Historia", subtopics: [], difficulty: 1, relevance: 0.1, selected: false }),
   ],
   sessions: [
-    { id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" },
-    { id: 71, order_index: 1, topic_name: "Árboles", duration_minutes: 25, review_offset_days: 1, status: "PENDING" },
+    makeSessionSummary({ id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" }),
+    makeSessionSummary({ id: 71, order_index: 1, topic_name: "Árboles", duration_minutes: 25, review_offset_days: 1, status: "PENDING" }),
   ],
 };
 

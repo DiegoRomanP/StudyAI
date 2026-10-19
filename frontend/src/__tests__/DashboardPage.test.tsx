@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/endpoints";
 import type { DashboardDTO, PlanDTO } from "../api/types";
 import { DashboardPage } from "../pages/DashboardPage";
+import { makeSessionSummary } from "../test/fixtures";
 
 const emptyDashboard: DashboardDTO = {
   scores: [],
@@ -107,7 +108,7 @@ describe("DashboardPage", () => {
       error_message: "",
       topics: [],
       sessions: [
-        { id: 71, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+        makeSessionSummary({ id: 71, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" }),
       ],
     };
     vi.spyOn(api, "listPlans").mockResolvedValue([plan]);

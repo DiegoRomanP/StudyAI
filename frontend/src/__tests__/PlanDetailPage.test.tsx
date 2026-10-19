@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/endpoints";
 import type { PlanDTO } from "../api/types";
 import { PlanDetailPage } from "../pages/PlanDetailPage";
+import { makeTopic, makeSessionSummary } from "../test/fixtures";
 
 const readyPlan: PlanDTO = {
   id: 9,
@@ -16,7 +17,7 @@ const readyPlan: PlanDTO = {
   created_at: "2026-10-01T10:00:00Z",
   error_message: "",
   topics: [
-    { id: 1, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.9, selected: true },
+    makeTopic({ id: 1, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.9, selected: true }),
   ],
   sessions: [],
 };
@@ -79,9 +80,9 @@ describe("PlanDetailPage", () => {
       ...readyPlan,
       created_at: "2026-10-12T10:00:00",
       sessions: [
-        { id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" },
-        { id: 72, order_index: 2, topic_name: "Heaps", duration_minutes: 25, review_offset_days: 3, status: "PENDING" },
-        { id: 71, order_index: 1, topic_name: "Árboles", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+        makeSessionSummary({ id: 70, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "COMPLETED" }),
+        makeSessionSummary({ id: 72, order_index: 2, topic_name: "Heaps", duration_minutes: 25, review_offset_days: 3, status: "PENDING" }),
+        makeSessionSummary({ id: 71, order_index: 1, topic_name: "Árboles", duration_minutes: 25, review_offset_days: 0, status: "PENDING" }),
       ],
     });
     renderPlan();

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/endpoints";
 import type { DashboardDTO, DocumentDTO, GoalDTO, LLMRuntimeDTO, PlanDTO } from "../api/types";
 import { GettingStarted } from "../components/home/GettingStarted";
+import { makeSessionSummary } from "../test/fixtures";
 
 const mockRuntime: LLMRuntimeDTO = {
   source: "MOCK",
@@ -50,7 +51,7 @@ const readyPlan: PlanDTO = {
   error_message: "",
   topics: [],
   sessions: [
-    { id: 71, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" },
+    makeSessionSummary({ id: 71, order_index: 0, topic_name: "Grafos", duration_minutes: 25, review_offset_days: 0, status: "PENDING" }),
   ],
 };
 

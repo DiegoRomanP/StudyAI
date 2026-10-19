@@ -10,6 +10,7 @@ import {
   sessionProgress,
   suggestedSessionDate,
 } from "../lib/studyProgress";
+import { makeSessionSummary, makeTopic } from "../test/fixtures";
 
 function plan(overrides: Partial<PlanDTO>): PlanDTO {
   return {
@@ -26,14 +27,14 @@ function plan(overrides: Partial<PlanDTO>): PlanDTO {
   };
 }
 
-const session = (id: number, order: number, status: "PENDING" | "COMPLETED", offset = 0) => ({
-  id,
-  order_index: order,
-  topic_name: `Tema ${id}`,
-  duration_minutes: 25,
-  review_offset_days: offset,
-  status,
-});
+const session = (id: number, order: number, status: "PENDING" | "COMPLETED", offset = 0) =>
+  makeSessionSummary({
+    id,
+    order_index: order,
+    topic_name: `Tema ${id}`,
+    review_offset_days: offset,
+    status,
+  });
 
 const dashboard = (overrides: Partial<DashboardDTO>): DashboardDTO => ({
   scores: [],
@@ -128,9 +129,9 @@ describe("study progress derivations", () => {
 
   it("ranks Pareto-selected topics first by estimated relevance with clamped percentages", () => {
     const ranked = rankTopics([
-      { id: 1, name: "Redes", subtopics: [], difficulty: 2, relevance: 0.6, selected: false },
-      { id: 2, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.954, selected: true },
-      { id: 3, name: "Árboles", subtopics: [], difficulty: 3, relevance: 1.4, selected: true },
+      makeTopic({ id: 1, name: "Redes", subtopics: [], difficulty: 2, relevance: 0.6, selected: false }),
+      makeTopic({ id: 2, name: "Grafos", subtopics: [], difficulty: 4, relevance: 0.954, selected: true }),
+      makeTopic({ id: 3, name: "Árboles", subtopics: [], difficulty: 3, relevance: 1.4, selected: true }),
     ]);
     expect(ranked.map((topic) => [topic.name, topic.relevancePercent])).toEqual([
       ["Árboles", 100],

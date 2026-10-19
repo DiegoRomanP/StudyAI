@@ -6,22 +6,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/endpoints";
 import type { QuizDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { SessionPage } from "../pages/SessionPage";
+import { makeSessionDetail } from "../test/fixtures";
 
-const session: SessionDetailDTO = {
+const session: SessionDetailDTO = makeSessionDetail({
   id: 5,
   plan_id: 9,
-  order_index: 0,
   topic_name: "Algoritmos",
-  duration_minutes: 25,
   review_offset_days: 0,
-  status: "PENDING",
-  completed_at: null,
   material: {
     content_markdown:
       "# Algoritmos\n\nLee [esta fuente](https://evil.example/phish) y mira ![diagrama](https://evil.example/pixel.png).",
     youtube_keywords: ["big o", "big o"],
   },
-};
+});
 
 const quiz: QuizDTO = {
   id: 77,

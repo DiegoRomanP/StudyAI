@@ -7,6 +7,7 @@ import { api } from "../api/endpoints";
 import type { DocumentDTO, PlanDTO } from "../api/types";
 import { DOCUMENTS_QUERY_KEY } from "../hooks/queries";
 import { STUDY_START_STORAGE_KEY, useStudyStart, type StudyStartInput } from "../hooks/useStudyStart";
+import { makeSessionSummary } from "../test/fixtures";
 
 const indexed: DocumentDTO = {
   id: 4,
@@ -28,14 +29,12 @@ const readyPlan: PlanDTO = {
   error_message: "",
   topics: [],
   sessions: [
-    {
+    makeSessionSummary({
       id: 70,
       order_index: 0,
       topic_name: "Grafos",
-      duration_minutes: 25,
       review_offset_days: 0,
-      status: "PENDING",
-    },
+    }),
   ],
 };
 
