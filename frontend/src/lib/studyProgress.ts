@@ -36,12 +36,47 @@ export function readyPlans(plans: PlanDTO[] | undefined): PlanDTO[] {
   return (plans ?? []).filter((plan) => plan.status === "READY").sort(byNewestFirst);
 }
 
-/** First pending session (by order) of the most recent READY plan that still has one. */
+/**
+ * Adaptive route order: which pending session goes first today. Computed on read (never
+ * persisted), because what is "due" changes every day even without a new exam.
+ *   1) reviews that are due (no date, or on/before today): heavier topics first;
+ *   2) new sessions in the AI's order;
+ *   3) future reviews, soonest first.
+ * Dates are `YYYY-MM-DD` and compare as text.
+ */
+export function routeOrder(
+  plan: Pick<PlanDTO, "sessions" | "topics">,
+  today = new Date(),
+): SessionSummaryDTO[] {
+  const todayKey = toDateKey(today);
+  const weight = (session: SessionSummaryDTO) =>
+    plan.topics.find((topic) => topic.id === session.topic_id)?.priority ?? 0;
+  const pending = plan.sessions.filter((session) => session.status === "PENDING");
+  const isReview = (session: SessionSummaryDTO) => session.kind === "REVIEW";
+  const due = pending
+    .filter((s) => isReview(s) && (s.scheduled_date === null || s.scheduled_date <= todayKey))
+    .sort(
+      (a, b) =>
+        weight(b) - weight(a) ||
+        (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? "") ||
+        a.id - b.id,
+    );
+  const fresh = pending.filter((s) => !isReview(s)).sort(byOrder);
+  const future = pending
+    .filter((s) => isReview(s) && s.scheduled_date !== null && s.scheduled_date > todayKey)
+    .sort(
+      (a, b) =>
+        (a.scheduled_date ?? "").localeCompare(b.scheduled_date ?? "") || weight(b) - weight(a) || a.id - b.id,
+    );
+  return [...due, ...fresh, ...future];
+}
+
+/** Next session of the most recent READY plan that still has a pending one (route order). */
 export function findNextSession(
   plans: PlanDTO[] | undefined,
 ): { plan: PlanDTO; session: SessionSummaryDTO } | null {
   for (const plan of readyPlans(plans)) {
-    const session = [...plan.sessions].sort(byOrder).find((item) => item.status === "PENDING");
+    const session = routeOrder(plan)[0];
     if (session) return { plan, session };
   }
   return null;
@@ -55,9 +90,11 @@ export interface SessionProgress {
   percent: number;
 }
 
-/** Completed vs pending sessions across READY plans. */
+/** Completed vs pending sessions across READY plans; reviews are extra, not progress. */
 export function sessionProgress(plans: PlanDTO[] | undefined): SessionProgress {
-  const sessions = readyPlans(plans).flatMap((plan) => plan.sessions);
+  const sessions = readyPlans(plans)
+    .flatMap((plan) => plan.sessions)
+    .filter((session) => session.kind === "NEW");
   const completed = sessions.filter((session) => session.status === "COMPLETED").length;
   const total = sessions.length;
   return {
@@ -80,8 +117,9 @@ export function upcomingReviewCount(dashboard: DashboardDTO | undefined): number
   return (dashboard?.upcoming_reviews ?? []).reduce((sum, review) => sum + review.count, 0);
 }
 
-/** The plan's own suggested day for a session: creation date + review offset. */
+/** The session's suggested day: its scheduled date, or (old plans) creation date + offset. */
 export function suggestedSessionDate(plan: Pick<PlanDTO, "created_at">, session: SessionSummaryDTO) {
+  if (session.scheduled_date) return parseApiDate(session.scheduled_date);
   const created = parseApiDate(plan.created_at);
   if (!created) return null;
   const date = new Date(created.getFullYear(), created.getMonth(), created.getDate());

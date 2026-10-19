@@ -105,4 +105,36 @@ describe("PlanDetailPage", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/session/70", "/session/71", "/session/72"]);
     expect(screen.getByRole("link", { name: /Ver temas clave/ })).toHaveAttribute("href", "/temas?plan=9");
   });
+
+  it("links Siguiente to the review that is due before a new session and badges it", async () => {
+    vi.spyOn(api, "getPlan").mockResolvedValue({
+      ...readyPlan,
+      created_at: "2026-10-12T10:00:00",
+      sessions: [
+        makeSessionSummary({ id: 70, order_index: 0, topic_name: "Grafos", status: "COMPLETED", topic_id: 1 }),
+        makeSessionSummary({ id: 71, order_index: 1, topic_name: "Árboles" }),
+        makeSessionSummary({
+          id: 72,
+          order_index: 2,
+          topic_name: "Grafos",
+          kind: "REVIEW",
+          topic_id: 1,
+          scheduled_date: "2026-10-01",
+        }),
+      ],
+    });
+    renderPlan();
+
+    expect(await screen.findByRole("link", { name: /Comenzar siguiente sesión/ })).toHaveAttribute(
+      "href",
+      "/session/72",
+    );
+    expect(screen.getByText("1 de 2 sesiones completadas")).toBeInTheDocument();
+    const sessions = screen.getByRole("region", { name: "Sesiones" });
+    expect(within(sessions).getByRole("link", { name: /Grafos.*Repaso.*Pendiente/ })).toHaveAttribute(
+      "href",
+      "/session/72",
+    );
+    expect(within(sessions).queryByText(/repaso a/)).not.toBeInTheDocument();
+  });
 });

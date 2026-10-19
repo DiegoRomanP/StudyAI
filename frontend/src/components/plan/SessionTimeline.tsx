@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import type { PlanDTO, SessionSummaryDTO } from "../../api/types";
 import { suggestedSessionDate, toDateKey } from "../../lib/studyProgress";
 import { Badge, SegmentedControl } from "../ui";
-import { HelpTerm } from "../help/HelpTerm";
 
 type View = "calendar" | "list";
 
@@ -19,8 +18,8 @@ function dayLabel(date: Date) {
 }
 
 /**
- * Every session of the plan, with stable links. "Calendario" groups them by the plan's
- * own suggested day (creation date + review offset); "Lista" keeps the study order.
+ * Every session of the plan, with stable links. "Calendario" groups them by their
+ * scheduled day; "Lista" keeps the study order.
  */
 export function SessionTimeline({ plan }: { plan: PlanDTO }) {
   const [view, setView] = useState<View>("calendar");
@@ -81,11 +80,7 @@ export function SessionTimeline({ plan }: { plan: PlanDTO }) {
           ))}
         </ol>
       )}
-      <p className="text-xs text-text-muted">
-        Las fechas son sugerencias del plan (día de creación + intervalo de{" "}
-        <HelpTerm term="repaso">repaso espaciado</HelpTerm>); puedes abrir cualquier sesión cuando
-        quieras, incluidas las completadas.
-      </p>
+      <p className="text-xs text-text-muted">Fechas sugeridas.</p>
     </section>
   );
 }
@@ -111,10 +106,10 @@ function SessionRow({ session, showOrder = false }: { session: SessionSummaryDTO
       <span className="min-w-0 flex-1">
         <span className="block font-medium text-text-primary">{session.topic_name}</span>
         <span className="block text-xs text-text-muted">
-          {session.duration_minutes} min de estudio · repaso a {session.review_offset_days}{" "}
-          {session.review_offset_days === 1 ? "día" : "días"}
+          {session.duration_minutes} min
         </span>
       </span>
+      {session.kind === "REVIEW" && <Badge color="brand">Repaso</Badge>}
       {done ? <Badge color="green">Completada</Badge> : <Badge>Pendiente</Badge>}
       <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-text-muted" />
     </Link>

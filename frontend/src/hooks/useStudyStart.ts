@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiErrorMessage, isNotFoundError } from "../api/errors";
 import type { GoalCreate, PlanDTO, SessionSummaryDTO } from "../api/types";
 import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
+import { routeOrder } from "../lib/studyProgress";
 import {
   getDocumentsListSnapshot,
   useCreateGoal,
@@ -84,11 +85,7 @@ function isLostResponse(error: unknown) {
 
 function firstPendingSession(plan: PlanDTO | undefined): SessionSummaryDTO | null {
   if (!plan) return null;
-  return (
-    [...plan.sessions]
-      .sort((a, b) => a.order_index - b.order_index)
-      .find((session) => session.status === "PENDING") ?? null
-  );
+  return routeOrder(plan)[0] ?? null;
 }
 
 export function useStudyStart() {

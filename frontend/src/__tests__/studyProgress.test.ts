@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { DashboardDTO, PlanDTO } from "../api/types";
+import type { DashboardDTO, PlanDTO, SessionSummaryDTO } from "../api/types";
 import {
   dueReviewCount,
   findNextSession,
   parseApiDate,
   quizStreakDays,
   rankTopics,
+  routeOrder,
   sessionProgress,
   suggestedSessionDate,
 } from "../lib/studyProgress";
@@ -138,5 +139,61 @@ describe("study progress derivations", () => {
       ["Grafos", 95],
       ["Redes", 60],
     ]);
+  });
+});
+
+
+describe("routeOrder", () => {
+  const today = new Date(2026, 9, 19); // 2026-10-19, local
+  const topics = [
+    makeTopic({ id: 1, name: "A", relevance: 0.9, selected: true, priority: 0.2 }),
+    makeTopic({ id: 2, name: "B", relevance: 0.8, selected: true, priority: 0.6 }),
+  ];
+  const item = (id: number, order: number, fields: Partial<SessionSummaryDTO> = {}) =>
+    makeSessionSummary({ id, order_index: order, topic_name: `Tema ${id}`, ...fields });
+  const ids = (sessions: SessionSummaryDTO[]) => sessions.map((s) => s.id);
+
+  it("puts due reviews (heavier first), then new sessions, then future reviews", () => {
+    const sessions = [
+      item(1, 0, { topic_id: 1 }),
+      item(2, 1, { topic_id: 2 }),
+      item(3, 2, { kind: "REVIEW", topic_id: 1, scheduled_date: "2026-10-18" }),
+      item(4, 3, { kind: "REVIEW", topic_id: 2, scheduled_date: "2026-10-19" }),
+      item(5, 4, { kind: "REVIEW", topic_id: 1, scheduled_date: "2026-10-25" }),
+      item(6, 5, { kind: "REVIEW", topic_id: 2, scheduled_date: "2026-10-22" }),
+    ];
+    expect(ids(routeOrder({ sessions, topics }, today))).toEqual([4, 3, 1, 2, 6, 5]);
+  });
+
+  it("breaks ties by date and then id, and treats an undated review as due", () => {
+    const sessions = [
+      item(9, 0, { kind: "REVIEW", topic_id: 1, scheduled_date: "2026-10-19" }),
+      item(8, 1, { kind: "REVIEW", topic_id: 1, scheduled_date: "2026-10-17" }),
+      item(7, 2, { kind: "REVIEW", topic_id: 1, scheduled_date: null }),
+    ];
+    expect(ids(routeOrder({ sessions, topics }, today))).toEqual([7, 8, 9]);
+  });
+
+  it("orders a legacy plan (all new, undated) exactly by order_index and skips completed", () => {
+    const sessions = [
+      item(3, 2),
+      item(1, 0, { status: "COMPLETED" }),
+      item(2, 1),
+    ];
+    expect(ids(routeOrder({ sessions, topics: [] }, today))).toEqual([2, 3]);
+  });
+
+  it("reads a date-only scheduled_date as a local day", () => {
+    const date = suggestedSessionDate(plan({}), item(1, 0, { scheduled_date: "2026-10-19" }));
+    expect([date?.getFullYear(), date?.getMonth(), date?.getDate()]).toEqual([2026, 9, 19]);
+  });
+
+  it("does not lower session progress when a review is added", () => {
+    const base = [item(1, 0, { status: "COMPLETED" }), item(2, 1)];
+    const before = sessionProgress([plan({ sessions: base })]);
+    const after = sessionProgress([
+      plan({ sessions: [...base, item(3, 2, { kind: "REVIEW", topic_id: 1, scheduled_date: "2026-10-22" })] }),
+    ]);
+    expect(after).toEqual(before);
   });
 });

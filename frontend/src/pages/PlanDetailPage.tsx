@@ -146,7 +146,9 @@ export function PlanDetailPage() {
   }
 
   const topics = rankTopics(plan.topics).filter((topic) => topic.selected);
-  const completed = plan.sessions.filter((session) => session.status === "COMPLETED").length;
+  // Reviews are extra: they never change the "N of M" progress of the plan.
+  const planned = plan.sessions.filter((session) => session.kind === "NEW");
+  const completed = planned.filter((session) => session.status === "COMPLETED").length;
   const next = findNextSession([plan]);
 
   return (
@@ -159,7 +161,7 @@ export function PlanDetailPage() {
           La IA analizó tu material y organizó las sesiones alrededor de los temas que estimó más
           relevantes.
         </p>
-        <Badge color="green">Listo · {plan.sessions.length} sesiones</Badge>
+        <Badge color="green">Listo · {planned.length} sesiones</Badge>
         <div className="pt-2">
           <StepChain
             label="Cómo es cada sesión"
@@ -176,7 +178,7 @@ export function PlanDetailPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <p className="text-sm text-text-muted">
-              {completed} de {plan.sessions.length} sesiones completadas
+              {completed} de {planned.length} sesiones completadas
             </p>
             {next ? (
               <p className="font-medium text-text-primary">Siguiente: {next.session.topic_name}</p>
@@ -194,7 +196,7 @@ export function PlanDetailPage() {
           )}
         </div>
         <ProgressBar
-          value={plan.sessions.length === 0 ? 0 : (completed / plan.sessions.length) * 100}
+          value={planned.length === 0 ? 0 : (completed / planned.length) * 100}
           label="Sesiones completadas del plan"
         />
       </Card>
