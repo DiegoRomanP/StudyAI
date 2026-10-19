@@ -24,7 +24,7 @@ import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
 const STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
   READY: { label: "Listo", color: "green" },
-  FAILED: { label: "Error", color: "red" },
+  FAILED: { label: "Incompleto", color: "red" },
 } as const;
 
 export function PlanPage() {
@@ -321,7 +321,7 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
               ? `${plan.sessions.filter((session) => session.status === "COMPLETED").length} de ${plan.sessions.length} sesiones completadas`
               : plan.status === "PROCESSING"
                 ? "Generando…"
-                : "Ver qué falló"}
+                : "Continuar generación"}
           </p>
         </Link>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">

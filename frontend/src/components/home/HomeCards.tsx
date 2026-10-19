@@ -215,7 +215,7 @@ export function ParetoFocusCard({ plan, limit = 5 }: { plan: PlanDTO; limit?: nu
 const PLAN_STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
   READY: { label: "Listo", color: "green" },
-  FAILED: { label: "Error", color: "red" },
+  FAILED: { label: "Incompleto", color: "red" },
 } as const;
 
 export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: number }) {
@@ -247,7 +247,7 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
                 <span className="mt-auto flex items-center justify-between gap-2 text-xs text-text-muted">
                   <span>
                     {plan.status === "FAILED"
-                      ? "Ver qué falló →"
+                      ? "Continuar generación →"
                       : plan.status === "PROCESSING"
                         ? "Generando…"
                         : `${completed} de ${plan.sessions.length} sesiones`}

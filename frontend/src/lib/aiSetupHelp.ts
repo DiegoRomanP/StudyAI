@@ -64,6 +64,11 @@ export const OLLAMA_COMMANDS: HelpCommand[] = [
   },
   { id: "pull", label: `2. Descarga un modelo`, command: `ollama pull ${OLLAMA_MODEL}` },
   { id: "list", label: "3. Comprueba que aparece", command: "ollama list" },
+  {
+    id: "context",
+    label: "4. Dale más contexto (recomendado)",
+    command: "OLLAMA_CONTEXT_LENGTH=16384 ollama serve",
+  },
 ];
 
 export const OLLAMA_DOWNLOAD_URL = "https://ollama.com/download";
@@ -72,4 +77,5 @@ export const OLLAMA_NOTES = [
   "En Windows, usa el instalador y luego los pasos 2 y 3.",
   "Si no responde, ejecuta «ollama serve» en otra terminal.",
   "El servidor debe llegar a Ollama (por defecto http://127.0.0.1:11434; se cambia con OLLAMA_BASE_URL).",
+  "Si Ollama corre como servicio, añade Environment=\"OLLAMA_CONTEXT_LENGTH=16384\" con «sudo systemctl edit ollama», reinícialo y compruébalo con «ollama ps» (columna CONTEXT).",
 ];

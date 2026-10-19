@@ -368,7 +368,9 @@ describe("HomePage", () => {
     expect(screen.getByText("curl -fsSL https://ollama.com/install.sh | sh")).toBeInTheDocument();
     expect(screen.getByText("ollama pull llama3.1")).toBeInTheDocument();
     expect(screen.getByText("ollama list")).toBeInTheDocument();
-    expect(screen.getByText(/ollama serve/)).toBeInTheDocument();
+    expect(screen.getByText(/ejecuta «ollama serve»/)).toBeInTheDocument();
+    expect(screen.getByText("OLLAMA_CONTEXT_LENGTH=16384 ollama serve")).toBeInTheDocument();
+    expect(screen.getByText(/sudo systemctl edit ollama/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Copiar comando: ollama pull llama3.1" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("ollama pull llama3.1"));
@@ -510,15 +512,73 @@ describe("HomePage", () => {
     renderHome();
 
     expect(await screen.findByText(/No pudimos consultar el estado de tu plan/)).toBeInTheDocument();
-    expect(screen.queryByText("Generando tu plan…")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Generando tu plan…|Analizando tu material…/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    expect(await screen.findByText("Generando tu plan…")).toBeInTheDocument();
+    // Once the plan is read, the stage it reports replaces the generic label.
+    expect(await screen.findByText("Analizando tu material…")).toBeInTheDocument();
     expect(getPlan).toHaveBeenCalledTimes(2);
 
     // Generation is a background task: the learner can always stop following it.
     fireEvent.click(screen.getByRole("button", { name: "Dejar de seguir este plan" }));
-    expect(screen.queryByText("Generando tu plan…")).not.toBeInTheDocument();
+    expect(screen.queryByText("Analizando tu material…")).not.toBeInTheDocument();
     expect(window.sessionStorage.getItem("studyai.study-start")).toBeNull();
+  });
+
+  describe("an incomplete plan", () => {
+    const failedPlan: PlanDTO = {
+      ...readyPlan,
+      id: 9,
+      status: "FAILED",
+      error_message: "La IA cortó la respuesta.",
+      progress_stage: "CONTENT",
+      progress_done: 1,
+      progress_total: 2,
+    };
+
+    function followFailedPlan(runtime: LLMRuntimeDTO = userRuntime) {
+      window.sessionStorage.setItem("studyai.study-start", JSON.stringify({ v: 1, planId: 9 }));
+      mockApi({ plans: [failedPlan], runtime });
+      return vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+    }
+
+    it("is labelled incomplete in the recent plans", async () => {
+      followFailedPlan();
+      renderHome();
+
+      const recent = await screen.findByRole("region", { name: "Tus planes" });
+      expect(within(recent).getByText("Incompleto")).toBeInTheDocument();
+      expect(within(recent).getByText("Continuar generación →")).toBeInTheDocument();
+    });
+
+    it("is continued from Inicio and followed again with its stage", async () => {
+      followFailedPlan();
+      vi.spyOn(api, "resumePlan").mockResolvedValue({
+        id: 9,
+        status: "PROCESSING",
+        error_message: "",
+        progress_stage: "CONTENT",
+        progress_done: 1,
+        progress_total: 2,
+      });
+      renderHome();
+
+      expect(await screen.findByText("La IA cortó la respuesta.")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Revisar mi IA" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Empezar de nuevo" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Continuar generación" }));
+
+      expect(await screen.findByRole("status", { name: "Preparando la sesión 2 de 2" })).toBeInTheDocument();
+      expect(api.resumePlan).toHaveBeenCalledOnce();
+    });
+
+    it("cannot be continued without free uses left, and says why", async () => {
+      followFailedPlan({ ...bundledRuntime, free_ai: { limit: 3, used: 3, remaining: 0 } });
+      renderHome();
+
+      const button = await screen.findByRole("button", { name: "Continuar generación" });
+      await waitFor(() => expect(button).toBeDisabled());
+      expect(button).toHaveAccessibleDescription(/Sin usos gratis hoy\./);
+    });
   });
 
   it("explains an empty saved-goal list after a lost goal creation instead of a dead form", async () => {

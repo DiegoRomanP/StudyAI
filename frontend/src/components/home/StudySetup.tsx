@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,12 +11,14 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type { GoalType } from "../../api/types";
 import {
   getDocumentsListSnapshot,
   useDocuments,
   useGoals,
+  useLlmRuntime,
   useUploadDocument,
 } from "../../hooks/queries";
 import { useStudyStart, type StudyStartInput } from "../../hooks/useStudyStart";
@@ -26,6 +28,7 @@ import {
   type GoalTemplate,
 } from "../../lib/goalTemplates";
 import { DocumentPicker } from "../documents/DocumentPicker";
+import { generationLabel } from "../plan/GenerationProgress";
 import { DocumentUpload } from "../documents/DocumentUpload";
 import { GoalTemplatePicker } from "../goals/GoalTemplatePicker";
 import {
@@ -503,13 +506,17 @@ function StudyStatus({
   onRetry: () => void;
   onChooseSavedGoal: () => void;
 }) {
+  const runtime = useLlmRuntime();
+  const reasonId = useId();
+  const noFreeUses = runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
+
   return (
     <div aria-live="polite" className="space-y-3">
       {study.phase === "saving-goal" && <ActivityIndicator label="Guardando tu meta…" />}
       {study.phase === "requesting-plan" && <ActivityIndicator label="Solicitando tu plan…" />}
       {study.phase === "processing" && (
         <div className="space-y-2">
-          <ActivityIndicator label="Generando tu plan…" />
+          <ActivityIndicator label={study.plan ? generationLabel(study.plan) : "Generando tu plan…"} />
           <p className="text-sm text-text-muted">
             Puedes salir de esta página: el plan seguirá generándose.
           </p>
@@ -563,6 +570,16 @@ function StudyStatus({
               </>
             ) : study.planId !== null && (
               <>
+                {study.canResume && (
+                  <Button
+                    type="button"
+                    disabled={noFreeUses || study.isResuming}
+                    aria-describedby={noFreeUses ? reasonId : undefined}
+                    onClick={() => void study.resume()}
+                  >
+                    {study.isResuming ? "Continuando…" : "Continuar generación"}
+                  </Button>
+                )}
                 <ButtonLink to="/settings" variant="secondary">
                   Revisar mi IA
                 </ButtonLink>
@@ -572,6 +589,14 @@ function StudyStatus({
               </>
             )}
           </div>
+          {study.canResume && noFreeUses && (
+            <p id={reasonId}>
+              Sin usos gratis hoy.{" "}
+              <Link to="/settings" className="font-medium underline">
+                Conectar IA
+              </Link>
+            </p>
+          )}
         </Alert>
       )}
       {study.phase === "uncertain" && study.error && (

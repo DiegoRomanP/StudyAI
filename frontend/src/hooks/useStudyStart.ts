@@ -11,6 +11,7 @@ import {
   useCreateGoal,
   useGeneratePlan,
   usePlan,
+  useResumePlan,
 } from "./queries";
 
 /**
@@ -92,6 +93,7 @@ export function useStudyStart() {
   const queryClient = useQueryClient();
   const createGoal = useCreateGoal();
   const generatePlan = useGeneratePlan();
+  const resumePlan = useResumePlan();
   const requestKey = useIdempotencyKey();
   const running = useRef(false);
   const createdGoal = useRef<{ fingerprint: string; goalId: number } | null>(null);
@@ -207,6 +209,20 @@ export function useStudyStart() {
     [createGoal, generatePlan, queryClient, requestKey],
   );
 
+  /** Continues a FAILED plan; the server generates only what is missing. */
+  const resume = useCallback(async () => {
+    if (running.current || planId === null) return;
+    running.current = true;
+    try {
+      await resumePlan.mutateAsync(planId);
+      setStep({ phase: "idle" });
+    } catch (caught: unknown) {
+      setStep({ phase: "error", message: getApiErrorMessage(caught, "No se pudo continuar la generación.") });
+    } finally {
+      running.current = false;
+    }
+  }, [planId, resumePlan]);
+
   const reset = useCallback(() => {
     if (running.current) return;
     writeStoredPlanId(null);
@@ -250,6 +266,9 @@ export function useStudyStart() {
     retryPlan: () => void planQuery.refetch(),
     isBusy: phase === "saving-goal" || phase === "requesting-plan",
     start,
+    resume,
+    isResuming: resumePlan.isPending,
+    canResume: !planMissing && !planLoadFailed && plan?.status === "FAILED",
     reset,
   };
 }

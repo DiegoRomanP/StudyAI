@@ -208,6 +208,65 @@ describe("useStudyStart", () => {
     expect(result.current.error).toContain("límite de solicitudes");
   });
 
+  describe("continuing a failed plan", () => {
+    const failedPlan: PlanDTO = { ...readyPlan, status: "FAILED", error_message: "Se cortó." };
+
+    function followFailedPlan() {
+      window.sessionStorage.setItem(STUDY_START_STORAGE_KEY, JSON.stringify({ v: 1, planId: 51 }));
+      return setup();
+    }
+
+    it("resumes it and follows the generation again", async () => {
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      const resumePlan = vi
+        .spyOn(api, "resumePlan")
+        .mockResolvedValue({ id: 51, status: "PROCESSING", error_message: "" });
+      const { result } = followFailedPlan();
+      await waitFor(() => expect(result.current.canResume).toBe(true));
+
+      await act(async () => {
+        await result.current.resume();
+      });
+
+      expect(resumePlan).toHaveBeenCalledWith(51);
+      expect(result.current.phase).toBe("processing");
+      expect(result.current.canResume).toBe(false);
+    });
+
+    it("shows the server's refusal", async () => {
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      vi.spyOn(api, "resumePlan").mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 429, data: { detail: "Ya usaste tus 3 usos gratis de hoy.", code: "FREE_AI_DAILY_LIMIT" } },
+      });
+      const { result } = followFailedPlan();
+      await waitFor(() => expect(result.current.canResume).toBe(true));
+
+      await act(async () => {
+        await result.current.resume();
+      });
+
+      expect(result.current.phase).toBe("error");
+      expect(result.current.error).toBe("Ya usaste tus 3 usos gratis de hoy.");
+      expect(result.current.canResume).toBe(true);
+    });
+
+    it("sends a single request when resumed twice in the same tick", async () => {
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      const resumePlan = vi
+        .spyOn(api, "resumePlan")
+        .mockResolvedValue({ id: 51, status: "PROCESSING", error_message: "" });
+      const { result } = followFailedPlan();
+      await waitFor(() => expect(result.current.canResume).toBe(true));
+
+      await act(async () => {
+        await Promise.all([result.current.resume(), result.current.resume()]);
+      });
+
+      expect(resumePlan).toHaveBeenCalledOnce();
+    });
+  });
+
   it("does not offer a ready plan without sessions", async () => {
     vi.spyOn(api, "generatePlan").mockResolvedValue({ id: 51, status: "PROCESSING", error_message: "" });
     vi.spyOn(api, "getPlan").mockResolvedValue({ ...readyPlan, sessions: [] });

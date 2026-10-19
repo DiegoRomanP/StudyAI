@@ -625,6 +625,32 @@ describe("PlanPage errors", () => {
     }
   });
 
+  it("labels a failed plan as incomplete and offers to continue it", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    vi.spyOn(api, "listGoals").mockResolvedValue([goal]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([
+      {
+        id: 51,
+        title: "Plan cortado",
+        status: "FAILED",
+        goal_id: goal.id,
+        document_ids: [documents[0].id],
+        created_at: "2026-10-01T00:00:00Z",
+        error_message: "Se cortó.",
+        topics: [],
+        sessions: [],
+      },
+    ]);
+    renderPage(queryClient);
+
+    expect(await screen.findByText("Incompleto")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Plan cortado.*Continuar generación/ })).toHaveAttribute("href", "/plan/51");
+  });
+
   it("explains an empty plan list with a call to action", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
