@@ -54,9 +54,12 @@ body {
 }
 
 /* Basic typography for LLM-rendered markdown study material. */
-.prose-study h1 { @apply text-2xl font-bold mt-4 mb-2; }
-.prose-study h2 { @apply text-xl font-semibold mt-4 mb-2; }
-.prose-study h3 { @apply text-lg font-semibold mt-3 mb-1; }
+/* SafeMarkdown shifts headings down one level (# → h2) to keep a single page h1. */
+.prose-study h2 { @apply text-2xl font-bold mt-4 mb-2; }
+.prose-study h3 { @apply text-xl font-semibold mt-4 mb-2; }
+.prose-study h4 { @apply text-lg font-semibold mt-3 mb-1; }
+.prose-study h5,
+.prose-study h6 { @apply text-base font-semibold mt-3 mb-1; }
 .prose-study p { @apply my-2 leading-reading; }
 .prose-study ul { @apply list-disc pl-6 my-2; }
 .prose-study ol { @apply list-decimal pl-6 my-2; }

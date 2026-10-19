@@ -108,6 +108,15 @@ async function answerFlashcard(prompt: string, quality: number) {
 }
 
 describe("SessionPage", () => {
+  it("material headings never add a second h1", async () => {
+    renderSession();
+
+    await screen.findByText(/Lee/);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1, name: "Algoritmos" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2, name: "Algoritmos" })).toHaveLength(1);
+  });
+
   it("shows which session step is current, with done steps checked", async () => {
     renderSession();
 
