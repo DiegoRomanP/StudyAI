@@ -68,6 +68,9 @@ export const api = {
     apiClient.get<PlanStatusDTO>(`/plans/${id}/status`).then((r) => r.data),
   getPlan: (id: number) =>
     apiClient.get<PlanDTO>(`/plans/${id}`).then((r) => r.data),
+  /** Generates only what a FAILED plan is missing (202; 409 if not resumable, 429 without free uses). */
+  resumePlan: (id: number) =>
+    apiClient.post<PlanStatusDTO>(`/plans/${id}/resume`).then((r) => r.data),
   deletePlan: (id: number) =>
     apiClient.delete<void>(`/plans/${id}`).then(() => undefined),
 

@@ -209,6 +209,20 @@ export function useGeneratePlan() {
   });
 }
 
+export function useResumePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (planId: number) => api.resumePlan(planId),
+    onSuccess: (status) => {
+      // The cached plan turns PROCESSING again, so usePlan resumes its polling.
+      qc.setQueryData<PlanDTO>(["plan", status.id], (current) => (current ? { ...current, ...status } : current));
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      // Resuming may spend a free-AI use.
+      qc.invalidateQueries({ queryKey: ["llm-runtime"] });
+    },
+  });
+}
+
 export function useDeletePlan() {
   const qc = useQueryClient();
   return useMutation({

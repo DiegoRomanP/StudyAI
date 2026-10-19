@@ -73,10 +73,15 @@ export interface SessionSummaryDTO {
   reinforcement_status: ReinforcementStatus;
 }
 
+export type GenerationStage = "TOPICS" | "SESSIONS" | "CONTENT";
+
 export interface PlanStatusDTO {
   id: number;
   status: PlanStatus;
   error_message: string;
+  progress_stage?: GenerationStage | null;
+  progress_done?: number;
+  progress_total?: number;
 }
 
 export interface PlanDTO {
@@ -87,6 +92,9 @@ export interface PlanDTO {
   document_ids: number[];
   created_at: string;
   error_message: string;
+  progress_stage?: GenerationStage | null;
+  progress_done?: number;
+  progress_total?: number;
   topics: PlanTopicDTO[];
   sessions: SessionSummaryDTO[];
 }

@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   submitQuiz: vi.fn(),
   getPlan: vi.fn(),
   getSession: vi.fn(),
+  resumePlan: vi.fn(),
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
@@ -25,6 +26,7 @@ import {
   useDocuments,
   useGeneratePlan,
   usePlan,
+  useResumePlan,
   useSession,
   useSubmitQuiz,
   useUploadDocument,
@@ -154,6 +156,37 @@ describe("cache consistency after writes", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("useResumePlan", () => {
+  it("turns the cached plan PROCESSING again and refreshes the lists and the free uses", async () => {
+    api.resumePlan.mockResolvedValue({
+      id: 9,
+      status: "PROCESSING",
+      error_message: "",
+      progress_stage: "CONTENT",
+      progress_done: 2,
+      progress_total: 3,
+    });
+    const queryClient = createClient();
+    queryClient.setQueryData(["plan", 9], { id: 9, title: "Plan", status: "FAILED", error_message: "x", sessions: [] });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useResumePlan(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.mutateAsync(9);
+    });
+
+    expect(api.resumePlan).toHaveBeenCalledWith(9);
+    expect(queryClient.getQueryData(["plan", 9])).toMatchObject({
+      title: "Plan",
+      status: "PROCESSING",
+      error_message: "",
+      progress_done: 2,
+    });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["plans"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["llm-runtime"] });
   });
 });
 
