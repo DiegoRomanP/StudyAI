@@ -49,6 +49,8 @@ class QuizQuestion(Base):
     answer: Mapped[str] = mapped_column(Text, default="")
     # For MULTIPLE_CHOICE: list of option strings; the correct one equals `answer`.
     options: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Review copies point at the original question so SM-2 keeps a single schedule.
+    source_question_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     quiz = relationship("Quiz", back_populates="questions")
 

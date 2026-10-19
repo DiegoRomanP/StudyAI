@@ -57,6 +57,7 @@ def init_db() -> None:
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()
     _ensure_llm_verification_columns()
+    _ensure_adaptive_route_columns()
     _seed_default_user()
 
 
@@ -113,6 +114,38 @@ def _ensure_plan_idempotency_columns() -> None:
             unique=True,
         ).create(bind=engine, checkfirst=True)
         logger.info("Migrated plans table: added idempotency unique index")
+
+
+def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
+    """Add each column that an older database lacks (portable DDL, no-op once present)."""
+    if table not in inspect(engine).get_table_names():
+        return
+    columns = {column["name"] for column in inspect(engine).get_columns(table)}
+    with engine.begin() as conn:
+        for name, definition in definitions.items():
+            if name not in columns:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
+                logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_adaptive_route_columns() -> None:
+    """Additive backfill for the adaptive route (session kind/date, topic mastery)."""
+    _add_missing_columns(
+        "sessions",
+        {
+            "kind": "VARCHAR(16) NOT NULL DEFAULT 'NEW'",
+            "topic_id": "INTEGER",
+            "scheduled_date": "DATE",
+            "review_points": "JSON",
+            "reinforcement_status": "VARCHAR(16) NOT NULL DEFAULT 'NONE'",
+            "reinforcement_error": "VARCHAR(1024) NOT NULL DEFAULT ''",
+        },
+    )
+    _add_missing_columns("plan_topics", {"mastery": "FLOAT", "review_box": "INTEGER NOT NULL DEFAULT 0"})
+    _add_missing_columns("quiz_questions", {"source_question_id": "INTEGER"})
+    if "sessions" in inspect(engine).get_table_names():
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sessions_topic_id ON sessions (topic_id)"))
 
 
 def _ensure_llm_verification_columns() -> None:

@@ -67,5 +67,7 @@ class PlanTopic(Base):
     difficulty: Mapped[int] = mapped_column(Integer, default=3)   # 1..5
     relevance: Mapped[float] = mapped_column(Float, default=0.5)  # 0..1
     selected: Mapped[bool] = mapped_column(default=False)         # survived Pareto filter
+    mastery: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1, None = no data
+    review_box: Mapped[int] = mapped_column(Integer, default=0)   # step of the review ladder
 
     plan = relationship("Plan", back_populates="topics")
