@@ -305,3 +305,30 @@ def test_submit_makes_no_llm_calls(client, today, created_plans, monkeypatch):
     _take(client, plan["sessions"][0]["id"], "bad")
 
     assert calls == []
+
+
+def test_rating_a_copied_card_updates_the_original_card_schedule(client, today, created_plans):
+    plan = _plan(client, created_plans, "Ruta SM2 copia")
+    first = plan["sessions"][0]
+    quiz = client.get(f"/quizzes/{first['id']}").json()
+    card = next(q for q in quiz["questions"] if q["question_type"] == "FLASHCARD")
+    answers = [
+        {"question_id": q["id"], "quality": 4} if q["question_type"] == "FLASHCARD"
+        else {"question_id": q["id"], "selected_option": q["answer"]}
+        for q in quiz["questions"]
+    ]
+    client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers})
+
+    plan = _refresh(client, plan)
+    [review] = _reviews(plan, first["topic_id"])
+    copied = client.get(f"/quizzes/{review['id']}").json()
+    copy = next(q for q in copied["questions"] if q["prompt"] == card["prompt"])
+    assert copy["id"] != card["id"]
+    today["day"] = date.fromisoformat(review["scheduled_date"])
+    client.post(f"/quizzes/{copied['id']}/submit", json={"answers": _answers(copied, "good")})
+
+    from app.models.flashcard import FlashcardReview
+
+    with SessionLocal() as db:
+        reviews = db.query(FlashcardReview).filter(FlashcardReview.question_id.in_([card["id"], copy["id"]])).all()
+    assert [(r.question_id, r.repetition_count) for r in reviews] == [(card["id"], 2)]

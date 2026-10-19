@@ -17,7 +17,7 @@ from app.events.session_events import (
 )
 from app.models.flashcard import FlashcardReview
 from app.models.plan import Plan
-from app.models.quiz import QuizResult
+from app.models.quiz import QuizQuestion, QuizResult
 from app.models.session import Session as StudySession
 from app.models.session import SessionStatus
 from app.repositories.quiz_repository import FlashcardReviewRepository
@@ -40,10 +40,20 @@ def handle_session_completed(event: SessionCompletedEvent) -> None:
     """
     db = event.db
     repo = FlashcardReviewRepository(db)
+    # A review session holds copies of the original cards: every copy keeps feeding
+    # the schedule of the original question, so a card never has two SM-2 calendars.
+    sources = dict(
+        db.execute(
+            select(QuizQuestion.id, QuizQuestion.source_question_id).where(
+                QuizQuestion.id.in_(list(event.flashcard_qualities))
+            )
+        ).all()
+    )
     for question_id, quality in event.flashcard_qualities.items():
-        review = repo.find_for_question(event.user_id, question_id)
+        review_key = sources.get(question_id) or question_id
+        review = repo.find_for_question(event.user_id, review_key)
         if review is None:
-            review = FlashcardReview(user_id=event.user_id, question_id=question_id)
+            review = FlashcardReview(user_id=event.user_id, question_id=review_key)
             db.add(review)
             # Flush so SQLAlchemy applies the column defaults (EF=2.5, etc.);
             # they are otherwise None until INSERT and SM-2 would fail.
