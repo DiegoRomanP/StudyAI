@@ -80,7 +80,7 @@ test("a learner goes from material to a graded quiz entirely from Inicio", async
     await page.getByRole("button", { name: "Siguiente" }).click();
   }
 
-  await expect(page.getByRole("heading", { name: "Resultado del test" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Resultado" })).toBeVisible();
 
   await page.goto("/dashboard");
   const summary = page.getByRole("region", { name: "Resumen del periodo" });

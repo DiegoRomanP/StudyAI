@@ -19,6 +19,7 @@ import {
   Textarea,
 } from "../components/ui";
 import { SessionResult } from "../components/session/SessionResult";
+import { makeSessionSummary } from "../test/fixtures";
 
 describe("UI primitives", () => {
   it("associates visible labels and errors with native form controls", () => {
@@ -88,6 +89,8 @@ describe("UI primitives", () => {
               element={
                 <SessionResult
                   planId={17}
+                  nextSession={makeSessionSummary({ id: 43, order_index: 1, topic_name: "Siguiente" })}
+                  nextIsAvailable
                   result={{
                     score: 50,
                     correct: 1,
@@ -97,22 +100,22 @@ describe("UI primitives", () => {
                 />
               }
             />
-            <Route path="/dashboard" element={<p>Dashboard destino</p>} />
+            <Route path="/session/43" element={<p>Siguiente destino</p>} />
             <Route path="/plan/:planId" element={<p>Plan destino</p>} />
           </Routes>
         </MemoryRouter>,
       );
 
     const firstRender = renderDoneView();
-    const dashboardLink = screen.getByRole("link", { name: "Ver estadísticas" });
-    expect(dashboardLink).toHaveAttribute("href", "/dashboard");
-    expect(dashboardLink.querySelector("button")).toBeNull();
-    fireEvent.click(dashboardLink);
-    expect(screen.getByText("Dashboard destino")).toBeInTheDocument();
+    const nextLink = screen.getByRole("link", { name: "Siguiente sesión" });
+    expect(nextLink).toHaveAttribute("href", "/session/43");
+    expect(nextLink.querySelector("button")).toBeNull();
+    fireEvent.click(nextLink);
+    expect(screen.getByText("Siguiente destino")).toBeInTheDocument();
     firstRender.unmount();
 
     renderDoneView();
-    const planLink = screen.getByRole("link", { name: "Volver al plan" });
+    const planLink = screen.getByRole("link", { name: "Ver plan" });
     expect(planLink).toHaveAttribute("href", "/plan/17");
     expect(planLink.querySelector("button")).toBeNull();
     fireEvent.click(planLink);

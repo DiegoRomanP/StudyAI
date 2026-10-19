@@ -8,8 +8,9 @@ import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Button, ButtonLink, Card, Spinner } from "../components/ui";
-import { useSession } from "../hooks/queries";
+import { usePlan, useSession } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
+import { routeOrder, toDateKey } from "../lib/studyProgress";
 
 type Phase = "study" | "break" | "test" | "done";
 
@@ -81,6 +82,23 @@ function SessionFlow({
   // Live from the server (a cached PENDING may refetch as COMPLETED); this visit's own
   // submission moves to the result, so it never asks to confirm itself.
   const alreadyCompleted = session.status === "COMPLETED";
+  // Only read once the exam is done; the plan (topic mastery, route) was just refreshed.
+  const plan = usePlan(phase === "done" ? session.plan_id : null).data;
+  const topic = plan?.topics.find((item) => item.id === session.topic_id);
+  const nextSession = plan ? routeOrder(plan).find((item) => item.id !== session.id) ?? null : null;
+  const nextIsAvailable =
+    nextSession !== null &&
+    (nextSession.kind === "NEW" ||
+      nextSession.scheduled_date === null ||
+      nextSession.scheduled_date <= toDateKey(new Date()));
+  const reviewDate =
+    plan?.sessions.find(
+      (item) =>
+        item.kind === "REVIEW" &&
+        item.status === "PENDING" &&
+        item.topic_id === session.topic_id &&
+        item.id !== session.id,
+    )?.scheduled_date ?? null;
 
   function handleSubmitted(confirmed: QuizResultDTO) {
     setResult(confirmed);
@@ -142,7 +160,15 @@ function SessionFlow({
       )}
       {phase === "done" &&
         (result ? (
-          <SessionResult result={result} planId={session.plan_id} />
+          <SessionResult
+            result={result}
+            planId={session.plan_id}
+            topic={topic}
+            nextSession={nextSession}
+            nextIsAvailable={nextIsAvailable}
+            reviewDate={reviewDate}
+            keywords={session.material?.youtube_keywords ?? []}
+          />
         ) : (
           <Card className="space-y-3">
             <p className="font-medium text-text-primary">Sesión completada.</p>

@@ -4,9 +4,9 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
-import type { QuizDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
+import type { PlanDTO, QuizDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { SessionPage } from "../pages/SessionPage";
-import { makeSessionDetail } from "../test/fixtures";
+import { makeSessionDetail, makeSessionSummary, makeTopic } from "../test/fixtures";
 
 const session: SessionDetailDTO = makeSessionDetail({
   id: 5,
@@ -19,6 +19,18 @@ const session: SessionDetailDTO = makeSessionDetail({
     youtube_keywords: ["big o", "big o"],
   },
 });
+
+const plan: PlanDTO = {
+  id: 9,
+  title: "Plan",
+  status: "READY",
+  goal_id: 1,
+  document_ids: [1],
+  created_at: "2026-10-10T09:00:00Z",
+  error_message: "",
+  topics: [],
+  sessions: [],
+};
 
 const quiz: QuizDTO = {
   id: 77,
@@ -68,10 +80,11 @@ afterEach(() => {
 });
 
 function renderSession(
-  options: { session?: SessionDetailDTO; quiz?: QuizDTO; cachedSession?: SessionDetailDTO; path?: string } = {},
+  options: { session?: SessionDetailDTO; quiz?: QuizDTO; plan?: PlanDTO; cachedSession?: SessionDetailDTO; path?: string } = {},
 ) {
   vi.spyOn(api, "getSession").mockResolvedValue(options.session ?? session);
   vi.spyOn(api, "getQuiz").mockResolvedValue(options.quiz ?? quiz);
+  vi.spyOn(api, "getPlan").mockResolvedValue(options.plan ?? plan);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -234,12 +247,11 @@ describe("SessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "O(log n)" }));
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
 
-    const summary = await screen.findByRole("region", { name: "Resultado del test" });
+    const summary = await screen.findByRole("region", { name: "Resultado" });
     // Focus moves to the confirmed result so keyboard and screen-reader users hear it.
-    expect(screen.getByRole("heading", { name: "Resultado del test" })).toHaveFocus();
+    expect(screen.getByRole("heading", { name: "Resultado" })).toHaveFocus();
     expect(within(summary).getByText("100%")).toBeInTheDocument();
-    expect(within(summary).getByText(/1 de 1 preguntas de opción múltiple correctas/)).toBeInTheDocument();
-    expect(within(summary).getByText(/2 tarjetas valoradas/)).toBeInTheDocument();
+    expect(within(summary).getByText("1 de 1 correctas")).toBeInTheDocument();
     expect(submitQuiz).toHaveBeenCalledTimes(1);
     expect(submitQuiz).toHaveBeenCalledWith(77, [
       { question_id: 1, quality: 0 },
@@ -261,11 +273,11 @@ describe("SessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
 
     expect(await screen.findByText("No se pudo enviar el test. Tus respuestas siguen aquí.")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Resultado del test" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Resultado" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "O(n)" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
-    expect(await screen.findByRole("region", { name: "Resultado del test" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Resultado" })).toBeInTheDocument();
     expect(submitQuiz).toHaveBeenCalledTimes(2);
     expect(submitQuiz.mock.calls[1][1]).toEqual(submitQuiz.mock.calls[0][1]);
   });
@@ -287,8 +299,7 @@ describe("SessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Calidad 5/ }));
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
 
-    const summary = await screen.findByRole("region", { name: "Resultado del test" });
-    expect(within(summary).getByText(/1 tarjeta valorada/)).toBeInTheDocument();
+    const summary = await screen.findByRole("region", { name: "Resultado" });
     expect(within(summary).queryByText("0%")).not.toBeInTheDocument();
   });
 
@@ -393,7 +404,87 @@ describe("SessionPage", () => {
 
     await waitFor(() => expect(submitQuiz).toHaveBeenCalledTimes(1));
     resolveSubmit(result);
-    expect(await screen.findByRole("region", { name: "Resultado del test" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Resultado" })).toBeInTheDocument();
     expect(submitQuiz).toHaveBeenCalledTimes(1);
+  });
+
+  describe("result screen", () => {
+    const topic = makeTopic({
+      id: 1,
+      name: "Algoritmos",
+      relevance: 0.9,
+      selected: true,
+      mastery: 0.8,
+      review_box: 1,
+      mastery_state: "EN_PROGRESO",
+    });
+    const topicSession = makeSessionDetail({ ...session, topic_id: 1 });
+    const review = (id: number, date: string) =>
+      makeSessionSummary({ id, order_index: id, topic_name: "Algoritmos", kind: "REVIEW", topic_id: 1, scheduled_date: date });
+
+    async function finishQuiz(options: Parameters<typeof renderSession>[0]) {
+      vi.spyOn(api, "submitQuiz").mockResolvedValue(result);
+      renderSession({ ...options, quiz: { ...quiz, questions: quiz.questions.slice(2) } });
+      await goToQuiz();
+      fireEvent.click(await screen.findByRole("button", { name: "O(log n)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
+      return screen.findByRole("region", { name: "Resultado" });
+    }
+
+    it("result shows mastery, state badge and next review", async () => {
+      const summary = await finishQuiz({
+        session: topicSession,
+        plan: { ...plan, topics: [topic], sessions: [review(6, "2099-01-01")] },
+      });
+
+      expect(await within(summary).findByText("Dominio 80 %")).toBeInTheDocument();
+      expect(within(summary).getByText("En progreso")).toBeInTheDocument();
+      expect(within(summary).getByText(/Próximo repaso: 1 ene/)).toBeInTheDocument();
+    });
+
+    it("next session button only when available", async () => {
+      const summary = await finishQuiz({
+        session: topicSession,
+        plan: { ...plan, topics: [topic], sessions: [review(6, "2099-01-01")] },
+      });
+      await within(summary).findByText("Dominio 80 %");
+      expect(within(summary).queryByRole("link", { name: "Siguiente sesión" })).not.toBeInTheDocument();
+      expect(within(summary).getByRole("link", { name: "Ver plan" })).toHaveAttribute("href", "/plan/9");
+    });
+
+    it("offers the next session when a review is due", async () => {
+      const summary = await finishQuiz({
+        session: topicSession,
+        plan: { ...plan, topics: [topic], sessions: [review(6, "2000-01-01")] },
+      });
+
+      expect(await within(summary).findByRole("link", { name: "Siguiente sesión" })).toHaveAttribute(
+        "href",
+        "/session/6",
+      );
+    });
+
+    it("video chips use youtube search urls", async () => {
+      const summary = await finishQuiz({ session: topicSession });
+
+      const videoLinks = within(summary).getAllByRole("link", { name: /big o/i });
+      expect(videoLinks).toHaveLength(1);
+      expect(videoLinks[0].getAttribute("href")).toMatch(/^https:\/\/www\.youtube\.com\/results\?search_query=/);
+    });
+
+    it("no removed helper copy", async () => {
+      const summary = await finishQuiz({ session: topicSession });
+
+      for (const text of [
+        "Resultado del test",
+        "se programaron para repasar",
+        "Las tarjetas no puntúan",
+        "El resultado quedó guardado",
+        "Ver estadísticas",
+      ]) {
+        expect(within(summary).queryByText(new RegExp(text))).not.toBeInTheDocument();
+        expect(within(summary).queryByRole("link", { name: text })).not.toBeInTheDocument();
+      }
+    });
   });
 });
