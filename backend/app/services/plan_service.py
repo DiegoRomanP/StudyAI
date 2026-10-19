@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,7 @@ from app.core.config import get_settings
 from app.core.exceptions import ConflictError, LLMError, NotFoundError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
+from app.algorithms.adaptive_route import normalize
 from app.algorithms.pareto import select_top_by_relevance
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.mock_provider import MockLLMProvider
@@ -39,7 +41,7 @@ from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal
 from app.models.plan import Plan, PlanStatus, PlanTopic
 from app.models.quiz import QuestionType, Quiz, QuizQuestion
-from app.models.session import Session as StudySession
+from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
@@ -341,18 +343,53 @@ class _Generator:
                 {"topic_name": t.name, "review_offset_days": intervals[i % len(intervals)]}
                 for i, t in enumerate(selected)
             ]
-        return sessions
+        return self._link_sessions_to_topics(sessions, selected, intervals)
+
+    @staticmethod
+    def _link_sessions_to_topics(
+        sessions: list, selected: list[PlanTopic], intervals: list[int]
+    ) -> list[dict]:
+        """Exactly one NEW session per selected topic, linked by id.
+
+        The LLM may rename, duplicate, invent or forget topics: names are matched
+        normalized, strays are dropped and forgotten topics are appended.
+        """
+        by_key = {normalize(t.name): t for t in selected}
+        seen: set[int] = set()
+        out: list[dict] = []
+        for spec in sessions:
+            if not isinstance(spec, dict):
+                continue
+            topic = by_key.get(normalize(str(spec.get("topic_name", ""))))
+            if topic is None or topic.id in seen:
+                continue
+            seen.add(topic.id)
+            out.append({**spec, "topic_name": topic.name, "topic_id": topic.id})
+        for topic in selected:
+            if topic.id not in seen:
+                out.append(
+                    {
+                        "topic_name": topic.name,
+                        "topic_id": topic.id,
+                        "review_offset_days": intervals[len(out) % len(intervals)],
+                    }
+                )
+        return out
 
     def _build_session(self, plan, index, spec, goal_text, config) -> None:
         topic_name = str(spec.get("topic_name", f"Tema {index + 1}"))[:255]
         offset = int(spec.get("review_offset_days", self.settings.REVIEW_INTERVALS_DAYS[0]))
 
+        created = plan.created_at or datetime.now(timezone.utc)
         session = StudySession(
             plan_id=plan.id,
             order_index=index,
             topic_name=topic_name,
             duration_minutes=config.duration_minutes,
             review_offset_days=offset,
+            kind=SessionKind.NEW,
+            topic_id=spec.get("topic_id"),
+            scheduled_date=created.date() + timedelta(days=index),
         )
         self.db.add(session)
         self.db.flush()

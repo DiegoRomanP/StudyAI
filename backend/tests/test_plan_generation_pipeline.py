@@ -8,6 +8,7 @@ truncating the result afterwards.
 from __future__ import annotations
 
 import io
+import json
 
 import httpx
 import pytest
@@ -237,3 +238,49 @@ def test_truncated_llm_output_fails_generation_before_json_parsing(client: TestC
     assert plan["status"] == "FAILED"
     assert plan["error_message"] == "El proveedor de IA agotó el presupuesto de salida antes de completar la respuesta."
     assert route.call_count == 1
+
+
+def test_new_plan_sessions_link_once_to_each_selected_topic(client: TestClient):
+    plan = _build_ready_plan(client, "LEARNING", "Plan enlace de temas")
+
+    selected_ids = sorted(t["id"] for t in plan["topics"] if t["selected"])
+    assert sorted(s["topic_id"] for s in plan["sessions"]) == selected_ids
+    assert {s["kind"] for s in plan["sessions"]} == {"NEW"}
+    assert all(s["scheduled_date"] for s in plan["sessions"])
+    dates = [s["scheduled_date"] for s in sorted(plan["sessions"], key=lambda s: s["order_index"])]
+    assert dates == sorted(dates)
+
+
+def test_session_plan_names_are_normalized_deduped_and_missing_topics_appended(
+    client: TestClient, monkeypatch
+):
+    class ScriptedPlanProvider(MockLLMProvider):
+        calls = 0
+
+        def complete(self, *, kind, context=None, **kwargs):
+            type(self).calls += 1
+            if kind == "session_plan":
+                first = (context or {})["topics"][0]
+                return json.dumps(
+                    {
+                        "sessions": [
+                            {"topic_name": f"  {first.upper()} ", "review_offset_days": 3},
+                            {"topic_name": first, "review_offset_days": 7},  # duplicate
+                            {"topic_name": "Tema inventado", "review_offset_days": 1},
+                            "not-a-dict",
+                        ]
+                    }
+                )
+            return super().complete(kind=kind, context=context, **kwargs)
+
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: ScriptedPlanProvider())
+    plan = _build_ready_plan(client, "LEARNING", "Plan nombres normalizados")
+
+    selected = [t for t in plan["topics"] if t["selected"]]
+    sessions = sorted(plan["sessions"], key=lambda s: s["order_index"])
+    assert [s["topic_id"] for s in sessions][0] == selected[0]["id"]
+    assert sessions[0]["topic_name"] == selected[0]["name"]
+    assert sessions[0]["review_offset_days"] == 3
+    assert sorted(s["topic_id"] for s in sessions) == sorted(t["id"] for t in selected)
+    assert "Tema inventado" not in [s["topic_name"] for s in sessions]
+    assert ScriptedPlanProvider.calls == 2 + len(sessions)
