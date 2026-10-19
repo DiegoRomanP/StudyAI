@@ -1,12 +1,14 @@
 import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Coffee, Play } from "lucide-react";
+import { type ReactNode, useId, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { isNotFoundError } from "../api/errors";
+import { getApiErrorMessage, isNotFoundError } from "../api/errors";
+import type { PlanDTO } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
 import { HelpTerm } from "../components/help/HelpTerm";
+import { GenerationProgress } from "../components/plan/GenerationProgress";
 import { SessionTimeline } from "../components/plan/SessionTimeline";
 import {
-  ActivityIndicator,
   Alert,
   Badge,
   Button,
@@ -16,7 +18,7 @@ import {
   Spinner,
   StepChain,
 } from "../components/ui";
-import { usePlan } from "../hooks/queries";
+import { useLlmRuntime, usePlan, useResumePlan } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
 import { findNextSession, rankTopics } from "../lib/studyProgress";
 
@@ -95,19 +97,11 @@ export function PlanDetailPage() {
           <Badge color="amber">Generando</Badge>
         </div>
         <Card className="space-y-4">
-          <ActivityIndicator label="Generación en curso" />
-          <section aria-labelledby="plan-generation-steps" className="space-y-2">
-            <h2 id="plan-generation-steps" className="font-display text-lg font-semibold text-text-primary">
-              Qué está haciendo la IA
-            </h2>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-text-muted marker:text-action-hover">
-              <li>Lee tu material y detecta los temas.</li>
-              <li>
-                Elige los <HelpTerm term="temasClave">temas clave</HelpTerm>.
-              </li>
-              <li>Prepara cada sesión con material y preguntas.</li>
-            </ol>
-          </section>
+          <GenerationProgress
+            stage={plan.progress_stage ?? null}
+            done={plan.progress_done ?? 0}
+            total={plan.progress_total ?? 0}
+          />
           <p className="text-sm text-text-muted">
             Suele tardar unos minutos. Esta página se actualiza sola; puedes salir y volver.
           </p>
@@ -116,34 +110,7 @@ export function PlanDetailPage() {
     );
   }
 
-  if (plan.status === "FAILED") {
-    return (
-      <div className="space-y-4">
-        {updateError}
-        <BackToPlans />
-        <h1 className="text-2xl font-bold">{plan.title}</h1>
-        <Alert tone="error" title="La generación falló">
-          {plan.error_message && (
-            <pre className="whitespace-pre-wrap break-words rounded-control bg-canvas/60 p-3 text-xs text-text-primary">
-              {plan.error_message}
-            </pre>
-          )}
-          <p className="text-text-primary">
-            Si el error menciona un límite de solicitudes («rate limit») o una clave inválida,
-            revisa tu proveedor en{" "}
-            <Link className="underline" to="/settings">
-              Conectar IA
-            </Link>{" "}
-            e intenta generar el plan de nuevo desde{" "}
-            <Link className="underline" to="/plan">
-              Plan de estudio
-            </Link>
-            .
-          </p>
-        </Alert>
-      </div>
-    );
-  }
+  if (plan.status === "FAILED") return <IncompletePlan plan={plan} updateError={updateError} />;
 
   const topics = rankTopics(plan.topics).filter((topic) => topic.selected);
   // Reviews are extra: they never change the "N of M" progress of the plan.
@@ -251,6 +218,79 @@ export function PlanDetailPage() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+/** A FAILED plan keeps what was generated; "Continuar generación" only asks for what is missing. */
+function IncompletePlan({ plan, updateError }: { plan: PlanDTO; updateError: ReactNode }) {
+  const runtime = useLlmRuntime();
+  const resume = useResumePlan();
+  const sending = useRef(false);
+  const reasonId = useId();
+
+  const noFreeUses = runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
+  const selectedTopics = plan.topics.filter((topic) => topic.selected).length;
+  const total = plan.progress_total ?? 0;
+  const kept =
+    total > 0
+      ? `Se conservaron ${selectedTopics} temas y ${plan.progress_done ?? 0} de ${total} sesiones.`
+      : plan.topics.length > 0
+        ? `Se conservaron ${plan.topics.length} temas.`
+        : null;
+
+  function continueGeneration() {
+    // A double click must not send two requests, even before the pending state re-renders.
+    if (sending.current) return;
+    sending.current = true;
+    resume.mutate(plan.id, { onSettled: () => (sending.current = false) });
+  }
+
+  return (
+    <div className="space-y-4">
+      {updateError}
+      <BackToPlans />
+      <div className="space-y-2">
+        <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">{plan.title}</h1>
+        <Badge color="red">Incompleto</Badge>
+      </div>
+      <Alert tone="error" title="La generación quedó incompleta">
+        {plan.error_message && (
+          <pre className="whitespace-pre-wrap break-words rounded-control bg-canvas/60 p-3 text-xs text-text-primary">
+            {plan.error_message}
+          </pre>
+        )}
+        {kept && <p className="text-text-primary">{kept}</p>}
+      </Alert>
+      {resume.isError && (
+        <Alert tone="error">{getApiErrorMessage(resume.error, "No se pudo continuar la generación.")}</Alert>
+      )}
+      <div className="space-y-2">
+        <Button
+          type="button"
+          disabled={noFreeUses || resume.isPending}
+          aria-describedby={noFreeUses ? reasonId : undefined}
+          onClick={continueGeneration}
+        >
+          {resume.isPending ? "Continuando…" : "Continuar generación"}
+        </Button>
+        {noFreeUses && (
+          <p id={reasonId} className="text-sm text-text-muted">
+            Sin usos gratis hoy.{" "}
+            <Link to="/settings" className="font-medium text-action hover:underline">
+              Conectar IA
+            </Link>
+          </p>
+        )}
+      </div>
+      <p className="text-sm text-text-muted">
+        Si el error menciona un límite de solicitudes («rate limit») o una clave inválida, revisa tu proveedor en{" "}
+        <Link className="underline" to="/settings">
+          Conectar IA
+        </Link>{" "}
+        y continúa la generación. Si usas Ollama, comprueba que su servidor tenga OLLAMA_CONTEXT_LENGTH de al menos
+        16384.
+      </p>
     </div>
   );
 }

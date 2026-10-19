@@ -43,16 +43,37 @@ function renderPlan() {
 }
 
 describe("PlanDetailPage", () => {
-  it("shows indeterminate activity while generating instead of an invented percentage", async () => {
-    vi.spyOn(api, "getPlan").mockResolvedValue({ ...readyPlan, status: "PROCESSING", topics: [] });
+  it("shows indeterminate activity while analysing instead of an invented percentage", async () => {
+    vi.spyOn(api, "getPlan").mockResolvedValue({
+      ...readyPlan,
+      status: "PROCESSING",
+      topics: [],
+      progress_stage: "TOPICS",
+      progress_done: 0,
+      progress_total: 0,
+    });
     renderPlan();
 
     expect(await screen.findByRole("heading", { level: 1, name: readyPlan.title })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByRole("heading", { level: 2, name: "Qué está haciendo la IA" })).toBeInTheDocument();
     expect(screen.getByText(/puedes salir y volver/)).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Generación en curso" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Analizando tu material…" })).toBeInTheDocument();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows which session is being prepared with a real progress bar", async () => {
+    vi.spyOn(api, "getPlan").mockResolvedValue({
+      ...readyPlan,
+      status: "PROCESSING",
+      progress_stage: "CONTENT",
+      progress_done: 1,
+      progress_total: 3,
+    });
+    renderPlan();
+
+    expect(await screen.findByText("Preparando la sesión 2 de 3")).toBeInTheDocument();
+    expect(screen.getAllByRole("progressbar")).toHaveLength(1);
   });
 
   it("explains that a deleted plan no longer exists", async () => {
@@ -136,5 +157,83 @@ describe("PlanDetailPage", () => {
       "/session/72",
     );
     expect(within(sessions).queryByText(/repaso a/)).not.toBeInTheDocument();
+  });
+
+  describe("an incomplete plan", () => {
+    const failedPlan: PlanDTO = {
+      ...readyPlan,
+      status: "FAILED",
+      error_message: "La IA cortó la respuesta.",
+      progress_stage: "CONTENT",
+      progress_done: 2,
+      progress_total: 3,
+      topics: [1, 2, 3, 4].map((id) =>
+        makeTopic({ id, name: `Tema ${id}`, subtopics: [], difficulty: 3, relevance: 0.5, selected: id < 4 }),
+      ),
+    };
+
+    function mockRuntime(remaining: number | null) {
+      vi.spyOn(api, "getLlmRuntime").mockResolvedValue({
+        source: remaining === null ? "USER" : "ENV",
+        bundled: remaining !== null,
+        free_ai: remaining === null ? null : { limit: 3, used: 3 - remaining, remaining },
+      } as Awaited<ReturnType<typeof api.getLlmRuntime>>);
+    }
+
+    it("keeps what was generated and continues it with a single request on a double click", async () => {
+      mockRuntime(null);
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      let release: (value: Awaited<ReturnType<typeof api.resumePlan>>) => void = () => {};
+      const resume = vi.spyOn(api, "resumePlan").mockReturnValue(new Promise((resolve) => (release = resolve)));
+      renderPlan();
+
+      expect(await screen.findByText("Incompleto")).toBeInTheDocument();
+      expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+      expect(screen.getByText("La IA cortó la respuesta.")).toBeInTheDocument();
+      expect(screen.getByText("Se conservaron 3 temas y 2 de 3 sesiones.")).toBeInTheDocument();
+      const button = screen.getByRole("button", { name: "Continuar generación" });
+
+      fireEvent.click(button);
+      fireEvent.click(button);
+
+      expect(await screen.findByRole("button", { name: "Continuando…" })).toBeDisabled();
+      expect(resume).toHaveBeenCalledTimes(1);
+      expect(resume).toHaveBeenCalledWith(9);
+      release({ id: 9, status: "PROCESSING", error_message: "" });
+    });
+
+    it("explains why it cannot continue without free uses left", async () => {
+      mockRuntime(0);
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      renderPlan();
+
+      const reason = await screen.findByText(/Sin usos gratis hoy\./);
+      const button = screen.getByRole("button", { name: "Continuar generación" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("aria-describedby", reason.id);
+      expect(within(reason).getByRole("link", { name: "Conectar IA" })).toHaveAttribute("href", "/settings");
+    });
+
+    it("shows the server's refusal", async () => {
+      mockRuntime(1);
+      vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
+      vi.spyOn(api, "resumePlan").mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 429, data: { detail: "Ya usaste tus 3 usos gratis de hoy.", code: "FREE_AI_DAILY_LIMIT" } },
+      });
+      renderPlan();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Continuar generación" }));
+
+      expect(await screen.findByText("Ya usaste tus 3 usos gratis de hoy.")).toBeInTheDocument();
+    });
+
+    it("mentions only the topics when no session was planned", async () => {
+      mockRuntime(null);
+      vi.spyOn(api, "getPlan").mockResolvedValue({ ...failedPlan, progress_stage: "SESSIONS", progress_total: 0, progress_done: 0 });
+      renderPlan();
+
+      expect(await screen.findByText("Se conservaron 4 temas.")).toBeInTheDocument();
+    });
   });
 });
