@@ -351,7 +351,7 @@ paths:
         queda disponible de inmediato, pero el modelo/URL se guarda como
         borrador con PATCH y se prueba después contra esa misma revisión.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -371,7 +371,7 @@ paths:
     delete:
       summary: Elimina la clave guardada de un proveedor
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
       responses:
         "204": { description: Eliminada }
         "404": { description: No hay clave configurada para ese proveedor }
@@ -384,7 +384,7 @@ paths:
         un cambio real. Omitir base_url conserva la anterior; "" restaura la URL
         predeterminada.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -422,7 +422,7 @@ paths:
         modelo no es evidencia: la prueba debe coincidir con la revisión y URL
         efectivas.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -446,7 +446,7 @@ paths:
     post:
       summary: Prueba con una llamada mínima el modelo y URL del borrador guardado
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
       requestBody:
         required: true
         content:
@@ -617,7 +617,7 @@ components:
     ProviderCatalogEntry:
       type: object
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] }
         label: { type: string }
         requires_model_selection: { type: boolean }
         default_model: { type: string }
@@ -645,7 +645,7 @@ components:
       type: object
       description: La clave real nunca se expone; solo un fragmento enmascarado.
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] }
         label: { type: string }
         masked_api_key: { type: string, example: "sk-a••••••9f2k" }
         model:
@@ -672,7 +672,7 @@ components:
         source: { type: string, enum: [USER, ENV, MOCK] }
         provider:
           type: string
-          enum: [ANTHROPIC, OPENAI, GLM, OPENROUTER, NVIDIA, HUGGINGFACE, OLLAMA, GEMINI]
+          enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI]
           nullable: true
           description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC, salvo bundled=true (NVIDIA o GEMINI).
         models:

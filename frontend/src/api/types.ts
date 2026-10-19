@@ -161,10 +161,9 @@ export interface DashboardDTO {
 export type LLMProviderKey =
   | "ANTHROPIC"
   | "OPENAI"
-  | "GLM"
+  | "DEEPSEEK"
   | "OPENROUTER"
   | "NVIDIA"
-  | "HUGGINGFACE"
   | "OLLAMA"
   | "GEMINI";
 

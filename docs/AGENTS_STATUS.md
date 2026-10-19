@@ -33,7 +33,7 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 
 ### Fase 2 — LLM y lógica de negocio ✅
 
-- [x] Anthropic nativo, OpenAI/GLM/Hugging Face mediante transporte común, OpenRouter directo, NVIDIA NIM dedicado, Ollama local y mock determinista.
+- [x] Anthropic nativo, OpenAI/DeepSeek mediante transporte común, OpenRouter directo, NVIDIA NIM dedicado, Ollama local y mock determinista.
 - [x] Contratos por proveedor en `backend/app/llm/providers/` y registro único en `provider_registry.py`.
 - [x] Perfiles de payload por modelo/proveedor, clasificación segura de errores, presupuestos y reintentos.
 - [x] NVIDIA limitado a modelos curados, endpoint fijo, polling NVCF tras `202` y sin repetir POST.

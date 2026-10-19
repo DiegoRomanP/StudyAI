@@ -26,10 +26,9 @@ const LLM_ERROR_CODES = new Set<LLMProviderErrorCode>([
 const LLM_PROVIDERS = new Set<LLMProviderKey>([
   "ANTHROPIC",
   "OPENAI",
-  "GLM",
+  "DEEPSEEK",
   "OPENROUTER",
   "NVIDIA",
-  "HUGGINGFACE",
   "OLLAMA",
   "GEMINI",
 ]);

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Literal
 
 @dataclass(frozen=True)
@@ -20,10 +22,12 @@ class RequestProfile:
     test_max_tokens: int
     requires_usage: bool = True
     json_response_kinds: frozenset[str] = field(default_factory=frozenset)
+    # Fixed vendor fields sent on every request (e.g. DeepSeek's thinking switch).
+    extra_parameters: Mapping[str, object] = field(default_factory=lambda: MappingProxyType({}))
 
     def payload_parameters(self, kind: str, max_tokens: int) -> dict[str, object]:
         """Build every profile-controlled part of an outbound request."""
-        parameters: dict[str, object] = {self.token_limit_parameter: max_tokens}
+        parameters: dict[str, object] = {**self.extra_parameters, self.token_limit_parameter: max_tokens}
         if kind in self.json_response_kinds:
             parameters["response_format"] = {"type": "json_object"}
         return parameters

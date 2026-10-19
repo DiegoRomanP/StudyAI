@@ -17,7 +17,7 @@ from app.core.config import LLMCallPolicy
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
 from app.llm.providers.ollama import OLLAMA_CHAT_PROFILE
 from app.llm.providers.openai import definition as openai_definition
-from app.llm.providers.huggingface import definition as huggingface_definition
+from app.llm.providers.deepseek import definition as deepseek_definition
 from app.llm.request_profiles import STANDARD_CHAT_PROFILE
 
 BASE_URL = "https://api.example.com/v1"
@@ -104,16 +104,16 @@ def test_openai_o_series_uses_max_completion_tokens_only():
 
 
 @respx.mock
-def test_hugging_face_uses_the_standard_max_tokens_profile():
+def test_deepseek_disables_thinking_on_every_request():
     route = respx.post(f"{BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(200, json=_successful_response("ok"))
     )
     provider = OpenAICompatibleProvider(
         base_url=BASE_URL,
         api_key="test-key",
-        model="zai-org/GLM-5.2",
-        provider="HUGGINGFACE",
-        request_profile=huggingface_definition.request_profile("zai-org/GLM-5.2"),
+        model="deepseek-flash",
+        provider="DEEPSEEK",
+        request_profile=deepseek_definition.request_profile("deepseek-flash"),
     )
 
     provider.complete(kind="quiz", system="sys", prompt="prompt", max_tokens=128)
@@ -121,10 +121,15 @@ def test_hugging_face_uses_the_standard_max_tokens_profile():
 
     payload = json.loads(route.calls[0].request.content)
     assert payload["max_tokens"] == 128
+    assert payload["thinking"] == {"type": "disabled"}
     assert "max_completion_tokens" not in payload
     test_payload = json.loads(route.calls[1].request.content)
     assert test_payload["max_tokens"] == 32
-    assert "max_completion_tokens" not in test_payload
+    assert test_payload["thinking"] == {"type": "disabled"}
+
+
+def test_standard_profile_sends_no_vendor_extras():
+    assert STANDARD_CHAT_PROFILE.payload_parameters("quiz", 64) == {"max_tokens": 64}
 
 
 @pytest.mark.parametrize("model", ["my-gateway-model", "o4-custom-deployment"])

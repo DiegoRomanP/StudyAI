@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from app.llm.providers.anthropic import definition as anthropic
 from app.llm.providers.base import ProviderDefinition, ProviderMeta
-from app.llm.providers.glm import definition as glm
+from app.llm.providers.deepseek import definition as deepseek
 from app.llm.providers.gemini import definition as gemini
-from app.llm.providers.huggingface import definition as huggingface
 from app.llm.providers.nvidia import definition as nvidia
 from app.llm.providers.openai import definition as openai
 from app.llm.providers.ollama import definition as ollama
@@ -23,10 +22,9 @@ PROVIDER_REGISTRY: dict[LLMProviderName, ProviderDefinition] = {
     for definition in (
         anthropic,
         openai,
-        glm,
+        deepseek,
         openrouter,
         nvidia,
-        huggingface,
         ollama,
         gemini,
     )

@@ -192,8 +192,8 @@ change at runtime. `PlanService._Generator` builds it in `run()` (after loading 
 `plan.user_id` is known), not in `__init__`.
 
 `OpenAICompatibleProvider` (`app/llm/openai_compatible_provider.py`, built on raw `httpx`, no
-`openai` SDK dependency) serves the generic OpenAI-compatible providers: OpenAI, GLM (Zhipu) and
-Hugging Face (Inference Providers' router, `https://router.huggingface.co/v1`). OpenRouter uses
+`openai` SDK dependency) serves the generic OpenAI-compatible providers: OpenAI and DeepSeek
+(`https://api.deepseek.com`). OpenRouter uses
 its direct adapter, NVIDIA NIM uses `NvidiaNimProvider` and Anthropic uses its native SDK adapter.
 Each provider owns its metadata, configuration validation, request profile, runtime construction and
 verification contract under `app/llm/providers/`; `app/llm/provider_registry.py` is the sole assembly
@@ -213,16 +213,12 @@ model IDs and URLs, and polls the documented NVCF status endpoint without ever r
 If NVCF returns metadata instead of a completion, it raises `LLM_ASYNC_RESULT_UNAVAILABLE`; never
 guess a retrieval endpoint or retry the original request.
 
-**Hugging Face's catalog is a token, not the whole story**: `HF_TOKEN` (HF's own naming) is what the
-user pastes as this provider's "API key" — same BYO-key flow as every other provider, no special
-casing needed. Its `common_models` (`zai-org/GLM-5.2`, `deepseek-ai/DeepSeek-V4-Pro`,
-`deepseek-ai/DeepSeek-V4-Flash`, `moonshotai/Kimi-K2.6`, `Qwen/Qwen3-235B-A22B-Instruct-2507`) are a
-tiny, deliberately-ordered slice of an enormous Hub — HF hosts far more models than any inference
-provider actually serves, so these are picks confirmed (as of mid-2026 research) to be live on
-Inference Providers, not an exhaustive or permanent list; the free-text "Personalizado…" option is
-how a user reaches anything else. A model id may optionally carry a `:<provider>` suffix (e.g.
-`openai/gpt-oss-120b:cerebras`) to pin one specific backend instead of HF's automatic routing —
-that's just part of the model string, `OpenAICompatibleProvider` doesn't need to know about it.
+**DeepSeek runs with thinking disabled**: its models (`deepseek-flash`, `deepseek-v4-pro`) reason by
+default, which would eat each call's sized `max_tokens` budget and slow every request. Its request
+profile (`app/llm/providers/deepseek.py`) sends `"thinking": {"type": "disabled"}` through
+`RequestProfile.extra_parameters` — the place for fixed vendor fields, not a branch in the transport.
+Zhipu GLM and Hugging Face were removed as providers; `init_db` deletes their leftover credentials
+(`RETIRED_PROVIDER_NAMES`) before any ORM read, since the enum can no longer load those rows.
 
 **Credential setup is revisioned and enforced backend-side**: `PUT /llm-settings/{p}` stores or
 replaces only the key. `PATCH /llm-settings/{p}/model` persists a model/URL draft with its
@@ -233,11 +229,11 @@ marker; use the derived `is_verified` response field. Replacing a key resets the
 while changing a model or URL creates a new revision and deactivates it. `PROVIDER_CATALOG.common_models` is `ModelOption(id, free)` tuples
 ordered free-tier first, then cheapest-to-priciest — preserve that order (`common_models[0].free`)
 if you add or reorder entries. `ProviderMeta.key_placeholder` (default `"sk-..."`, overridden per
-provider e.g. `"nvapi-..."` for NVIDIA, `"hf_..."` for Hugging Face) is UI-only — it's the input's
+provider e.g. `"nvapi-..."` for NVIDIA, `"AIza..."` for Gemini) is UI-only — it's the input's
 placeholder text in `SettingsPage.tsx`, not validated against.
 
 **`base_url` is an SSRF surface**: `ProviderMeta.supports_custom_base_url` is false for Anthropic,
-NVIDIA and Ollama; never accept an override for them. Anthropic historical overrides must fail with
+DeepSeek, NVIDIA and Ollama; never accept an override for them. Anthropic historical overrides must fail with
 `LLM_UNSUPPORTED_CONFIGURATION` before the SDK is constructed, so the user can explicitly clear
 the stored value. For supported OpenAI-compatible providers, it is a free-text override that ends up as the
 `base_url` of a real outbound `httpx.Client`. `app/core/url_safety.py::assert_safe_outbound_url`

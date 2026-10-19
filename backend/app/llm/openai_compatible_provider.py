@@ -1,6 +1,6 @@
 """Provider for any OpenAI-compatible chat-completions API.
 
-OpenAI, GLM (Zhipu), OpenRouter and NVIDIA NIM all expose the same
+OpenAI, DeepSeek, OpenRouter and NVIDIA NIM all expose the same
 ``POST {base_url}/chat/completions`` shape and differ only in base URL, model
 name and API key — so one class serves all four rather than four near-duplicate
 provider classes. Written against ``httpx`` directly instead of adding the

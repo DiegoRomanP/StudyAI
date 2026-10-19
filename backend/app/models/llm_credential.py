@@ -20,12 +20,16 @@ from app.models.mixins import TimestampMixin
 class LLMProviderName(str, enum.Enum):
     ANTHROPIC = "ANTHROPIC"
     OPENAI = "OPENAI"
-    GLM = "GLM"
     OPENROUTER = "OPENROUTER"
     NVIDIA = "NVIDIA"
-    HUGGINGFACE = "HUGGINGFACE"
     OLLAMA = "OLLAMA"
     GEMINI = "GEMINI"
+    DEEPSEEK = "DEEPSEEK"
+
+
+# Providers that were offered once and removed; their stored credentials are
+# purged at startup because the enum can no longer load them.
+RETIRED_PROVIDER_NAMES = ("GLM", "HUGGINGFACE")
 
 
 class LLMCredential(TimestampMixin, Base):

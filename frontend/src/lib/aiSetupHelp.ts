@@ -25,6 +25,11 @@ export const KEY_SOURCES: KeySource[] = [
     note: "De pago.",
   },
   {
+    provider: "DEEPSEEK",
+    url: "https://platform.deepseek.com/api_keys",
+    note: "De pago, muy económico.",
+  },
+  {
     provider: "GEMINI",
     url: "https://aistudio.google.com/apikey",
     note: "Nivel gratuito limitado.",
@@ -33,11 +38,6 @@ export const KEY_SOURCES: KeySource[] = [
     provider: "OPENROUTER",
     url: "https://openrouter.ai/keys",
     note: "Algunos modelos gratis.",
-  },
-  {
-    provider: "HUGGINGFACE",
-    url: "https://huggingface.co/settings/tokens",
-    note: "Token con permiso de lectura.",
   },
 ];
 

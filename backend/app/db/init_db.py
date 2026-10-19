@@ -7,22 +7,25 @@ the schema stabilises and you want versioned migrations.
 
 from __future__ import annotations
 
-from sqlalchemy import Index, inspect, text
+from sqlalchemy import Index, bindparam, inspect, text
 
 from app.api.deps import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
 from app.core.logging import get_logger
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
-from app.models.llm_credential import LLMCredential, LLMProviderName
+from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
 from app.models.plan import Plan
 from app.models.user import User
 
 logger = get_logger(__name__)
 
+# Providers registered after the native PostgreSQL enum type was first created.
+_BACKFILLED_PROVIDER_NAMES = (LLMProviderName.GEMINI, LLMProviderName.DEEPSEEK)
 
-def _ensure_gemini_provider_enum_value() -> None:
-    """Add Gemini to existing PostgreSQL provider enums after table creation.
+
+def _ensure_provider_enum_values() -> None:
+    """Add later providers to existing PostgreSQL provider enums after table creation.
 
     SQLAlchemy creates a missing native enum type but does not alter an existing
     type when the Python enum grows. Keep this additive backfill PostgreSQL-only;
@@ -39,23 +42,44 @@ def _ensure_gemini_provider_enum_value() -> None:
     type_name = preparer.quote(provider_enum.name)
     if provider_enum.schema:
         type_name = f"{preparer.quote_schema(provider_enum.schema)}.{type_name}"
-    enum_value = LLMProviderName.GEMINI.value.replace("'", "''")
-    statement = f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{enum_value}'"
     with engine.begin() as conn:
-        conn.exec_driver_sql(statement)
+        for provider in _BACKFILLED_PROVIDER_NAMES:
+            enum_value = provider.value.replace("'", "''")
+            conn.exec_driver_sql(f"ALTER TYPE {type_name} ADD VALUE IF NOT EXISTS '{enum_value}'")
     logger.info(
-        "Migrated llm_credentials provider enum: ensured %s label",
-        LLMProviderName.GEMINI.value,
+        "Migrated llm_credentials provider enum: ensured %s labels",
+        ", ".join(provider.value for provider in _BACKFILLED_PROVIDER_NAMES),
     )
+
+
+def _purge_retired_provider_credentials() -> None:
+    """Delete credentials of removed providers before anything loads them.
+
+    The ORM enum no longer knows those names, so a leftover row would raise
+    ``LookupError`` on every credential listing and provider resolution.
+    """
+    if "llm_credentials" not in inspect(engine).get_table_names():
+        return
+    with engine.begin() as conn:
+        result = conn.execute(
+            # CAST: PostgreSQL stores a native enum that won't compare to text params.
+            text("DELETE FROM llm_credentials WHERE CAST(provider AS TEXT) IN :providers").bindparams(
+                bindparam("providers", expanding=True)
+            ),
+            {"providers": list(RETIRED_PROVIDER_NAMES)},
+        )
+    if result.rowcount:
+        logger.info("Removed %d credential(s) of retired LLM providers", result.rowcount)
 
 
 def init_db() -> None:
     """Create all tables and seed the default (demo) user."""
     Base.metadata.create_all(bind=engine)
-    _ensure_gemini_provider_enum_value()
+    _ensure_provider_enum_values()
     _ensure_document_error_message_column()
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()
+    _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
     _seed_default_user()

@@ -211,8 +211,8 @@ Frontend (`frontend/.env`): `VITE_API_URL` (por defecto `http://localhost:8001`)
 
 En vez de (o además de) editar `backend/.env`, la sección **Conectar IA** del
 frontend (`/settings`; también en versión compacta desde Inicio) permite guardar
-tu propia clave para **Anthropic (Claude), OpenAI (ChatGPT), Google Gemini,
-Zhipu GLM, OpenRouter, NVIDIA NIM o Hugging Face**. También permite
+tu propia clave para **Anthropic (Claude), OpenAI (ChatGPT), DeepSeek, Google
+Gemini, OpenRouter o NVIDIA NIM**. También permite
 usar **Ollama local**, sin clave: la tarjeta descubre los modelos ya instalados
 en el daemon que ve el backend y excluye las entradas `:cloud`.
 
@@ -223,16 +223,13 @@ FastAPI se ejecuta dentro de Docker, `OLLAMA_BASE_URL` debe resolver desde el
 contenedor hacia el host o servicio que ejecuta Ollama; `localhost` no apunta al
 navegador.
 
-Para Hugging Face, la "clave de API" es tu **`HF_TOKEN`** (Settings → Access
-Tokens en huggingface.co, prefijo `hf_...`) — StudyAI habla con el router
-OpenAI-compatible de Hugging Face Inference Providers
-(`https://router.huggingface.co/v1`), que reenvía la llamada a alguno de sus
-15+ partners de hosting (Together, Fireworks, Novita, Cerebras, DeepInfra,
-Zai...). Modelos sugeridos por defecto: `zai-org/GLM-5.2`,
-`deepseek-ai/DeepSeek-V4-Pro`, `deepseek-ai/DeepSeek-V4-Flash`,
-`moonshotai/Kimi-K2.6` y `Qwen/Qwen3-235B-A22B-Instruct-2507` — como con
-cualquier proveedor, "Personalizado…" acepta cualquier otro ID de modelo del
-Hub que Inference Providers sirva.
+Para DeepSeek, crea la clave en `https://platform.deepseek.com/api_keys`
+(formato `sk-...`, de pago). StudyAI usa su API OpenAI-compatible en
+`https://api.deepseek.com` con `deepseek-flash` (predeterminado, más barato) o
+`deepseek-v4-pro`. DeepSeek razona ("thinking") por defecto; StudyAI lo desactiva
+en cada solicitud (`thinking: {"type": "disabled"}`) porque el razonamiento
+consumiría el presupuesto de `max_tokens` de cada llamada y la haría mucho más
+lenta. No admite URL base personalizada.
 
 Para NVIDIA NIM, StudyAI usa siempre `https://integrate.api.nvidia.com/v1` y
 solo admite modelos generativos cuyo contrato está validado en el servidor. El
@@ -257,7 +254,7 @@ Internamente, cada proveedor posee su contrato en `backend/app/llm/providers/`:
 metadatos de la UI, validación de clave/modelo/URL, perfil de solicitud,
 construcción del adaptador y versión de verificación. `provider_registry.py` los
 ensambla; el transporte HTTP, presupuestos y errores seguros se comparten para
-evitar duplicar lógica de reintentos. OpenAI, GLM y Hugging Face usan el transporte
+evitar duplicar lógica de reintentos. OpenAI y DeepSeek usan el transporte
 de chat común; Anthropic, OpenRouter, NVIDIA y Ollama conservan sus adaptadores o
 contratos específicos. Para incorporar un proveedor nuevo, agrega su definición,
 regístrala y cúbrela con pruebas de contrato en lugar de añadir condicionales a la
@@ -280,10 +277,10 @@ El flujo de configuración se realiza en cuatro pasos:
 Los modelos sugeridos se ordenan con los **gratuitos primero** (marcados
 "— gratis") y los de pago después. Los proveedores que lo permiten ofrecen
 "Personalizado…" para cualquier ID; NVIDIA queda limitado a su lista validada.
-En "Configuración avanzada", OpenAI, GLM, OpenRouter y Hugging Face permiten
-un override opcional de URL base (útil, por ejemplo, para un endpoint regional
-de GLM). Anthropic, NVIDIA y Ollama no lo admiten: Anthropic usa solo su API
-nativa, NVIDIA su endpoint hospedado oficial y Ollama se configura mediante
+En "Configuración avanzada", OpenAI y OpenRouter permiten un override opcional
+de URL base (útil, por ejemplo, para un gateway propio). Anthropic, DeepSeek,
+NVIDIA y Ollama no lo admiten: Anthropic usa solo su API nativa, DeepSeek y
+NVIDIA su endpoint hospedado oficial y Ollama se configura mediante
 `OLLAMA_BASE_URL` en el servidor.
 
 Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido

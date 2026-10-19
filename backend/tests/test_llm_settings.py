@@ -82,16 +82,15 @@ def _verify(client: TestClient, provider: str, revision: int) -> dict:
     return response.json()["credential"]
 
 
-def test_catalog_lists_all_eight_providers(client: TestClient):
+def test_catalog_lists_all_seven_providers(client: TestClient):
     response = client.get("/llm-settings/catalog")
     assert response.status_code == 200
     assert {entry["provider"] for entry in response.json()} == {
         "ANTHROPIC",
         "OPENAI",
-        "GLM",
+        "DEEPSEEK",
         "OPENROUTER",
         "NVIDIA",
-        "HUGGINGFACE",
         "OLLAMA",
         "GEMINI",
     }
@@ -99,10 +98,9 @@ def test_catalog_lists_all_eight_providers(client: TestClient):
     assert capabilities == {
         "ANTHROPIC": False,
         "OPENAI": True,
-        "GLM": True,
+        "DEEPSEEK": False,
         "OPENROUTER": True,
         "NVIDIA": False,
-        "HUGGINGFACE": True,
         "OLLAMA": False,
         "GEMINI": False,
     }
@@ -268,11 +266,11 @@ def test_nvidia_rejects_a_custom_base_url(client: TestClient):
 
 
 def test_authentication_failure_revokes_only_the_tested_credential(client: TestClient):
-    credential = _save_key(client, "HUGGINGFACE")
-    draft = _save_draft(client, "HUGGINGFACE", credential["config_revision"], "test-model")
-    verified = _verify(client, "HUGGINGFACE", draft["config_revision"])
+    credential = _save_key(client, "DEEPSEEK")
+    draft = _save_draft(client, "DEEPSEEK", credential["config_revision"], "test-model")
+    verified = _verify(client, "DEEPSEEK", draft["config_revision"])
     activated = client.post(
-        "/llm-settings/HUGGINGFACE/activate",
+        "/llm-settings/DEEPSEEK/activate",
         json={"expected_revision": verified["config_revision"]},
     )
     assert activated.status_code == 200
@@ -281,12 +279,12 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
         LLMError(
             "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.",
             code="LLM_AUTHENTICATION_FAILED",
-            provider="HUGGINGFACE",
+            provider="DEEPSEEK",
             upstream_status=401,
         )
     )
     response = client.post(
-        "/llm-settings/HUGGINGFACE/test",
+        "/llm-settings/DEEPSEEK/test",
         json={"expected_revision": verified["config_revision"]},
     )
 
@@ -294,13 +292,13 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
     assert response.json() == {
         "detail": "El proveedor de IA rechazó la autenticación. Revisa o reemplaza la clave.",
         "code": "LLM_AUTHENTICATION_FAILED",
-        "provider": "HUGGINGFACE",
+        "provider": "DEEPSEEK",
         "upstream_status": 401,
         "retryable": False,
         "retry_after_seconds": None,
     }
     stored = client.get("/llm-settings").json()
-    credential = next(item for item in stored if item["provider"] == "HUGGINGFACE")
+    credential = next(item for item in stored if item["provider"] == "DEEPSEEK")
     assert credential["is_verified"] is False
     assert credential["is_active"] is False
     assert verified["verified_at"] is not None
@@ -309,10 +307,10 @@ def test_authentication_failure_revokes_only_the_tested_credential(client: TestC
 @pytest.mark.parametrize(
     ("provider", "code"),
     [
-        ("GLM", "LLM_ACCESS_DENIED"),
+        ("DEEPSEEK", "LLM_ACCESS_DENIED"),
         ("NVIDIA", "LLM_QUOTA_EXHAUSTED"),
         ("OPENROUTER", "LLM_TIMEOUT"),
-        ("HUGGINGFACE", "LLM_RATE_LIMITED"),
+        ("OPENROUTER", "LLM_RATE_LIMITED"),
         ("ANTHROPIC", "LLM_PROVIDER_UNAVAILABLE"),
         ("OPENAI", "LLM_UNSUPPORTED_REQUEST"),
         ("OPENAI", "LLM_OUTPUT_LIMIT"),
@@ -448,29 +446,29 @@ def test_activation_requires_evidence_for_the_current_draft(client: TestClient):
 
 
 def test_changing_a_verified_model_invalidates_evidence_and_deactivates(client: TestClient):
-    credential = _save_key(client, "GLM")
-    draft = _save_draft(client, "GLM", credential["config_revision"], "glm-4-flash")
-    verified = _verify(client, "GLM", draft["config_revision"])
-    client.post("/llm-settings/GLM/activate", json={"expected_revision": verified["config_revision"]})
+    credential = _save_key(client, "DEEPSEEK")
+    draft = _save_draft(client, "DEEPSEEK", credential["config_revision"], "deepseek-flash")
+    verified = _verify(client, "DEEPSEEK", draft["config_revision"])
+    client.post("/llm-settings/DEEPSEEK/activate", json={"expected_revision": verified["config_revision"]})
 
-    changed = _save_draft(client, "GLM", verified["config_revision"], "glm-4-air")
+    changed = _save_draft(client, "DEEPSEEK", verified["config_revision"], "deepseek-v4-pro")
     assert changed["is_verified"] is False
     assert changed["is_active"] is False
 
 
 def test_stale_revision_cannot_replace_or_verify_a_draft(client: TestClient):
-    credential = _save_key(client, "HUGGINGFACE")
-    draft = _save_draft(client, "HUGGINGFACE", credential["config_revision"], "zai-org/GLM-5.2")
+    credential = _save_key(client, "DEEPSEEK")
+    draft = _save_draft(client, "DEEPSEEK", credential["config_revision"], "deepseek-flash")
 
     stale_patch = client.patch(
-        "/llm-settings/HUGGINGFACE/model",
-        json={"model": "moonshotai/Kimi-K2.6", "expected_revision": credential["config_revision"]},
+        "/llm-settings/DEEPSEEK/model",
+        json={"model": "deepseek-v4-pro", "expected_revision": credential["config_revision"]},
     )
     assert stale_patch.status_code == 409
     assert stale_patch.json()["code"] == "LLM_CONFIGURATION_CHANGED"
 
     stale_test = client.post(
-        "/llm-settings/HUGGINGFACE/test",
+        "/llm-settings/DEEPSEEK/test",
         json={"expected_revision": credential["config_revision"]},
     )
     assert stale_test.status_code == 409
