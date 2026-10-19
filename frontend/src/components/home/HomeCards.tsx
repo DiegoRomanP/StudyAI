@@ -20,6 +20,7 @@ import {
   parseApiDate,
   quizStreakDays,
   rankTopics,
+  sessionProgress,
   suggestedSessionDate,
   toDateKey,
   upcomingReviewCount,
@@ -235,7 +236,8 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
       </div>
       <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {recent.map((plan) => {
-          const completed = plan.sessions.filter((session) => session.status === "COMPLETED").length;
+          // Reviews are extra sessions: they never count as plan progress.
+          const progress = sessionProgress([plan]);
           const status = PLAN_STATUS[plan.status];
           return (
             <li key={plan.id}>
@@ -250,7 +252,7 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
                       ? "Continuar generación →"
                       : plan.status === "PROCESSING"
                         ? "Generando…"
-                        : `${completed} de ${plan.sessions.length} sesiones`}
+                        : `${progress.completed} de ${progress.total} sesiones`}
                   </span>
                   <Badge color={status.color}>{status.label}</Badge>
                 </span>

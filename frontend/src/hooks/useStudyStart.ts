@@ -217,7 +217,12 @@ export function useStudyStart() {
       await resumePlan.mutateAsync(planId);
       setStep({ phase: "idle" });
     } catch (caught: unknown) {
-      setStep({ phase: "error", message: getApiErrorMessage(caught, "No se pudo continuar la generación.") });
+      // 409: it was already resumed or finished elsewhere; follow the reloaded plan instead.
+      setStep(
+        axios.isAxiosError(caught) && caught.response?.status === 409
+          ? { phase: "idle" }
+          : { phase: "error", message: getApiErrorMessage(caught, "No se pudo continuar la generación.") },
+      );
     } finally {
       running.current = false;
     }

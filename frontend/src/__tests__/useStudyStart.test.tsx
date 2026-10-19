@@ -251,6 +251,25 @@ describe("useStudyStart", () => {
       expect(result.current.canResume).toBe(true);
     });
 
+    it("follows the plan again when it was already resumed elsewhere (409)", async () => {
+      vi.spyOn(api, "getPlan")
+        .mockResolvedValueOnce(failedPlan)
+        .mockResolvedValue({ ...failedPlan, status: "PROCESSING", error_message: "" });
+      vi.spyOn(api, "resumePlan").mockRejectedValue({
+        isAxiosError: true,
+        response: { status: 409, data: { detail: "No", code: "PLAN_NOT_RESUMABLE" } },
+      });
+      const { result } = followFailedPlan();
+      await waitFor(() => expect(result.current.canResume).toBe(true));
+
+      await act(async () => {
+        await result.current.resume();
+      });
+
+      await waitFor(() => expect(result.current.phase).toBe("processing"));
+      expect(result.current.error).toBeNull();
+    });
+
     it("sends a single request when resumed twice in the same tick", async () => {
       vi.spyOn(api, "getPlan").mockResolvedValue(failedPlan);
       const resumePlan = vi

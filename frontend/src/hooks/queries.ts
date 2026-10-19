@@ -220,6 +220,12 @@ export function useResumePlan() {
       // Resuming may spend a free-AI use.
       qc.invalidateQueries({ queryKey: ["llm-runtime"] });
     },
+    // A 409 means it was resumed or finished elsewhere: a FAILED plan is not polled, so reload it.
+    onError: (_error, planId) => {
+      qc.invalidateQueries({ queryKey: ["plan", planId] });
+      qc.invalidateQueries({ queryKey: ["plans"] });
+      qc.invalidateQueries({ queryKey: ["llm-runtime"] });
+    },
   });
 }
 

@@ -20,6 +20,7 @@ import {
 } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
 import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
+import { sessionProgress } from "../lib/studyProgress";
 
 const STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
@@ -296,6 +297,8 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
   const deletePlan = useDeletePlan();
   const [error, setError] = useState<string | null>(null);
   const meta = STATUS[plan.status];
+  // Reviews are extra sessions: they never count as plan progress.
+  const progress = sessionProgress([plan]);
 
   async function handleDelete() {
     if (
@@ -318,7 +321,7 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
           <p className="truncate font-medium text-text-primary hover:text-action">{plan.title}</p>
           <p className="text-xs text-text-muted">
             {plan.status === "READY"
-              ? `${plan.sessions.filter((session) => session.status === "COMPLETED").length} de ${plan.sessions.length} sesiones completadas`
+              ? `${progress.completed} de ${progress.total} sesiones completadas`
               : plan.status === "PROCESSING"
                 ? "Generando…"
                 : "Continuar generación"}

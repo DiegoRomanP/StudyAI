@@ -190,6 +190,25 @@ describe("useResumePlan", () => {
   });
 });
 
+describe("useResumePlan refused", () => {
+  it("reloads the plan after a 409 so a plan resumed elsewhere stops offering to continue", async () => {
+    api.resumePlan.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 409, data: { detail: "No", code: "PLAN_NOT_RESUMABLE" } },
+    });
+    const queryClient = createClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useResumePlan(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.mutateAsync(9).catch(() => undefined);
+    });
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["plan", 9] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["plans"] });
+  });
+});
+
 describe("useUploadDocument cache", () => {
   it("keeps cached documents and replaces an uploaded ID instead of duplicating it", async () => {
     const queryClient = new QueryClient({

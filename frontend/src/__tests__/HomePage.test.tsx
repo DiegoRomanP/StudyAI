@@ -524,6 +524,24 @@ describe("HomePage", () => {
     expect(window.sessionStorage.getItem("studyai.study-start")).toBeNull();
   });
 
+  it("counts only the planned sessions of a recent plan, never the extra reviews", async () => {
+    mockApi({
+      plans: [
+        {
+          ...readyPlan,
+          sessions: [
+            ...readyPlan.sessions,
+            makeSessionSummary({ id: 72, order_index: 2, topic_name: "Grafos", kind: "REVIEW" }),
+          ],
+        },
+      ],
+    });
+    renderHome();
+
+    const recent = await screen.findByRole("region", { name: "Tus planes" });
+    expect(within(recent).getByText("1 de 2 sesiones")).toBeInTheDocument();
+  });
+
   describe("an incomplete plan", () => {
     const failedPlan: PlanDTO = {
       ...readyPlan,
