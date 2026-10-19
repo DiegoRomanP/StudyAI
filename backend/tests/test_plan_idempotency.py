@@ -64,6 +64,9 @@ def test_same_key_and_canonical_payload_replays_one_plan_and_one_task(
         "id": first.json()["id"],
         "status": "PROCESSING",
         "error_message": "",
+        "progress_stage": None,
+        "progress_done": 0,
+        "progress_total": 0,
     }
     plans = _plans_for_goal(client, goal_id)
     assert len(plans) == 1

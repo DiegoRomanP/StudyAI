@@ -8,8 +8,9 @@ identified (with a Pareto-selected subset flagged via ``selected``).
 from __future__ import annotations
 
 import enum
+from datetime import date
 
-from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Date, Enum, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -20,6 +21,12 @@ class PlanStatus(str, enum.Enum):
     PROCESSING = "PROCESSING"    # background generation in progress
     READY = "READY"              # sessions + materials available
     FAILED = "FAILED"
+
+
+class GenerationStage(str, enum.Enum):
+    TOPICS = "TOPICS"        # reading the material and detecting topics
+    SESSIONS = "SESSIONS"    # selecting key topics and laying out sessions
+    CONTENT = "CONTENT"      # preparing each session's material and quiz
 
 
 class Plan(TimestampMixin, Base):
@@ -41,6 +48,13 @@ class Plan(TimestampMixin, Base):
     error_message: Mapped[str] = mapped_column(String(1024), default="")
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    progress_stage: Mapped[GenerationStage | None] = mapped_column(
+        Enum(GenerationStage, native_enum=False, length=16), nullable=True
+    )
+    progress_done: Mapped[int] = mapped_column(Integer, default=0)
+    progress_total: Mapped[int] = mapped_column(Integer, default=0)
+    # UTC day a free-AI use was spent on this plan; cleared once it is refunded or the plan is READY.
+    free_ai_use_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     goal = relationship("Goal")
     topics = relationship(

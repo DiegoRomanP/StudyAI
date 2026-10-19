@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.algorithms.adaptive_route import priority as topic_priority
 from app.algorithms.adaptive_route import topic_state
-from app.models.plan import PlanStatus
+from app.models.plan import GenerationStage, PlanStatus
 
 
 class PlanGenerateRequest(BaseModel):
@@ -60,6 +60,9 @@ class PlanStatusResponse(BaseModel):
     id: int
     status: PlanStatus
     error_message: str = ""
+    progress_stage: GenerationStage | None = None
+    progress_done: int = 0
+    progress_total: int = 0
 
 
 class PlanResponse(BaseModel):
@@ -72,5 +75,8 @@ class PlanResponse(BaseModel):
     document_ids: list[int]
     created_at: datetime
     error_message: str = ""
+    progress_stage: GenerationStage | None = None
+    progress_done: int = 0
+    progress_total: int = 0
     topics: list[PlanTopicResponse] = Field(default_factory=list)
     sessions: list[SessionSummary] = Field(default_factory=list)

@@ -60,6 +60,7 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "_ensure_document_error_message_column",
         "_ensure_plan_error_message_column",
         "_ensure_plan_idempotency_columns",
+        "_ensure_plan_generation_columns",
         "_purge_retired_provider_credentials",
         "_ensure_llm_verification_columns",
         "_ensure_adaptive_route_columns",

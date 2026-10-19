@@ -79,6 +79,7 @@ def init_db() -> None:
     _ensure_document_error_message_column()
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()
+    _ensure_plan_generation_columns()
     _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
@@ -150,6 +151,19 @@ def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
             if name not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_plan_generation_columns() -> None:
+    """Additive backfill for resumable generation progress and the spent free-AI day."""
+    _add_missing_columns(
+        "plans",
+        {
+            "progress_stage": "VARCHAR(16)",
+            "progress_done": "INTEGER NOT NULL DEFAULT 0",
+            "progress_total": "INTEGER NOT NULL DEFAULT 0",
+            "free_ai_use_date": "DATE",
+        },
+    )
 
 
 def _ensure_adaptive_route_columns() -> None:
