@@ -9,7 +9,7 @@ Days follow UTC, like every other timestamp in the app.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -43,7 +43,7 @@ def uses_free_ai(db: Session, user_id: int) -> bool:
     return resolution.runtime.bundled
 
 
-def _today():
+def utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
 
@@ -55,7 +55,7 @@ class FreeAiQuota:
     def _row(self, user_id: int) -> FreeAiUsage | None:
         return self.db.scalar(
             select(FreeAiUsage).where(
-                FreeAiUsage.user_id == user_id, FreeAiUsage.usage_date == _today()
+                FreeAiUsage.user_id == user_id, FreeAiUsage.usage_date == utc_today()
             )
         )
 
@@ -67,7 +67,7 @@ class FreeAiQuota:
         """Spend one use or raise ``DailyLimitError``; the increment is atomic in SQL."""
         if self._row(user_id) is None:
             try:
-                self.db.add(FreeAiUsage(user_id=user_id, usage_date=_today(), uses=0))
+                self.db.add(FreeAiUsage(user_id=user_id, usage_date=utc_today(), uses=0))
                 self.db.commit()
             except IntegrityError:  # a concurrent request created today's row first
                 self.db.rollback()
@@ -75,7 +75,7 @@ class FreeAiQuota:
             update(FreeAiUsage)
             .where(
                 FreeAiUsage.user_id == user_id,
-                FreeAiUsage.usage_date == _today(),
+                FreeAiUsage.usage_date == utc_today(),
                 FreeAiUsage.uses < self.limit,
             )
             .values(uses=FreeAiUsage.uses + 1)
@@ -84,12 +84,13 @@ class FreeAiQuota:
         if spent.rowcount == 0:
             raise DailyLimitError(_LIMIT_MESSAGE.format(limit=self.limit), code="FREE_AI_DAILY_LIMIT")
 
-    def refund(self, user_id: int) -> None:
+    def refund(self, user_id: int, day: date | None = None) -> None:
+        """Give one use back on ``day`` (today by default), the day it was spent."""
         self.db.execute(
             update(FreeAiUsage)
             .where(
                 FreeAiUsage.user_id == user_id,
-                FreeAiUsage.usage_date == _today(),
+                FreeAiUsage.usage_date == (day or utc_today()),
                 FreeAiUsage.uses > 0,
             )
             .values(uses=FreeAiUsage.uses - 1)

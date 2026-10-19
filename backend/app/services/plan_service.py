@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -48,7 +48,7 @@ from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
-from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
+from app.services.free_ai_quota import FreeAiQuota, utc_today, uses_free_ai
 from app.strategies.goal_strategies import GoalStrategyFactory
 from app.utils.text import extract_keywords
 
@@ -94,6 +94,7 @@ class PlanService:
             document_ids=list(document_ids),
             idempotency_key=idempotency_key,
             idempotency_request_hash=request_hash if idempotency_key is not None else None,
+            free_ai_use_date=utc_today() if spent_free_use else None,
         )
         if idempotency_key is None:
             return self.repo.save(plan), True
@@ -167,6 +168,28 @@ class PlanService:
         self.repo.delete(plan)
 
 
+def _refund_plan_use(db: Session, plan_id: int, user_id: int, fallback_day: date | None) -> None:
+    """Give back the free use this plan spent, exactly once and on the day it was spent."""
+    try:
+        exists = db.scalar(select(Plan.id).where(Plan.id == plan_id)) is not None
+        if not exists:  # deleted mid-run: nobody else can refund it
+            if fallback_day is not None:
+                FreeAiQuota(db).refund(user_id, fallback_day)
+            return
+        day = db.scalar(select(Plan.free_ai_use_date).where(Plan.id == plan_id))
+        if day is None:
+            return
+        cleared = db.execute(
+            update(Plan).where(Plan.id == plan_id, Plan.free_ai_use_date == day).values(free_ai_use_date=None)
+        )
+        db.commit()
+        if cleared.rowcount == 1:
+            FreeAiQuota(db).refund(user_id, day)
+    except Exception:  # noqa: BLE001 - bookkeeping must never hide the real outcome
+        db.rollback()
+        logger.warning("Could not refund the free AI use for plan %s", plan_id)
+
+
 def generate_plan_task(plan_id: int) -> None:
     """Background worker that generates the full plan content."""
     db = SessionLocal()
@@ -198,14 +221,14 @@ class _Generator:
         if plan is None or plan.status != PlanStatus.PROCESSING:
             logger.warning("generate_plan_task: plan %s not found or not processing", plan_id)
             return
-        user_id = plan.user_id
+        user_id, spent_day = plan.user_id, plan.free_ai_use_date
         try:
             self.llm = get_llm_provider(self.db, user_id)
             self._generate(plan)
             self._finish(plan_id)
         except _PlanGone:
             self.db.rollback()
-            self._refund_free_use(user_id)
+            _refund_plan_use(self.db, plan_id, user_id, spent_day)
         except Exception as exc:  # noqa: BLE001 - record a safe failure for the client
             # A failed flush leaves the session usable only for a rollback.
             self.db.rollback()
@@ -224,19 +247,10 @@ class _Generator:
                 upstream_status,
             )
             self._fail(plan_id, error_message[:1000])
-            self._refund_free_use(user_id)
+            _refund_plan_use(self.db, plan_id, user_id, spent_day)
         finally:
             if self.llm is not None:
                 self.llm.close()
-
-    def _refund_free_use(self, user_id: int) -> None:
-        """A failed plan gives back the free use it spent; never let bookkeeping hide the failure."""
-        try:
-            if _uses_free_ai(self.db, user_id):
-                FreeAiQuota(self.db).refund(user_id)
-        except Exception:  # noqa: BLE001
-            self.db.rollback()
-            logger.warning("Could not refund the free AI use for user %s", user_id)
 
     def _generate(self, plan: Plan) -> None:
         goal = self.db.get(Goal, plan.goal_id)
@@ -312,7 +326,7 @@ class _Generator:
         result = self.db.execute(
             update(Plan)
             .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
-            .values(status=PlanStatus.READY, error_message="")
+            .values(status=PlanStatus.READY, error_message="", free_ai_use_date=None)
         )
         if result.rowcount == 0:
             raise _PlanGone
