@@ -252,20 +252,25 @@ async function assertMobileLayout(
   expectVerticalScroll = false,
   expectedControls: ExpectedControl[] = [],
   readinessEvidence: string[] = [],
+  options: { bottomNav?: boolean } = {},
 ): Promise<MobileLayoutEvidence> {
+  const hasBottomNav = options.bottomNav ?? true;
   await page.evaluate(() => {
     document.documentElement.style.scrollBehavior = "auto";
     window.scrollTo(0, 0);
   });
 
-  const layout = await page.evaluate(() => {
+  const layout = await page.evaluate((hasBottomNav) => {
     const main = document.querySelector<HTMLElement>("#main-content");
     if (!main) throw new Error("No se encontró #main-content.");
     const bottomNavigation = document.querySelector<HTMLElement>(
       'nav[aria-label="Navegación inferior"]',
     );
-    if (!bottomNavigation) throw new Error("No se encontró la navegación inferior móvil.");
-    const bottomNavigationTop = bottomNavigation.getBoundingClientRect().top;
+    if (hasBottomNav && !bottomNavigation) throw new Error("No se encontró la navegación inferior móvil.");
+    // The focus chrome has no bottom navigation: the viewport edge is the limit.
+    const bottomNavigationTop = bottomNavigation
+      ? bottomNavigation.getBoundingClientRect().top
+      : window.innerHeight;
 
     const describe = (element: Element): ControlDescription => ({
       tag: element.tagName.toLowerCase(),
@@ -321,7 +326,7 @@ async function assertMobileLayout(
       overflowingControls,
       overflowingContent,
     };
-  });
+  }, hasBottomNav);
 
   expect(layout.width, `${label}: viewport width`).toBe(320);
   expect(layout.documentWidth, `${label}: document horizontal overflow`).toBe(320);
@@ -678,20 +683,47 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
   await page.goto("/session/54");
   await expect(page.getByRole("heading", { name: session.topic_name })).toBeVisible();
   await expect(page).toHaveTitle("Sesión de estudio | StudyAI");
-  await expect(page.getByText("Material de estudio A06", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Saltar al receso/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Empezar" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Navegación inferior" })).toHaveCount(0);
+  await expect(page.getByText("Material de estudio A06", { exact: true })).toHaveCount(0);
   mobileLayoutEvidence.push(
-    await assertMobileLayout(page, "Sesión de estudio", true, [
-      { tag: "button", label: "Saltar al receso" },
-    ], ["session heading and material: Material de estudio A06", "study action: Saltar al receso"]),
+    await assertMobileLayout(
+      page,
+      "Sesión de estudio",
+      false,
+      [
+        { tag: "a", label: "Salir de la sesión", href: "/plan/27" },
+        { tag: "button", label: "Empezar" },
+      ],
+      ["session heading: " + session.topic_name, "study action: Empezar"],
+      { bottomNav: false },
+    ),
   );
-  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("a06-session-direct-link-320.png") });
 
-  const breakButton = page.getByRole("button", { name: /Saltar al receso/ });
+  const startButton = page.getByRole("button", { name: "Empezar" });
+  await startButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Material de estudio A06", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Terminé" })).toBeFocused();
+  mobileLayoutEvidence.push(
+    await assertMobileLayout(
+      page,
+      "Sesión en enfoque",
+      false,
+      [
+        { tag: "a", label: "Salir de la sesión", href: "/plan/27" },
+        { tag: "button", label: "Terminé" },
+      ],
+      ["session material: Material de estudio A06", "study action: Terminé"],
+      { bottomNav: false },
+    ),
+  );
+
+  const breakButton = page.getByRole("button", { name: "Terminé" });
   await breakButton.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Receso activo (5 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Descanso" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Ir al test/ })).toBeVisible();
   mobileLayoutEvidence.push(
     await assertMobileLayout(
@@ -699,7 +731,8 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
       "Receso",
       false,
       [{ tag: "button", label: "Ir al test" }],
-      ["break state heading: Receso activo (5 min)", "break action: Ir al test"],
+      ["break state heading: Descanso", "break action: Ir al test"],
+      { bottomNav: false },
     ),
   );
   const quizButton = page.getByRole("button", { name: /Ir al test/ });
@@ -711,7 +744,7 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
     await assertMobileLayout(page, "Quiz", true, [
       // Text content includes the decorative A–D badge (aria-hidden; the accessible name above omits it).
       { tag: "button", label: `A${quiz.questions[0].options[0]}` },
-    ], ["quiz state: Pregunta 1 de 1", `answer action: ${quiz.questions[0].options[0]}`]),
+    ], ["quiz state: Pregunta 1 de 1", `answer action: ${quiz.questions[0].options[0]}`], { bottomNav: false }),
   );
 
   const requestsBeforeInvalidIds = apiRequests.length;

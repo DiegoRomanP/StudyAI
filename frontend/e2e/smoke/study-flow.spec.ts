@@ -58,7 +58,8 @@ test("a learner goes from material to a graded quiz entirely from Inicio", async
 
   await page.getByRole("link", { name: "Comenzar la siguiente sesión" }).click();
   await expect(page).toHaveURL(/\/session\/\d+$/);
-  await page.getByRole("button", { name: "Saltar al receso" }).click();
+  await page.getByRole("button", { name: "Empezar" }).click();
+  await page.getByRole("button", { name: "Terminé" }).click();
   await page.getByRole("button", { name: "Ir al test" }).click();
 
   // Answer every question: rate flashcards, pick the first option of each multiple choice.
