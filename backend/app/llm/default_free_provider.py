@@ -1,9 +1,10 @@
 """Free-tier AI that ships with the server, so a learner can generate a plan without a key.
 
-An ordered chain (NVIDIA first, then Google) behind the ordinary ``LLMProvider`` interface.
-A tier that runs out of quota, is rate limited, stalls or is unavailable is skipped for a
-cooldown and the next one answers; the learner never picks a model. The keys come from the
-operator's environment and are used only to build the provider clients, never logged.
+A chain of tiers (today a single one: DeepSeek) behind the ordinary ``LLMProvider``
+interface. A tier that runs out of quota, is rate limited, stalls or is unavailable is
+skipped for a cooldown; when none is left the learner is asked to connect their own AI.
+The key comes from the operator's environment and is used only to build the provider
+client, never logged.
 """
 
 from __future__ import annotations
@@ -15,12 +16,10 @@ from dataclasses import dataclass
 
 from app.core.config import Settings
 from app.core.exceptions import LLMError
-from app.core.logging import get_logger, safe_model_identifier
+from app.core.logging import get_logger
 from app.llm.base import LLMProvider
-from app.llm.gemini_provider import GeminiProvider
-from app.llm.nvidia_models import get_nvidia_model_spec
-from app.llm.nvidia_provider import NvidiaNimProvider
-from app.llm.providers.gemini import definition as gemini_definition
+from app.llm.openai_compatible_provider import OpenAICompatibleProvider
+from app.llm.providers.deepseek import definition as deepseek_definition
 from app.models.llm_credential import LLMProviderName
 
 logger = get_logger(__name__)
@@ -79,45 +78,27 @@ class FreeTier:
 
 
 def build_free_tiers(settings: Settings) -> list[FreeTier]:
-    """The configured tiers in priority order; empty when the operator set no keys."""
-    tiers: list[FreeTier] = []
+    """The configured tiers in priority order; empty when the operator set no key."""
+    if not settings.has_free_ai:
+        return []
     policy = settings.default_ai_policy
-    if settings.has_default_nvidia_key:
-        model = settings.DEFAULT_NVIDIA_MODEL
-        spec = get_nvidia_model_spec(model)
-        if spec is None:
-            logger.warning("Default NVIDIA model %s is not in the registry; skipping it.", safe_model_identifier(model))
-        else:
-            tiers.append(
-                FreeTier(
-                    name="nvidia",
-                    provider=LLMProviderName.NVIDIA,
-                    model=model,
-                    build=lambda: NvidiaNimProvider(
-                        api_key=settings.NVIDIA_API_KEY.strip(),
-                        model_spec=spec,
-                        generation_policy=policy,
-                        test_policy=policy,
-                    ),
-                )
-            )
-    if settings.has_default_gemini_key:
-        model = settings.DEFAULT_GEMINI_MODEL
-        tiers.append(
-            FreeTier(
-                name="gemini",
-                provider=LLMProviderName.GEMINI,
+    model = settings.DEFAULT_DEEPSEEK_MODEL
+    return [
+        FreeTier(
+            name="deepseek",
+            provider=LLMProviderName.DEEPSEEK,
+            model=model,
+            build=lambda: OpenAICompatibleProvider(
+                base_url=deepseek_definition.meta.default_base_url or "",
+                api_key=settings.DEEPSEEK_API_KEY.strip(),
                 model=model,
-                build=lambda: GeminiProvider(
-                    api_key=settings.GEMINI_API_KEY.strip(),
-                    model=model,
-                    request_profile=gemini_definition.request_profile(model),
-                    generation_policy=policy,
-                    test_policy=policy,
-                ),
-            )
+                request_profile=deepseek_definition.request_profile(model),
+                generation_policy=policy,
+                test_policy=policy,
+                provider=LLMProviderName.DEEPSEEK.value,
+            ),
         )
-    return tiers
+    ]
 
 
 class FreeTierProvider(LLMProvider):

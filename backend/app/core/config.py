@@ -17,6 +17,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Repository layout anchors so paths in .env can stay relative and portable.
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = BACKEND_DIR.parent
 STORAGE_DIR = BACKEND_DIR / "storage"
 
 
@@ -51,7 +52,8 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # The repo-root .env holds the operator's free-AI key; backend/.env (cwd) wins on conflicts.
+        env_file=(REPO_DIR / ".env", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -90,15 +92,13 @@ class Settings(BaseSettings):
     # single call even needs to retry. Skipped entirely for MockLLMProvider so
     # local dev/tests stay instant. Raise this in `.env` for very tight tiers.
     LLM_REQUEST_PACING_SECONDS: float = Field(default=2.0, ge=0, allow_inf_nan=False)
-    # Operator-provided free-tier AI for learners who have not connected their own:
-    # NVIDIA first, Google once NVIDIA's quota is gone. Keys live only in the environment.
-    NVIDIA_API_KEY: str = ""
-    GEMINI_API_KEY: str = ""
-    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
-    DEFAULT_GEMINI_MODEL: str = "gemma-4-26b-a4b-it"
+    # Operator-provided free-tier AI (DeepSeek) for learners who have not connected their own.
+    # The key lives only in the environment.
+    DEEPSEEK_API_KEY: str = ""
+    DEFAULT_DEEPSEEK_MODEL: str = "deepseek-flash"
     # Plan generations per learner and day on the included AI; their own key has no limit.
     FREE_AI_DAILY_LIMIT: int = Field(default=3, ge=1)
-    # Free tiers get a short leash so a stalled provider hands over to the next one quickly.
+    # The free tier gets a short leash so a stalled provider fails fast.
     DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
     DEFAULT_AI_TOTAL_BUDGET_SECONDS: float = Field(default=120.0, gt=0, allow_inf_nan=False)
     # Ollama runs on the backend host, not in the browser. This URL is operator
@@ -157,16 +157,8 @@ class Settings(BaseSettings):
         return bool(self.ANTHROPIC_API_KEY.strip())
 
     @property
-    def has_default_nvidia_key(self) -> bool:
-        return bool(self.NVIDIA_API_KEY.strip())
-
-    @property
-    def has_default_gemini_key(self) -> bool:
-        return bool(self.GEMINI_API_KEY.strip())
-
-    @property
     def has_free_ai(self) -> bool:
-        return self.has_default_nvidia_key or self.has_default_gemini_key
+        return bool(self.DEEPSEEK_API_KEY.strip())
 
     @property
     def default_ai_policy(self) -> LLMCallPolicy:

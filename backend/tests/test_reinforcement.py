@@ -71,8 +71,7 @@ def _review(client: TestClient, created_plans: list[int], title: str) -> tuple[d
 
 def _bundled(monkeypatch, *, limit: int = 3, own_key: bool = False) -> None:
     settings = Settings(
-        NVIDIA_API_KEY="nvapi-test",
-        GEMINI_API_KEY="gem-test",
+        DEEPSEEK_API_KEY="sk-free-test",
         FREE_AI_DAILY_LIMIT=limit,
         ANTHROPIC_API_KEY="anthropic-test" if own_key else "",
     )

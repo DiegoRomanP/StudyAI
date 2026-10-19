@@ -161,21 +161,24 @@ order — check this chain before assuming which LLM is actually being called:
    and built via `build_provider_from_credential()`.
 2. The operator's `.env` `ANTHROPIC_API_KEY` (legacy path, unchanged, zero-migration for existing
    deployments).
-3. The included free-tier AI (`app/llm/default_free_provider.py`): `NVIDIA_API_KEY` first
-   (`DEFAULT_NVIDIA_MODEL`), then `GEMINI_API_KEY` (`DEFAULT_GEMINI_MODEL`). Learners never pick
-   between them. A tier that is out of quota, rate limited, stalled or unavailable is skipped for a
-   cooldown (in-process, `reset_cooldowns()` for tests) and the next one answers; when all are out it
-   raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock. Keys exist
-   only in the environment (`backend/.env` is git-ignored): `tests/conftest.py` and the QA runner
-   (`scripts/qa-runtime.mjs`) force them empty so no test spends quota — keep that when adding env keys.
+3. The included free-tier AI (`app/llm/default_free_provider.py`): DeepSeek via `DEEPSEEK_API_KEY`
+   (`DEFAULT_DEEPSEEK_MODEL`, default `deepseek-flash`, thinking disabled through its request profile).
+   NVIDIA NIM and Gemini are no longer free tiers (they remain as bring-your-own-key providers). The
+   chain shape is kept with a single tier: one that is out of quota (DeepSeek's 402 "saldo"), rate
+   limited, stalled or unavailable is skipped for a cooldown (in-process, `reset_cooldowns()` for tests)
+   and then it raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock.
+   The key exists only in the environment: `Settings` reads the **repo-root `.env`** and then
+   `backend/.env` (the latter wins; both git-ignored). `tests/conftest.py` and the QA runner
+   (`scripts/qa-runtime.mjs`) force it empty as an environment variable (which beats both files) so no
+   test spends quota — keep that when adding env keys.
    `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`, and `free_ai` (`limit`/`used`/`remaining`,
    null when the server has no free keys or an Anthropic `.env` key).
    **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) uses per user and UTC day (a plan generation *or* an AI reinforcement of a review), counted in `free_ai_usage`
    (`app/services/free_ai_quota.py`). `PlanService.create_plan` spends one use *only when the resolved provider is bundled*
    (429 `FREE_AI_DAILY_LIMIT`, no plan row, when it is spent) and `_Generator` gives it back if generation fails; the learner's own key,
    Ollama and the mock never count. Idempotent replays do not spend another use.
-   A real environment variable beats `backend/.env` (pydantic-settings), so a stale `NVIDIA_API_KEY` exported in the
-   shell silently overrides the file and shows up as 403 "Authorization failed".
+   A real environment variable beats both `.env` files (pydantic-settings), so a stale key exported in the
+   shell silently overrides them (it showed up as 403 "Authorization failed" with the old NVIDIA tier).
 4. `MockLLMProvider`.
 
 `resolve_llm_provider()` es la única resolución compartida por la generación y

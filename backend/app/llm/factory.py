@@ -4,7 +4,7 @@ Priority order:
     1. The user's active ``LLMCredential`` configured through the settings UI.
     2. The operator-level ``ANTHROPIC_API_KEY`` from ``.env`` (legacy path,
        unchanged, keeps existing deployments working with zero migration).
-    3. The operator's free-tier chain (``NVIDIA_API_KEY`` then ``GEMINI_API_KEY``),
+    3. The operator's free-tier AI (``DEEPSEEK_API_KEY``),
        which needs nothing from the learner.
     4. ``MockLLMProvider`` — the deterministic offline fallback that makes the
        whole app runnable with no key at all.

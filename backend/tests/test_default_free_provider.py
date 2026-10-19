@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import json
+
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 import main
-from app.core.config import Settings
+from app.core.config import REPO_DIR, Settings
 from app.core.exceptions import LLMError
 from app.llm import default_free_provider as free
 from app.llm import factory
 from app.llm.base import LLMProvider
 from app.llm.default_free_provider import FreeTier, FreeTierProvider, build_free_tiers
-from app.llm.providers.gemini import GEMINI_REQUEST_PROFILE
+from app.llm.providers.deepseek import DEEPSEEK_NON_THINKING_PROFILE
 from app.models.llm_credential import LLMProviderName
 
 
@@ -126,31 +130,66 @@ def test_close_releases_the_providers_that_were_built():
     assert first_provider.closed
 
 
-def test_builds_tiers_in_priority_order_from_the_environment():
-    settings = Settings(NVIDIA_API_KEY="nvapi-test", GEMINI_API_KEY="gem-test")
-    tiers = build_free_tiers(settings)
+def test_builds_the_deepseek_tier_from_the_environment():
+    tiers = build_free_tiers(Settings(DEEPSEEK_API_KEY="sk-test"))
 
-    assert [tier.name for tier in tiers] == ["nvidia", "gemini"]
-    assert tiers[0].model == "nvidia/nemotron-3-super-120b-a12b"
-    assert tiers[1].model == "gemma-4-26b-a4b-it"
-    # Construction is lazy-cheap: building the clients performs no network I/O.
-    for tier in tiers:
-        tier.build().close()
-
-
-def test_the_free_gemma_tier_keeps_the_base_profile():
-    settings = Settings(GEMINI_API_KEY="gem-test", DEFAULT_GEMINI_MODEL="gemma-4-26b-a4b-it")
-    provider = build_free_tiers(settings)[0].build()
+    assert [(tier.name, tier.provider, tier.model) for tier in tiers] == [
+        ("deepseek", LLMProviderName.DEEPSEEK, "deepseek-flash")
+    ]
+    # Construction is lazy-cheap: building the client performs no network I/O.
+    provider = tiers[0].build()
     try:
-        assert provider._request_profile == GEMINI_REQUEST_PROFILE
+        assert provider._request_profile == DEEPSEEK_NON_THINKING_PROFILE
     finally:
         provider.close()
 
 
-def test_ignores_missing_keys_and_unregistered_nvidia_models():
-    assert build_free_tiers(Settings(NVIDIA_API_KEY="", GEMINI_API_KEY="")) == []
-    only_gemini = build_free_tiers(Settings(NVIDIA_API_KEY="k", DEFAULT_NVIDIA_MODEL="not/registered", GEMINI_API_KEY="g"))
-    assert [tier.name for tier in only_gemini] == ["gemini"]
+@respx.mock
+def test_the_free_deepseek_tier_calls_deepseek_with_thinking_off():
+    route = respx.post("https://api.deepseek.com/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [{"finish_reason": "stop", "message": {"content": "{}"}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+            },
+        )
+    )
+    provider = build_free_tiers(Settings(DEEPSEEK_API_KEY="sk-test"))[0].build()
+    try:
+        provider.complete(kind="session_content", system="s", prompt="p", max_tokens=4096)
+    finally:
+        provider.close()
+
+    request = route.calls.last.request
+    assert request.headers["Authorization"] == "Bearer sk-test"
+    payload = json.loads(request.content)
+    assert payload["model"] == "deepseek-flash"
+    assert payload["thinking"] == {"type": "disabled"}
+    assert payload["max_tokens"] == 4096
+
+
+def test_no_key_means_no_free_tier():
+    assert build_free_tiers(Settings(DEEPSEEK_API_KEY="")) == []
+    assert build_free_tiers(Settings(DEEPSEEK_API_KEY="   ")) == []
+
+
+def test_the_free_ai_key_is_read_from_the_repo_root_env_file(tmp_path, monkeypatch):
+    root_env, backend_env = tmp_path / "root.env", tmp_path / "backend.env"
+    root_env.write_text("DEEPSEEK_API_KEY = sk-from-root\n")
+    backend_env.write_text("FREE_AI_DAILY_LIMIT=5\n")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    settings = Settings(_env_file=(root_env, backend_env))
+
+    assert Settings.model_config["env_file"][0] == REPO_DIR / ".env"
+    assert settings.DEEPSEEK_API_KEY.strip() == "sk-from-root"
+    assert settings.FREE_AI_DAILY_LIMIT == 5
+
+
+def test_tests_never_see_the_operators_free_ai_key():
+    # conftest's empty environment variable beats the repo-root .env that holds the real key.
+    assert Settings().DEEPSEEK_API_KEY == ""
 
 
 def _runtime_with(monkeypatch, settings):
@@ -161,28 +200,23 @@ def _runtime_with(monkeypatch, settings):
 
 
 def test_runtime_reports_the_included_ai_when_the_server_has_free_keys(monkeypatch):
-    runtime = _runtime_with(monkeypatch, Settings(NVIDIA_API_KEY="nvapi-test", GEMINI_API_KEY="gem-test"))
+    runtime = _runtime_with(monkeypatch, Settings(DEEPSEEK_API_KEY="sk-free-test"))
 
     assert runtime["source"] == "ENV"
-    assert runtime["provider"] == "NVIDIA"
+    assert runtime["provider"] == "DEEPSEEK"
     assert runtime["bundled"] is True
-    assert runtime["models"]["session_content"] == "nvidia/nemotron-3-super-120b-a12b"
-    assert "nvapi" not in str(runtime) and "gem-test" not in str(runtime)
-
-
-def test_included_ai_starts_with_google_when_only_that_key_exists(monkeypatch):
-    runtime = _runtime_with(monkeypatch, Settings(NVIDIA_API_KEY="", GEMINI_API_KEY="gem-test"))
-    assert (runtime["provider"], runtime["bundled"]) == ("GEMINI", True)
+    assert runtime["models"]["session_content"] == "deepseek-flash"
+    assert "sk-free-test" not in str(runtime)
 
 
 def test_an_operator_anthropic_key_wins_over_the_included_ai(monkeypatch):
-    settings = Settings(ANTHROPIC_API_KEY="anthropic-test", NVIDIA_API_KEY="nvapi-test")
+    settings = Settings(ANTHROPIC_API_KEY="anthropic-test", DEEPSEEK_API_KEY="sk-free-test")
     runtime = _runtime_with(monkeypatch, settings)
     assert (runtime["provider"], runtime["bundled"]) == ("ANTHROPIC", False)
 
 
 def test_no_keys_still_means_demo_mode(monkeypatch):
-    runtime = _runtime_with(monkeypatch, Settings(NVIDIA_API_KEY="", GEMINI_API_KEY=""))
+    runtime = _runtime_with(monkeypatch, Settings(DEEPSEEK_API_KEY=""))
     assert runtime["source"] == "MOCK"
 
 
@@ -194,7 +228,7 @@ def _free_ai_client(monkeypatch, limit=3):
     from app.core import config as config_module
     from app.services import free_ai_quota
 
-    settings = Settings(NVIDIA_API_KEY="nvapi-test", GEMINI_API_KEY="gem-test", FREE_AI_DAILY_LIMIT=limit)
+    settings = Settings(DEEPSEEK_API_KEY="sk-free-test", FREE_AI_DAILY_LIMIT=limit)
     for module in (factory, llm_routes, free_ai_quota):
         monkeypatch.setattr(module, "get_settings", lambda: settings)
     monkeypatch.setattr(config_module, "get_settings", lambda: settings)
@@ -281,7 +315,7 @@ def test_a_failed_generation_gives_the_use_back(monkeypatch):
 
 def test_the_learners_own_key_or_demo_mode_never_spend_the_allowance(monkeypatch):
     _reset_usage()
-    settings = Settings(NVIDIA_API_KEY="", GEMINI_API_KEY="")
+    settings = Settings(DEEPSEEK_API_KEY="")
     monkeypatch.setattr(factory, "get_settings", lambda: settings)
     monkeypatch.setattr("app.api.v1.routes.plans.generate_plan_task", lambda plan_id: None)
     with TestClient(main.app) as client:

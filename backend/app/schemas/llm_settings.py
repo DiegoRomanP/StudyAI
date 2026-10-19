@@ -163,8 +163,8 @@ class LLMRuntimeResponse(BaseModel):
             raise ValueError("La IA incluida solo puede venir del servidor.")
         if self.source == "ENV" and not self.bundled and self.provider != LLMProviderName.ANTHROPIC:
             raise ValueError("ENV requiere Anthropic.")
-        if self.bundled and self.provider not in (LLMProviderName.NVIDIA, LLMProviderName.GEMINI):
-            raise ValueError("La IA incluida usa NVIDIA o Gemini.")
+        if self.bundled and self.provider != LLMProviderName.DEEPSEEK:
+            raise ValueError("La IA incluida usa DeepSeek.")
         if self.source == "USER" and self.provider is None:
             raise ValueError("USER requiere un proveedor real.")
         return self

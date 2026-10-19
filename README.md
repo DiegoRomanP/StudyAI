@@ -175,6 +175,9 @@ tiempo total del host; no cambia los límites reales ni el gate de Bruno.
 | Variable | Por defecto | Descripción |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | *(vacío)* | Alternativa del servidor: con clave usa Claude cuando no hay una credencial de usuario activa; sin clave, la alternativa es el LLM mock. |
+| `DEEPSEEK_API_KEY` | *(vacío)* | IA gratuita incluida: con clave, quien no conectó su propia IA genera con DeepSeek (sin razonamiento) hasta `FREE_AI_DAILY_LIMIT` usos al día. Se puede poner en el `.env` de la raíz del repo o en `backend/.env` (gana este; una variable exportada en la shell gana a ambos). |
+| `DEFAULT_DEEPSEEK_MODEL` | `deepseek-flash` | Modelo de la IA gratuita incluida. |
+| `FREE_AI_DAILY_LIMIT` | `3` | Usos diarios (UTC) por estudiante de la IA gratuita: generar un plan o reforzar un repaso con IA. |
 | `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para análisis de temas y distribución de sesiones. |
 | `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para el contenido y cuestionario fusionados de cada sesión. |
 | `LLM_MAX_RETRIES` | `3` | Intentos máximos de generación para errores transitorios (5xx/timeout). |
