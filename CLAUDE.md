@@ -107,16 +107,26 @@ does the real work in `_Generator.run`:
 2. LLM call #1 (`topic_analysis`) — extract topics/subtopics/difficulty/relevance as JSON.
 3. `select_top_by_relevance` (Pareto, `app/algorithms/pareto.py`) — keep the high-value slice of
    topics.
-4. LLM call #2 (`plan_generation`) — distribute selected topics into sessions with
+4. LLM call #2 (`session_plan`) — distribute selected topics into sessions with
    `REVIEW_INTERVALS_DAYS` (Ebbinghaus) offsets; on any failure this degrades to a deterministic
    round-robin session layout rather than failing the whole plan.
 5. Per session: **one merged LLM call** (`session_content`, `app/llm/prompts/session_content.py`)
    produces study material + YouTube *keywords* + flashcards + multiple choice together.
 
 All LLM JSON responses go through `parse_llm_json` (`app/llm/output_parsers.py`), which strips
-markdown fences and repairs common malformations before `json.loads`. Any step of `_generate` that
-raises sets `Plan.status = FAILED` with the error message truncated to 1000 chars — the whole
-pipeline never leaves a plan stuck in `PROCESSING`. A `BackgroundTask` dies with the process
+markdown fences and repairs common malformations before `json.loads`.
+
+**Generation is resumable and commits after every step.** `_Generator._generate` works out what is
+missing from the stored rows (no topics → analyse; none selected → select; missing sessions →
+plan them, matched by `topic_id`/normalized name; sessions without material → generate them), so the
+same code runs a new plan and `POST /plans/{id}/resume` (`PlanService.resume_plan`: FAILED →
+PROCESSING by conditional UPDATE, 409 `PLAN_NOT_RESUMABLE` otherwise, a double POST starts one task).
+Each step writes `Plan.progress_stage` (`TOPICS`/`SESSIONS`/`CONTENT`) and `progress_done`/`progress_total`
+(sessions with material / sessions) through an UPDATE guarded by `status='PROCESSING'`; rowcount 0 means
+the plan was deleted and the task stops (`_PlanGone`) without leaving orphan rows. On any error the
+generator rolls back first, then sets `FAILED` with the message truncated to 1000 chars, keeping
+everything already committed. That rollback + guarded UPDATE + startup recovery is why the pipeline
+never leaves a plan stuck in `PROCESSING`. A `BackgroundTask` dies with the process
 (`--reload`, crash), so the `lifespan` runs `recover_interrupted_plans` (PROCESSING → FAILED,
 resumable, free use refunded) and `recover_interrupted_reinforcements` (PROCESSING → FAILED, no
 refund) at startup. **This assumes a single backend process** (the SQLite MVP): with several
@@ -130,12 +140,15 @@ The merged prompt also asks for **exactly** `config.flashcards`/`config.multiple
 goal's `SessionConfig`) instead of a hardcoded "5 and 5" that then got truncated client-side —
 that old behavior silently under-delivered for e.g. `MemorizationStrategy` (wants 8 flashcards,
 only ever got 5). Every `_Generator._llm_call` also passes an explicit `max_tokens` sized to what
-that specific call actually needs (1536 for topic analysis, 1024 for session planning, 2048 for
-the merged session call) rather than a blanket 4096 — smaller prompts and smaller expected output
-both make each request cheaper/faster to process on a capacity-constrained model. `_llm_call` also
-proactively sleeps `Settings.LLM_REQUEST_PACING_SECONDS` (default 2s) between successive calls,
-skipped entirely when `self.llm` is `MockLLMProvider` (checked via `isinstance` — keep this check if
-you touch `_llm_call`, or the whole test suite gets slow). This pacing is *proactive* — it
+that specific call actually needs, from `OUTPUT_BUDGETS` in `app/llm/output_budget.py` (2048 for
+topic analysis, 1024 for session planning, 4096 for the merged session call, shared with the AI
+reinforcement) — smaller expected output makes each request cheaper/faster on a capacity-constrained
+model. `complete_within_budget` retries **once** with double the budget (capped at 8192) only on
+`LLM_OUTPUT_LIMIT`; `session_plan` never retries (it degrades to the deterministic layout instead), so
+success stays `2 + N` and the worst case is `3 + 2N`. `_llm_call` also
+proactively sleeps `Settings.LLM_REQUEST_PACING_SECONDS` (default 2s) between successive calls (and
+before that retry), skipped entirely when the provider's `requires_request_pacing` is false (the mock and
+Ollama — keep this check if you touch `_llm_call`, or the whole test suite gets slow). This pacing is *proactive* — it
 complements, not replaces, `OpenAICompatibleProvider`'s *reactive* retry-on-429 described below.
 
 Completing a session (`POST /sessions/{id}/complete`) publishes `session.completed` with
@@ -180,7 +193,9 @@ order — check this chain before assuming which LLM is actually being called:
    **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) uses per user and UTC day (a plan generation *or* an AI reinforcement of a review), counted in `free_ai_usage`
    (`app/services/free_ai_quota.py`). `PlanService.create_plan` spends one use *only when the resolved provider is bundled*
    (429 `FREE_AI_DAILY_LIMIT`, no plan row, when it is spent) and `_Generator` gives it back if generation fails; the learner's own key,
-   Ollama and the mock never count. Idempotent replays do not spend another use.
+   Ollama and the mock never count. Idempotent replays do not spend another use. Resuming a plan spends one use the same way
+   (429 leaves the plan FAILED with its message). The refund uses the UTC day stored in `Plan.free_ai_use_date` and clears it,
+   so a use is given back **exactly once**, on the day it was spent, even across a midnight or a restart.
    A real environment variable beats both `.env` files (pydantic-settings), so a stale key exported in the
    shell silently overrides them (it showed up as 403 "Authorization failed" with the old NVIDIA tier).
 4. `MockLLMProvider`.
@@ -220,10 +235,23 @@ model IDs and URLs, and polls the documented NVCF status endpoint without ever r
 If NVCF returns metadata instead of a completion, it raises `LLM_ASYNC_RESULT_UNAVAILABLE`; never
 guess a retrieval endpoint or retry the original request.
 
-**DeepSeek runs with thinking disabled**: its models (`deepseek-flash`, `deepseek-v4-pro`) reason by
-default, which would eat each call's sized `max_tokens` budget and slow every request. Its request
-profile (`app/llm/providers/deepseek.py`) sends `"thinking": {"type": "disabled"}` through
-`RequestProfile.extra_parameters` — the place for fixed vendor fields, not a branch in the transport.
+**Generation runs with reasoning off or minimal**: reasoning models spend hidden tokens that eat each
+call's sized `max_tokens` budget (the cause of the old `LLM_OUTPUT_LIMIT` failures) and slow every request.
+Fixed vendor fields go through `RequestProfile.extra_parameters` (or NVIDIA's `static_parameters`), never a
+branch in the transport:
+
+| Provider | Where | Field |
+|---|---|---|
+| Ollama | `providers/ollama.py` | `"reasoning_effort": "none"` |
+| NVIDIA NIM | `nvidia_models.py` | `"reasoning_effort": "none"` |
+| Gemini 3.x Flash / Pro | `providers/gemini.py` (`gemini-3*` profiles) | `thinkingConfig.thinkingLevel` `"minimal"` / `"low"` |
+| DeepSeek | `providers/deepseek.py` | `"thinking": {"type": "disabled"}` |
+| Gemma, Gemini 2.x, OpenRouter, OpenAI, Anthropic | — | unchanged |
+
+Changing a profile's identity (`identifier`/`version`, NVIDIA `contract_version`) invalidates every verified
+credential using it, so do it **only** when the new field can break an already verified configuration (that is
+why the Gemini 3 profiles are new: those credentials must be tested again). A field documented as accepted or
+ignored by every model of the profile goes into `extra_parameters` without a version bump.
 Zhipu GLM and Hugging Face were removed as providers; `init_db` deletes their leftover credentials
 (`RETIRED_PROVIDER_NAMES`) before any ORM read, since the enum can no longer load those rows.
 
@@ -285,7 +313,9 @@ while, only exposed via `PlanStatusResponse` (the polling endpoint nothing in th
 calls), so `PlanDetailPage`'s FAILED view rendered a bare "La generación falló." with the real cause
 completely invisible to the user. Keep `error_message` on `PlanResponse` and keep rendering it
 (`PlanDetailPage.tsx`) — it's the only way a user can self-diagnose *why* generation failed (bad
-key, dead/retired model, rate limit, etc.) without reading server logs.
+key, dead/retired model, rate limit, etc.) without reading server logs. Both responses also carry
+`progress_stage`/`progress_done`/`progress_total`, which the UI shows while generating and to say what an
+incomplete plan kept.
 
 **Model changes never inherit verification evidence.** `update_model` stays a no-network draft
 write so users can recover from unavailable models, but it invalidates the prior revision atomically.
@@ -313,7 +343,8 @@ The maths is the pure `app/algorithms/adaptive_route.py` (mastery = moving avera
   state machine `NONE → PROCESSING → READY|FAILED` via conditional UPDATEs, so a double POST starts one task
   and spends one use. It spends 1 free-AI use only when the provider is bundled; **only the background task
   refunds** (on failure, cancel or deleted plan) — cancelling by itself does not. Same `session_content`
-  kind as plan generation, so model routing and the runtime report are unchanged.
+  kind and output budget as plan generation, so model routing and the runtime report are unchanged. A
+  reinforcement left PROCESSING by a restart is set to FAILED at startup (no refund).
 - `QuizService.submit` answers 409 `QUIZ_OUTDATED` if an answer names a question the quiz no longer has
   (a reinforcement replaced it); the UI reloads the quiz and keeps the answers that still apply.
 - "Siempre con IA" is a per-browser flag (`lib/reinforcePreference.ts`, `localStorage` with try/catch), not
@@ -334,7 +365,13 @@ startup — there is no `alembic upgrade` step in the normal dev loop, even thou
 configured (`alembic.ini`, `app/db/migrations/`) for when the schema stabilizes. Because
 `create_all` never alters existing tables, `init_db.py` also hand-rolls additive column backfills
 (see `_ensure_document_error_message_column`) for anyone with a pre-existing `studyai.db`. If you
-add a column to an existing model, add a matching backfill here rather than relying on `create_all`.
+add a column to an existing model, add a matching backfill here rather than relying on `create_all`
+(the plan progress columns and `free_ai_use_date` come from `_ensure_plan_generation_columns`).
+
+`app/db/session.py` opens SQLite in WAL mode with a 30 s `busy_timeout`, so the 3 s polling and other
+writes don't fail with "database is locked" while a generation commits; expect `studyai.db-wal`/`-shm`
+next to the database (git-ignored). `PRAGMA foreign_keys` stays **off** on purpose (see the plan-deletion
+notes above).
 
 Single-user MVP: `app/api/deps.py` seeds/returns a fixed demo user (`DEFAULT_USER_ID = 1`) instead
 of real auth. This dependency boundary exists specifically so real auth can be dropped in later
@@ -351,8 +388,12 @@ import the API client), and inside `AppShell` `/inicio` (home + setup wizard + "
 coordinator, `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test; it renders with `AppShell chrome="focus"`: only `<main>`, no navigation),
 `/practica` (read-only practice; never writes), `/temas` ("Temas clave"), `/documents` ("Recursos"), `/goals`,
 `/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
-UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since
-generation is async on the backend. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
+UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `usePlan` polls a PROCESSING plan every 3 s via TanStack Query `refetchInterval` since
+generation is async on the backend. `GenerationProgress` (`src/components/plan/`) shows the real stage
+and, only during `CONTENT`, «Preparando la sesión N de M» with a bar (never an invented percentage);
+`generationLabel` gives Inicio the same text. A FAILED plan is labelled «Incompleto» everywhere and offers
+«Continuar generación» (`useResumePlan`, also `useStudyStart.resume`), which sends one request even on a
+double click and is disabled with its reason when the free AI has no uses left. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
 (fetched from the backend, not hardcoded) so the provider list/model suggestions never drift from
 `app/llm/providers_catalog.py`, whose compatibility view is derived from
 `app/llm/provider_registry.py`.

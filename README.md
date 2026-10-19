@@ -194,7 +194,7 @@ tiempo total del host; no cambia los límites reales ni el gate de Bruno.
 | `OLLAMA_TIMEOUT_SECONDS` | `600` | Timeout para inferencia local, que puede incluir la carga inicial del modelo. |
 | `OLLAMA_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada local; Ollama no reintenta 429. |
 | `OLLAMA_MAX_RETRIES` | `1` | Intentos por llamada local; evita repetir cargas costosas de CPU/GPU. |
-| `DATABASE_URL` | `sqlite:///./studyai.db` | Cadena de conexión SQLAlchemy. |
+| `DATABASE_URL` | `sqlite:///./studyai.db` | Cadena de conexión SQLAlchemy. SQLite se abre en modo WAL: verás `studyai.db-wal` y `studyai.db-shm` junto a la base (ignorados por git). |
 | `CHROMA_PERSIST_DIR` | `./storage/chroma` | Directorio de persistencia del vector store. |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Modelo de embeddings (si instalas RAG). |
 | `UPLOAD_DIR` | `./storage/uploads` | Carpeta de archivos subidos. |
@@ -226,6 +226,14 @@ FastAPI se ejecuta dentro de Docker, `OLLAMA_BASE_URL` debe resolver desde el
 contenedor hacia el host o servicio que ejecuta Ollama; `localhost` no apunta al
 navegador.
 
+**Ollama necesita al menos 16384 tokens de contexto.** El análisis de temas envía
+unos 5k tokens de material y puede pedir hasta 4k de salida (8k en el reintento);
+con el contexto por defecto, el modelo recorta la entrada o se queda sin espacio y
+la generación falla. Arranca el servidor con `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`
+o, si Ollama corre como servicio, añade `Environment="OLLAMA_CONTEXT_LENGTH=16384"`
+con `sudo systemctl edit ollama`, reinícialo y compruébalo con `ollama ps` (columna
+`CONTEXT`). StudyAI apaga el razonamiento de Ollama (`reasoning_effort: "none"`).
+
 Para DeepSeek, crea la clave en `https://platform.deepseek.com/api_keys`
 (formato `sk-...`, de pago). StudyAI usa su API OpenAI-compatible en
 `https://api.deepseek.com` con `deepseek-flash` (predeterminado, más barato) o
@@ -239,9 +247,9 @@ solo admite modelos generativos cuyo contrato está validado en el servidor. El
 catálogo actual ofrece `nvidia/nemotron-3-super-120b-a12b`; en la evaluación
 live del 2026-09-29, NVIDIA respondió `410 Gone` indicando fin de vida para los
 dos modelos Llama y `deepseek-ai/deepseek-v4-flash` que antes aparecían aquí, por
-lo que se retiraron de la lista admitida. Nemotron se invoca con `stream: false`,
-`reasoning_effort: low` y un `reasoning_budget` acotado para reservar tokens de
-salida a las respuestas JSON de StudyAI. NVIDIA no ofrece campos de URL ni de
+lo que se retiraron de la lista admitida. Nemotron se invoca con `stream: false`
+y `reasoning_effort: "none"`, para que todos los tokens de salida queden para las
+respuestas JSON de StudyAI. NVIDIA no ofrece campos de URL ni de
 modelo personalizado: su catálogo general también incluye clasificadores,
 guardas y extractores que no sirven para generar planes.
 
@@ -293,7 +301,17 @@ además fija `stream: false`, limita cada modelo a su máximo validado y no repi
 un POST tras una respuesta `202`. Un ID personalizado usa el perfil conservador
 hasta que se confirme su contrato. El perfil también define las capacidades de
 formato de respuesta: Ollama usa JSON estructurado solo para las operaciones
-que lo requieren y no recibe `reasoning_effort` no confirmado.
+que lo requieren y recibe `reasoning_effort: "none"` para no gastar el presupuesto
+en razonamiento.
+
+**La generación corre con el razonamiento apagado o mínimo**: Ollama y NVIDIA con
+`reasoning_effort: "none"`, DeepSeek con `thinking` desactivado y Gemini 3.x con
+`thinkingLevel` `"minimal"` (`"low"` en los modelos Pro). Cada llamada tiene un
+presupuesto de salida (2048 para el análisis de temas, 1024 para repartir sesiones
+y 4096 por sesión); si el modelo se queda sin espacio, se reintenta **una vez** con
+el doble (tope 8192). **Tras actualizar, vuelve a «Probar» las credenciales propias
+de Gemini 3**: usan un perfil de solicitud nuevo y su verificación anterior deja de
+valer.
 
 Las pruebas de conectividad usan un presupuesto explícito de 32 tokens para
 chat convencional y Ollama, y 256 para los modelos OpenAI o-series. Una
@@ -365,8 +383,12 @@ dedicadas siguen disponibles para tener más control.
    Entrevistas técnicas, Aprender desde cero, Otro) o una meta guardada; el
    tipo es `EXAM`, `LEARNING` o `MEMORIZATION`.
 3. **Estudiar** guarda la meta y genera el plan de forma asíncrona
-   (`PROCESSING → READY`), con *polling* de estado. Inicio muestra la siguiente
-   sesión sin redirigir.
+   (`PROCESSING → READY`), con *polling* de estado. Mientras genera se ve la etapa
+   real (analizar el material, repartir las sesiones y «Preparando la sesión N de
+   M»). Inicio muestra la siguiente sesión sin redirigir.
+   - Si la generación falla (o el servidor se reinicia a mitad), el plan queda
+     **Incompleto** y conserva lo ya generado. **Continuar generación** pide solo lo
+     que falta; con la IA gratuita gasta un uso, que se devuelve si vuelve a fallar.
 4. **Estudiar una sesión**: material → receso → quiz. Las flashcards se puntúan
    0–5 y las preguntas de opción múltiple se autocalifican.
 5. **Completar la sesión** dispara el evento `session.completed`, que actualiza
@@ -393,7 +415,8 @@ en `/docs`.
 | `GET`/`PUT` | `/goals` · `/goals/{id}` | Lista / detalle / actualiza (parcial) |
 | `DELETE` | `/goals/{id}` | Elimina la meta y, en cascada, sus planes generados |
 | `POST` | `/plans/generate` | Inicia la generación asíncrona del plan |
-| `GET`  | `/plans/{id}/status` · `/plans/{id}` | Estado / plan completo |
+| `GET`  | `/plans/{id}/status` · `/plans/{id}` | Estado y progreso / plan completo |
+| `POST` | `/plans/{id}/resume` | Continúa un plan incompleto (`FAILED`); genera solo lo que falta (409 si no es reanudable, 429 sin usos gratis) |
 | `DELETE` | `/plans/{id}` | Elimina el plan (sesiones, quizzes y repasos incluidos) |
 | `GET`  | `/sessions/{id}` | Detalle de sesión (con material) |
 | `POST` | `/sessions/{id}/complete` | Marca la sesión como completada |
