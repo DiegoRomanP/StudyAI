@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.exceptions import DailyLimitError
+from app.llm.factory import resolve_llm_provider
 from app.models.free_ai_usage import FreeAiUsage
 
 _LIMIT_MESSAGE = (
@@ -32,6 +33,13 @@ class FreeAiStatus:
     @property
     def remaining(self) -> int:
         return max(self.limit - self.used, 0)
+
+
+def uses_free_ai(db: Session, user_id: int) -> bool:
+    """Whether the next generation for this learner runs on the included free-tier AI."""
+    resolution = resolve_llm_provider(db, user_id)
+    resolution.provider.close()
+    return resolution.runtime.bundled
 
 
 def _today():

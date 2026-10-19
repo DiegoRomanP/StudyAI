@@ -17,7 +17,7 @@ SYSTEM = (
     "fences de markdown."
 )
 
-_SCHEMA_TEMPLATE = """{{
+SCHEMA_TEMPLATE = """{{
   "summary_markdown": "string (markdown: resumen, explicación y punto clave)",
   "youtube_keywords": ["string", "..."],
   "flashcards": [
@@ -31,6 +31,8 @@ _SCHEMA_TEMPLATE = """{{
     }}
   ]
 }}"""
+
+_SCHEMA_TEMPLATE = SCHEMA_TEMPLATE  # backwards-compatible alias
 
 
 def build_session_content_prompt(
@@ -52,5 +54,5 @@ def build_session_content_prompt(
         f"preguntas de opción múltiple (4 opciones cada una) sobre el tema. En "
         f"cada pregunta de opción múltiple, 'answer' debe coincidir exactamente "
         f"con una de las 'options'.\n\n"
-        f"Devuelve exactamente este esquema JSON:\n{_SCHEMA_TEMPLATE}"
+        f"Devuelve exactamente este esquema JSON:\n{SCHEMA_TEMPLATE}"
     )

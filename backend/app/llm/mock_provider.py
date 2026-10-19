@@ -83,6 +83,8 @@ class MockLLMProvider(LLMProvider):
         goal = ctx.get("goal_title", "tu objetivo")
         num_flashcards = int(ctx.get("flashcards", 5) or 0)
         num_multiple_choice = int(ctx.get("multiple_choice", 5) or 0)
+        if ctx.get("reinforcement") and ctx.get("failed_points"):
+            return self._reinforcement(topic, ctx["failed_points"], num_flashcards, num_multiple_choice)
         markdown = (
             f"# {topic}\n\n"
             f"> _Contenido simulado (modo demo, sin clave de API)._\n\n"
@@ -123,6 +125,39 @@ class MockLLMProvider(LLMProvider):
         return {
             "summary_markdown": markdown,
             "youtube_keywords": [f"{topic} explicación", f"{topic} ejemplo", topic],
+            "flashcards": flashcards,
+            "multiple_choice": multiple_choice,
+        }
+
+    def _reinforcement(self, topic: str, points: list[dict], num_flashcards: int, num_multiple_choice: int) -> dict:
+        """Deterministic reinforcement built from the failed points (demo mode)."""
+        markdown = f"# Refuerzo: {topic}\n\n> _Contenido simulado (modo demo, sin clave de API)._\n\n"
+        for point in points:
+            markdown += (
+                f"## {point.get('prompt', '')}\n\n**Respuesta:** {point.get('answer', '')}\n\n"
+                "Explicación simulada con otras palabras y un ejemplo.\n\n"
+            )
+        flashcards = [
+            {
+                "question": f"Refuerzo: {points[i % len(points)].get('prompt', '')}",
+                "answer": points[i % len(points)].get("answer", ""),
+            }
+            for i in range(num_flashcards)
+        ]
+        multiple_choice = []
+        for i in range(num_multiple_choice):
+            point = points[i % len(points)]
+            correct = point.get("answer", "")
+            multiple_choice.append(
+                {
+                    "question": f"Refuerzo: {point.get('prompt', '')}",
+                    "options": [correct, f"Distractor A sobre {topic}", f"Distractor B sobre {topic}", f"Distractor C sobre {topic}"],
+                    "answer": correct,
+                }
+            )
+        return {
+            "summary_markdown": markdown,
+            "youtube_keywords": [f"{topic} refuerzo", topic],
             "flashcards": flashcards,
             "multiple_choice": multiple_choice,
         }

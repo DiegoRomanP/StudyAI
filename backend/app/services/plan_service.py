@@ -46,18 +46,15 @@ from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
-from app.services.free_ai_quota import FreeAiQuota
+from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
 from app.strategies.goal_strategies import GoalStrategyFactory
 from app.utils.text import extract_keywords
 
 logger = get_logger(__name__)
 
 
-def _uses_free_ai(db: Session, user_id: int) -> bool:
-    """Whether the next generation for this learner runs on the included free-tier AI."""
-    resolution = resolve_llm_provider(db, user_id)
-    resolution.provider.close()
-    return resolution.runtime.bundled
+# Kept as a module-level name for existing imports and monkeypatches.
+_uses_free_ai = uses_free_ai
 
 
 class PlanService:
