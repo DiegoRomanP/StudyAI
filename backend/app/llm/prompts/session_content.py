@@ -34,6 +34,12 @@ SCHEMA_TEMPLATE = """{{
 
 _SCHEMA_TEMPLATE = SCHEMA_TEMPLATE  # backwards-compatible alias
 
+# Bounded lengths keep each session near 1.6-1.9k output tokens.
+QUIZ_LENGTH_LIMITS = (
+    "Cada flashcard: pregunta de 20 palabras como máximo y respuesta de 30 como máximo. "
+    "Cada pregunta de opción múltiple: enunciado de 30 palabras como máximo y opciones de 12 palabras como máximo."
+)
+
 
 def build_session_content_prompt(
     topic: str,
@@ -54,5 +60,8 @@ def build_session_content_prompt(
         f"preguntas de opción múltiple (4 opciones cada una) sobre el tema. En "
         f"cada pregunta de opción múltiple, 'answer' debe coincidir exactamente "
         f"con una de las 'options'.\n\n"
+        "Extensión: 'summary_markdown' entre 250 y 400 palabras en total (resumen de 80 palabras como máximo, "
+        "explicación en 3 a 5 apartados breves y punto clave en 1 o 2 frases). "
+        f"{QUIZ_LENGTH_LIMITS}\n\n"
         f"Devuelve exactamente este esquema JSON:\n{SCHEMA_TEMPLATE}"
     )

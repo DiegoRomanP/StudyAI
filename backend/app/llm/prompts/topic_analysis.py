@@ -32,6 +32,7 @@ def build_topic_analysis_prompt(chunks: list[str], goal: str) -> str:
         f"MATERIAL (fragmentos recuperados):\n{material}\n\n"
         f"Identifica entre 6 y 10 temas de estudio relevantes para la meta. "
         f"Para cada tema incluye 2-3 subtemas, una dificultad (1 fácil .. 5 difícil) "
-        f"y una relevancia (0..1) respecto a la meta.\n\n"
+        f"y una relevancia (0..1) respecto a la meta. "
+        f"Nombres de tema de 6 palabras como máximo y subtemas de 8 palabras como máximo, sin descripciones.\n\n"
         f"Devuelve exactamente este esquema JSON:\n{_SCHEMA}"
     )
