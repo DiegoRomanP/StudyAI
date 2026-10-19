@@ -194,3 +194,30 @@ def test_deleting_the_plan_mid_generation_leaves_no_rows(client, monkeypatch):
         )
         assert orphan_materials == 0
         assert orphan_quizzes == 0
+
+
+def test_loosely_shaped_topics_still_produce_a_plan(client, monkeypatch):
+    loose = (
+        '{"topics": ["Tema suelto", {"name": "Tema con texto", "difficulty": "media", '
+        '"relevance": "alta", "subtopics": "uno solo"}, {"name": "Tema numérico", '
+        '"difficulty": "4", "relevance": "0.9"}, null]}'
+    )
+    _use(monkeypatch, _Scripted(lambda p, kind, t: loose if kind == "topic_analysis" else None))
+
+    plan = _generate(client, "Plan temas sueltos")
+
+    assert plan["status"] == "READY"
+    by_name = {topic["name"]: topic for topic in plan["topics"]}
+    assert set(by_name) == {"Tema suelto", "Tema con texto", "Tema numérico"}
+    assert (by_name["Tema con texto"]["difficulty"], by_name["Tema con texto"]["relevance"]) == (3, 0.5)
+    assert by_name["Tema con texto"]["subtopics"] == ["uno solo"]
+    assert (by_name["Tema numérico"]["difficulty"], by_name["Tema numérico"]["relevance"]) == (4, 0.9)
+
+
+def test_topics_that_are_not_a_list_fail_as_an_invalid_response(client, monkeypatch):
+    _use(monkeypatch, _Scripted(lambda p, kind, t: '{"topics": "ninguno"}' if kind == "topic_analysis" else None))
+
+    plan = _generate(client, "Plan temas no lista")
+
+    assert plan["status"] == "FAILED"
+    assert plan["error_message"] == "El proveedor de IA devolvió una respuesta inválida."

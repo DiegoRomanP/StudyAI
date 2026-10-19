@@ -262,6 +262,14 @@ def generate_plan_task(plan_id: int) -> None:
         db.close()
 
 
+def _as_number(value, default, kind):
+    """Models write numbers as text ("3", "0.8") or as words ("media"); fall back on the latter."""
+    try:
+        return kind(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
 class _PlanGone(Exception):
     """The plan was deleted (or left PROCESSING) while it was being generated."""
 
@@ -304,10 +312,11 @@ class _Generator:
                 error_message = "No se pudo generar el plan. Inténtalo de nuevo."
                 error_code = "PLAN_GENERATION_FAILED"
             logger.error(
-                "Plan generation failed for plan %s (code=%s, upstream_status=%s)",
+                "Plan generation failed for plan %s (code=%s, upstream_status=%s, error_type=%s)",
                 plan_id,
                 error_code,
                 upstream_status,
+                type(exc).__name__,
             )
             self._fail(plan_id, error_message[:1000])
             _refund_plan_use(self.db, plan_id, user_id, spent_day)
@@ -443,18 +452,22 @@ class _Generator:
             prompt=prompt,
             context={"goal_title": goal_text, "keywords": keywords},
         )
-        data = parse_llm_json(raw)
-        return data.get("topics", [])
+        topics = parse_llm_json(raw).get("topics", [])
+        if not isinstance(topics, list):
+            raise LLMError("El proveedor de IA devolvió una respuesta inválida.", code="LLM_INVALID_RESPONSE")
+        # Small models sometimes answer a bare name instead of an object.
+        return [item if isinstance(item, dict) else {"name": item} for item in topics if item]
 
     def _persist_topics(self, plan: Plan, topics_data: list[dict]) -> list[PlanTopic]:
         topics: list[PlanTopic] = []
         for item in topics_data:
+            subtopics = item.get("subtopics") or []
             topic = PlanTopic(
                 plan_id=plan.id,
-                name=str(item.get("name", "Tema"))[:255],
-                subtopics=list(item.get("subtopics", []) or []),
-                difficulty=int(item.get("difficulty", 3) or 3),
-                relevance=float(item.get("relevance", 0.5) or 0.5),
+                name=str(item.get("name") or "Tema")[:255],
+                subtopics=[str(s) for s in subtopics] if isinstance(subtopics, list) else [str(subtopics)],
+                difficulty=min(max(_as_number(item.get("difficulty"), 3, int), 1), 5),
+                relevance=min(max(_as_number(item.get("relevance"), 0.5, float), 0.0), 1.0),
             )
             self.db.add(topic)
             topics.append(topic)
