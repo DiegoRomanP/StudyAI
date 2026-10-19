@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Outlet, Route, Routes } from "react-router-dom";
+import { Outlet, Route, Routes, useMatch } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
@@ -26,8 +26,9 @@ function Lazy({ children }: { children: ReactNode }) {
 }
 
 function AppLayout() {
+  const focus = useMatch("/session/:sessionId") !== null;
   return (
-    <AppShell sidebarFooter={<StudyStreakCard />}>
+    <AppShell chrome={focus ? "focus" : "default"} sidebarFooter={focus ? undefined : <StudyStreakCard />}>
       <RouteErrorBoundary>
         <Lazy>
           <Outlet />

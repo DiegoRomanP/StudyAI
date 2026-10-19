@@ -117,7 +117,15 @@ function NavigationLinks({
   );
 }
 
-export function AppShell({ children, sidebarFooter }: { children: ReactNode; sidebarFooter?: ReactNode }) {
+export function AppShell({
+  children,
+  sidebarFooter,
+  chrome = "default",
+}: {
+  children: ReactNode;
+  sidebarFooter?: ReactNode;
+  chrome?: "default" | "focus";
+}) {
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -153,6 +161,18 @@ export function AppShell({ children, sidebarFooter }: { children: ReactNode; sid
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [mobileMenuOpen]);
+
+  if (chrome === "focus") {
+    return (
+      <div className="min-h-screen">
+        <main ref={mainRef} id="main-content" tabIndex={-1} className="min-w-0 overflow-x-hidden">
+          <div className="mx-auto max-w-6xl px-4 pb-8 md:px-8">
+            <PageTransition routeKey={pathname}>{children}</PageTransition>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">

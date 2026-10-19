@@ -207,6 +207,51 @@ describe("App routes", () => {
     expect(api.getSession).toHaveBeenCalledWith(54);
   });
 
+  it("focus chrome renders only main without navigation", async () => {
+    renderApp("/session/54");
+
+    expect(await screen.findByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegación inferior" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Saltar al contenido" })).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).toBeInTheDocument();
+    expect(api.getDashboard).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.title).toBe("Sesión de estudio | StudyAI"));
+  });
+
+  it("navigating from /plan/27 to /session/54 hides navigation, keeps title and focuses main", async () => {
+    api.getPlan.mockResolvedValue({
+      ...plan,
+      sessions: [
+        {
+          id: 54,
+          plan_id: 27,
+          order_index: 0,
+          topic_name: "Sesión de enlace directo",
+          duration_minutes: 25,
+          review_offset_days: 1,
+          status: "PENDING",
+          completed_at: null,
+        },
+      ],
+    });
+    renderApp("/plan/27");
+
+    expect(await screen.findByRole("heading", { name: "Plan de enlace directo" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Navegación principal" })).toBeInTheDocument();
+    const sessionLink = (await screen.findAllByRole("link")).find(
+      (link) => link.getAttribute("href") === "/session/54",
+    );
+    expect(sessionLink).toBeDefined();
+    fireEvent.click(sessionLink!);
+
+    expect(await screen.findByRole("heading", { name: "Sesión de enlace directo" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegación principal" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegación inferior" })).not.toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Sesión de estudio | StudyAI"));
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
+
   it("keeps a cached plan visible if refreshing its route fails", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
