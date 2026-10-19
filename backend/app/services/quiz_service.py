@@ -86,6 +86,7 @@ class QuizService:
 
         # Mark the session complete and emit the event (SM-2 runs in the handler).
         session = self.db.get(StudySession, quiz.session_id)
+        first_completion = session.status != SessionStatus.COMPLETED
         session.status = SessionStatus.COMPLETED
         session.completed_at = datetime.now(timezone.utc)
         self.db.add(session)
@@ -98,6 +99,8 @@ class QuizService:
                 user_id=user_id,
                 db=self.db,
                 flashcard_qualities=flashcard_qualities,
+                quiz_result_id=result.id,
+                first_completion=first_completion,
             ),
         )
         self.db.commit()
