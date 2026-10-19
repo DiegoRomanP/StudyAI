@@ -36,11 +36,12 @@ from app.algorithms.pareto import select_top_by_relevance
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.output_parsers import parse_llm_json
+from app.services.session_content_builder import build_session_content
 from app.llm.prompts import plan_generation, session_content, topic_analysis
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal
 from app.models.plan import Plan, PlanStatus, PlanTopic
-from app.models.quiz import QuestionType, Quiz, QuizQuestion
+from app.models.quiz import Quiz, QuizQuestion
 from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
@@ -417,42 +418,17 @@ class _Generator:
             # comfortably fits in far less than the previous 4096+4096.
             max_tokens=2048,
         )
-        data = parse_llm_json(raw)
+        content = build_session_content(parse_llm_json(raw), config)
 
-        material = SessionMaterial(
-            session_id=session.id,
-            content_markdown=str(data.get("summary_markdown", "")),
-            youtube_keywords=list(data.get("youtube_keywords", []) or []),
+        self.db.add(
+            SessionMaterial(
+                session_id=session.id,
+                content_markdown=content.material_markdown,
+                youtube_keywords=content.keywords,
+            )
         )
-        self.db.add(material)
-
         quiz = Quiz(session_id=session.id)
         self.db.add(quiz)
         self.db.flush()
-
-        order = 0
-        for card in (data.get("flashcards") or [])[: config.flashcards]:
-            self.db.add(
-                QuizQuestion(
-                    quiz_id=quiz.id,
-                    order_index=order,
-                    question_type=QuestionType.FLASHCARD,
-                    prompt=str(card.get("question", "")),
-                    answer=str(card.get("answer", "")),
-                    options=[],
-                )
-            )
-            order += 1
-        for mc in (data.get("multiple_choice") or [])[: config.multiple_choice]:
-            options = list(mc.get("options", []) or [])
-            self.db.add(
-                QuizQuestion(
-                    quiz_id=quiz.id,
-                    order_index=order,
-                    question_type=QuestionType.MULTIPLE_CHOICE,
-                    prompt=str(mc.get("question", "")),
-                    answer=str(mc.get("answer", "")),
-                    options=options,
-                )
-            )
-            order += 1
+        for question in content.questions:
+            self.db.add(QuizQuestion(quiz_id=quiz.id, **question))
