@@ -170,7 +170,7 @@ order — check this chain before assuming which LLM is actually being called:
    (`scripts/qa-runtime.mjs`) force them empty so no test spends quota — keep that when adding env keys.
    `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`, and `free_ai` (`limit`/`used`/`remaining`,
    null when the server has no free keys or an Anthropic `.env` key).
-   **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) plan generations per user and UTC day, counted in `free_ai_usage`
+   **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) uses per user and UTC day (a plan generation *or* an AI reinforcement of a review), counted in `free_ai_usage`
    (`app/services/free_ai_quota.py`). `PlanService.create_plan` spends one use *only when the resolved provider is bundled*
    (429 `FREE_AI_DAILY_LIMIT`, no plan row, when it is spent) and `_Generator` gives it back if generation fails; the learner's own key,
    Ollama and the mock never count. Idempotent replays do not spend another use.
@@ -290,6 +290,32 @@ The UI then tests the saved draft and only enables activation after the server r
 evidence. Catalog entries remain suggestions for generic providers; NVIDIA's curated registry is an
 enforced authorization boundary.
 
+### Adaptive route (focus mode + reinforcement)
+
+An exam adjusts the plan. `session.completed` carries `quiz_result_id` and `first_completion`;
+`AdaptiveRouteService` (`app/services/adaptive_route_service.py`, registered in the `lifespan`) acts only
+on a *first* graded completion — retakes and `POST /sessions/{id}/complete` never move the route.
+The maths is the pure `app/algorithms/adaptive_route.py` (mastery = moving average, Leitner box over
+`REVIEW_INTERVALS_DAYS`); mastery/box live on `PlanTopic` so they die with the plan cascade.
+- **No LLM in the route.** Submitting an exam makes 0 calls and creates at most one pending `REVIEW`
+  session per topic, built deterministically (failed questions first, options shuffled by a seed). Plan
+  generation stays `2 + N` calls; an AI reinforcement is exactly 1 call, only when the learner asks.
+- `EventBus` de-duplicates handlers and runs each in a SAVEPOINT: a failing handler never loses the
+  `QuizResult` or leaves a half-built review. `register_handlers()` may run many times in tests.
+- Review questions are copies keyed by `source_question_id`: SM-2 uses `source_question_id or id`, so a
+  card keeps one schedule. `delete_plan` already clears reviews by every question id of the plan.
+- The route order is computed on read by `routeOrder` (`src/lib/studyProgress.ts`), never persisted:
+  what is "due" changes daily. Plan progress counts only `kind === "NEW"` sessions.
+- **Reinforcement** (`POST /sessions/{id}/reinforcement`, `.../cancel`; `app/services/reinforcement_service.py`):
+  state machine `NONE → PROCESSING → READY|FAILED` via conditional UPDATEs, so a double POST starts one task
+  and spends one use. It spends 1 free-AI use only when the provider is bundled; **only the background task
+  refunds** (on failure, cancel or deleted plan) — cancelling by itself does not. Same `session_content`
+  kind as plan generation, so model routing and the runtime report are unchanged.
+- `QuizService.submit` answers 409 `QUIZ_OUTDATED` if an answer names a question the quiz no longer has
+  (a reinforcement replaced it); the UI reloads the quiz and keeps the answers that still apply.
+- "Siempre con IA" is a per-browser flag (`lib/reinforcePreference.ts`, `localStorage` with try/catch), not
+  a user setting. "Hoy" is UTC in the backend and local in the browser (±1 day near midnight, accepted).
+
 ### Config
 
 `app/core/config.py` is the single place environment variables are read (Twelve-Factor); nothing
@@ -319,7 +345,7 @@ Vite + React 18 + TypeScript + Tailwind + TanStack Query + React Router + Axios.
 `http://localhost:8001`). Pages under `src/pages/` map 1:1 to the routes in `App.tsx`:
 public `/` (landing) and `/demo` (simulated walkthrough with local sample data — it must never
 import the API client), and inside `AppShell` `/inicio` (home + setup wizard + "Estudiar"
-coordinator, `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test),
+coordinator, `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test; it renders with `AppShell chrome="focus"`: only `<main>`, no navigation),
 `/practica` (read-only practice; never writes), `/temas` ("Temas clave"), `/documents` ("Recursos"), `/goals`,
 `/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
 UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `PlanPage` polls plan generation status via TanStack Query `refetchInterval` since

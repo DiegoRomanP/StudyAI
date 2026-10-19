@@ -266,7 +266,7 @@ describe("HomePage", () => {
     const options = screen.getByRole("group", { name: "Cómo usar la IA" });
     const labels = within(options).getAllByRole("button").map((button) => button.textContent);
     expect(labels).toEqual(["Gratis · 3 al día (en uso)", "Mi API key", "En local (Ollama)"]);
-    expect(screen.getByText("Cada plan gasta 1 uso. Te quedan 2 de 3 hoy.")).toBeInTheDocument();
+    expect(screen.getByText("Cada plan o refuerzo con IA gasta 1 uso. Te quedan 2 de 3 hoy.")).toBeInTheDocument();
     expect(screen.getByText("En uso")).toBeInTheDocument();
     expect(screen.queryByText(/deepseek|nemotron/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Seguir en modo demo" })).not.toBeInTheDocument();

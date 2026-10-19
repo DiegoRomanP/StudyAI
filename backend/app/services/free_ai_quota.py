@@ -1,7 +1,8 @@
-"""Daily limit on the included free-tier AI: ``FREE_AI_DAILY_LIMIT`` plan generations per user.
+"""Daily limit on the included free-tier AI: ``FREE_AI_DAILY_LIMIT`` uses per user.
 
-A "use" is one plan generation (``2 + N`` LLM calls). It is spent when the plan is requested
-and given back if generation fails, so a provider outage never burns the learner's day.
+A "use" is one plan generation (``2 + N`` LLM calls) or one AI reinforcement of a review (1 call).
+It is spent when the work is requested and given back if it fails, so a provider outage never
+burns the learner's day.
 Days follow UTC, like every other timestamp in the app.
 """
 
@@ -20,7 +21,7 @@ from app.llm.factory import resolve_llm_provider
 from app.models.free_ai_usage import FreeAiUsage
 
 _LIMIT_MESSAGE = (
-    "Ya usaste tus {limit} planes gratis de hoy. Conecta tu propia IA en «Conectar IA» "
+    "Ya usaste tus {limit} usos gratis de hoy. Conecta tu propia IA en «Conectar IA» "
     "o vuelve mañana."
 )
 

@@ -172,7 +172,7 @@ export function AiStep() {
         <div className="space-y-3 rounded-surface border border-line bg-surface-subtle/50 p-3">
           <p className="text-sm text-text-primary">
             {freeAi.remaining > 0
-              ? `Cada plan gasta 1 uso. Te quedan ${freeAi.remaining} de ${freeAi.limit} hoy.`
+              ? `Cada plan o refuerzo con IA gasta 1 uso. Te quedan ${freeAi.remaining} de ${freeAi.limit} hoy.`
               : `Hoy ya usaste tus ${freeAi.limit} usos. Vuelve mañana o usa tu API key.`}
           </p>
           {freeActive && freeAi.remaining > 0 ? (

@@ -233,6 +233,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SessionDetail" }
 
+  /sessions/{session_id}/reinforcement:
+    post:
+      summary: Refuerza un repaso con IA (1 llamada; gasta 1 uso gratis si la IA es la incluida)
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "202":
+          description: Aceptado; reinforcement_status = PROCESSING (idempotente si ya lo estaba).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionDetail" }
+        "404": { description: Sesión no encontrada }
+        "409": { description: REINFORCEMENT_NOT_AVAILABLE — no es un repaso pendiente, o ya está READY }
+        "429": { description: FREE_AI_DAILY_LIMIT — sin usos gratis hoy; el estado vuelve a NONE }
+
+  /sessions/{session_id}/reinforcement/cancel:
+    post:
+      summary: PROCESSING → NONE; en cualquier otro estado no hace nada (no devuelve el uso)
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionDetail" }
+        "404": { description: Sesión no encontrada }
+
   /sessions/{session_id}/complete:
     post:
       summary: Marca una sesión como completada
@@ -271,6 +299,10 @@ paths:
                       quality: { type: integer, minimum: 0, maximum: 5, nullable: true }
       responses:
         "200": { description: Resultado del quiz }
+        "409":
+          description: >
+            QUIZ_OUTDATED — alguna respuesta nombra una pregunta que el quiz ya no tiene
+            (p. ej. lo reemplazó un refuerzo con IA). No se guarda resultado.
 
   /dashboard:
     get:
