@@ -4,10 +4,11 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import type { QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { QuizPhase } from "../components/session/QuizPhase";
+import { ReviewPanel, ReviewPoints } from "../components/session/ReviewPanel";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
-import { Alert, Button, ButtonLink, Card, Spinner } from "../components/ui";
+import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
 import { usePlan, useSession } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
 import { routeOrder, toDateKey } from "../lib/studyProgress";
@@ -107,6 +108,16 @@ function SessionFlow({
 
   const fromPractice = searchParams.get("fase") === "test";
   const material = session.material?.content_markdown || "_Sin material._";
+  const isReview = session.kind === "REVIEW";
+  const points = session.review_points ?? [];
+  const reinforced = session.reinforcement_status === "READY";
+  const showReviewSide = isReview && points.length > 0;
+  const badge = isReview ? (
+    <>
+      <Badge color="brand">Repaso</Badge>
+      {reinforced && <Badge color="green">Con IA</Badge>}
+    </>
+  ) : undefined;
   const exit = (
     <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost" aria-label="Salir de la sesión">
       <X aria-hidden="true" className="h-5 w-5" />
@@ -122,8 +133,15 @@ function SessionFlow({
           topic={session.topic_name}
           durationMinutes={session.duration_minutes}
           exit={exit}
+          badge={badge}
+          aside={showReviewSide && !reinforced ? <ReviewPanel session={session} /> : undefined}
+          preview={showReviewSide ? <ReviewPoints points={points} /> : undefined}
+          startDisabledReason={
+            session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
+          }
           onDone={() => setPhase("break")}
         >
+          {showReviewSide && <ReviewPoints points={points} />}
           <SafeMarkdown>{material}</SafeMarkdown>
         </StudyPhase>
       ) : (
@@ -154,6 +172,7 @@ function SessionFlow({
             sessionId={session.id}
             planId={session.plan_id}
             alreadyCompleted={alreadyCompleted}
+            allowShuffle={isReview}
             onSubmitted={handleSubmitted}
           />
         </div>

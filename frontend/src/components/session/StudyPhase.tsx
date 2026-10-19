@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { formatTime, useTimer } from "../../hooks/useTimer";
@@ -8,16 +8,30 @@ export function StudyPhase({
   topic,
   durationMinutes,
   exit,
+  badge,
+  aside,
+  preview,
+  startDisabledReason,
   children,
   onDone,
 }: {
   topic: string;
   durationMinutes: number;
   exit: ReactNode;
+  /** Next to the topic heading (e.g. "Repaso"). */
+  badge?: ReactNode;
+  /** Review sessions: a side card shown before starting (below the timer on mobile). */
+  aside?: ReactNode;
+  /** Review sessions: what will be reinforced, shown before starting. */
+  preview?: ReactNode;
+  /** When set, Empezar is disabled and this visible reason is linked to it. */
+  startDisabledReason?: string;
   children: ReactNode;
   onDone: () => void;
 }) {
   const { remaining, start, finish } = useTimer(durationMinutes * 60, onDone);
+  const reasonId = useId();
+  const withSide = aside !== undefined || preview !== undefined;
   const [started, setStarted] = useState(false);
   const doneRef = useRef<HTMLButtonElement>(null);
 
@@ -31,16 +45,21 @@ export function StudyPhase({
   }
 
   return (
-    <div>
+    <div className={!started && withSide ? "lg:grid lg:grid-cols-3 lg:gap-x-8" : undefined}>
       <div
         className={`sticky top-0 z-10 flex transition-[min-height] duration-[var(--motion-card)] ease-flow ${
           started
             ? "min-h-14 flex-row items-center justify-between gap-3 border-b border-line bg-surface-paper/95 backdrop-blur"
-            : "min-h-[100dvh] flex-col items-center justify-center"
+            : `${withSide ? "min-h-[60dvh] lg:col-span-2" : "min-h-[100dvh]"} flex-col items-center justify-center`
         }`}
       >
         <div className={started ? "" : "absolute left-0 top-2"}>{exit}</div>
-        {!started && <h1 className="max-w-reading text-center text-2xl font-bold">{topic}</h1>}
+        {!started && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <h1 className="max-w-reading text-center text-2xl font-bold">{topic}</h1>
+            {badge}
+          </div>
+        )}
         <div
           role="timer"
           aria-label="Tiempo restante"
@@ -56,13 +75,34 @@ export function StudyPhase({
             <ArrowRight aria-hidden="true" className="h-4 w-4" />
           </Button>
         ) : (
-          <Button onClick={begin}>Empezar</Button>
+          <div className="flex flex-col items-center gap-2">
+            <Button
+              onClick={begin}
+              disabled={startDisabledReason !== undefined}
+              aria-describedby={startDisabledReason !== undefined ? reasonId : undefined}
+            >
+              Empezar
+            </Button>
+            {startDisabledReason !== undefined && (
+              <p id={reasonId} className="text-sm text-text-muted">
+                {startDisabledReason}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
+      {!started && aside !== undefined && (
+        <div className="lg:col-start-3 lg:row-span-2 lg:row-start-1">{aside}</div>
+      )}
+      {!started && preview !== undefined && <div className="mt-6 lg:col-span-2 lg:mt-0">{preview}</div>}
+
       {started && (
         <div className="pt-6 transition-opacity duration-[var(--motion-micro)]">
-          <h1 className="mb-4 text-center text-2xl font-bold">{topic}</h1>
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+            <h1 className="text-center text-2xl font-bold">{topic}</h1>
+            {badge}
+          </div>
           <div className="prose-study mx-auto max-w-reading">{children}</div>
         </div>
       )}

@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useId, useRef, useState } from "react";
 import { ArrowRight, ListChecks } from "lucide-react";
 
@@ -21,15 +22,28 @@ const QUALITY_LABELS = [
   "la recordé perfectamente",
 ];
 
+/** Fisher-Yates on a copy. */
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 export function QuizPhase({
   sessionId,
   planId,
   alreadyCompleted,
+  allowShuffle = false,
   onSubmitted,
 }: {
   sessionId: number;
   planId: number;
   alreadyCompleted: boolean;
+  /** Reviews can reorder their questions (before the first answer). */
+  allowShuffle?: boolean;
   onSubmitted: (result: QuizResultDTO) => void;
 }) {
   const { data: quiz, isLoading, isError, isFetching, refetch } = useQuiz(sessionId);
@@ -38,6 +52,9 @@ export function QuizPhase({
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, QuizAnswer>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // The quiz was replaced while the learner answered: the server asked to reload it.
+  const [outdated, setOutdated] = useState<string | null>(null);
+  const [shuffledIds, setShuffledIds] = useState<number[] | null>(null);
   // Blocks a second submission synchronously, before the pending state re-renders.
   const submitting = useRef(false);
 
@@ -85,7 +102,11 @@ export function QuizPhase({
     );
   }
 
-  const questions = quiz.questions;
+  const questions = shuffledIds
+    ? shuffledIds
+        .map((id) => quiz.questions.find((item) => item.id === id))
+        .filter((item): item is QuizQuestionDTO => item !== undefined)
+    : quiz.questions;
   const question = questions[Math.min(index, questions.length - 1)];
   const isLast = index >= questions.length - 1;
   const currentAnswered = answers[question.id] !== undefined;
@@ -97,8 +118,14 @@ export function QuizPhase({
       ? "Muestra la respuesta y valora cuánto la recordabas."
       : "Elige una respuesta para continuar.";
 
+  function toggleShuffle() {
+    setIndex(0);
+    setShuffledIds((current) => (current ? null : shuffle(quiz!.questions.map((item) => item.id))));
+  }
+
   function record(answer: QuizAnswer) {
     setSubmitError(null);
+    setOutdated(null);
     setAnswers((previous) => ({ ...previous, [answer.question_id]: answer }));
   }
 
@@ -117,7 +144,16 @@ export function QuizPhase({
       const result = await submit.mutateAsync({ quizId: quiz!.id, sessionId, answers: payload });
       onSubmitted(result);
     } catch (caught: unknown) {
-      setSubmitError(getApiErrorMessage(caught, ""));
+      if (axios.isAxiosError(caught) && caught.response?.data?.code === "QUIZ_OUTDATED") {
+        // Keep the answers whose questions still exist; the reloaded quiz asks for the rest.
+        setOutdated(getApiErrorMessage(caught, ""));
+        setSubmitError(null);
+        setShuffledIds(null);
+        setIndex(0);
+        await refetch();
+      } else {
+        setSubmitError(getApiErrorMessage(caught, ""));
+      }
     } finally {
       submitting.current = false;
     }
@@ -126,9 +162,18 @@ export function QuizPhase({
   return (
     <div className="space-y-4">
       <ProgressBar value={(answeredCount / questions.length) * 100} label="Preguntas respondidas" />
-      <p className="text-sm text-text-muted">
-        Pregunta {index + 1} de {questions.length}
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-text-muted">
+          Pregunta {index + 1} de {questions.length}
+        </p>
+        {allowShuffle && answeredCount === 0 && (
+          <Button type="button" variant="ghost" aria-pressed={shuffledIds !== null} onClick={toggleShuffle}>
+            Mezclar
+          </Button>
+        )}
+      </div>
+
+      {outdated !== null && <Alert tone="warning">{outdated}</Alert>}
 
       {question.question_type === "FLASHCARD" ? (
         <FlashCard
