@@ -226,6 +226,33 @@ def _refund_plan_use(db: Session, plan_id: int, user_id: int, fallback_day: date
         logger.warning("Could not refund the free AI use for plan %s", plan_id)
 
 
+_INTERRUPTED_MESSAGE = (
+    "La generación se interrumpió porque el servidor se reinició. "
+    "Pulsa «Continuar generación» para terminarla."
+)
+
+
+def recover_interrupted_plans(db: Session) -> None:
+    """At startup, a PROCESSING plan has no live task left: make it resumable and refund it.
+
+    Assumes a single backend process (the SQLite MVP); with several workers this would
+    fail the live generations of the others.
+    """
+    interrupted = db.execute(
+        select(Plan.id, Plan.user_id).where(Plan.status == PlanStatus.PROCESSING)
+    ).all()
+    for plan_id, user_id in interrupted:
+        db.execute(
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
+            .values(status=PlanStatus.FAILED, error_message=_INTERRUPTED_MESSAGE)
+        )
+        db.commit()
+        _refund_plan_use(db, plan_id, user_id, None)
+    if interrupted:
+        logger.warning("Marked %d interrupted plan generation(s) as resumable", len(interrupted))
+
+
 def generate_plan_task(plan_id: int) -> None:
     """Background worker that generates the full plan content."""
     db = SessionLocal()

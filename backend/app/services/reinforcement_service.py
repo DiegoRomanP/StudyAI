@@ -41,6 +41,21 @@ _NOT_AVAILABLE = ConflictError("Este repaso no admite refuerzo con IA.", "REINFO
 _GENERIC_FAILURE = "No se pudo generar el refuerzo. Inténtalo de nuevo."
 
 
+def recover_interrupted_reinforcements(db: Session) -> None:
+    """At startup, a PROCESSING reinforcement has no live task left. Its use is not refunded."""
+    result = db.execute(
+        update(StudySession)
+        .where(StudySession.reinforcement_status == Status.PROCESSING)
+        .values(
+            reinforcement_status=Status.FAILED,
+            reinforcement_error="El refuerzo se interrumpió porque el servidor se reinició. Inténtalo de nuevo.",
+        )
+    )
+    db.commit()
+    if result.rowcount:
+        logger.warning("Marked %d interrupted reinforcement(s) as failed", result.rowcount)
+
+
 def _set_status(db: Session, session_id: int, new: Status, *, only_if: list[Status], error: str = "") -> int:
     result = db.execute(
         update(StudySession)

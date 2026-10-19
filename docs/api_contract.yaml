@@ -143,9 +143,9 @@ paths:
         el mismo plan y no registra otra tarea. Reutilizar la clave con otro
         payload devuelve 409. Sin clave, conserva el comportamiento anterior y
         crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
-        actual; no es una cola durable ni garantiza recuperación tras un cierre.
-        Si la generación falla o se interrumpe, el plan queda FAILED conservando
-        lo generado y se puede continuar con `/plans/{plan_id}/resume`.
+        actual; no es una cola durable. Si la generación falla, o el servidor se
+        reinicia a mitad (al arrancar, todo plan PROCESSING pasa a FAILED), el plan
+        conserva lo generado y se puede continuar con `/plans/{plan_id}/resume`.
       parameters:
         - name: Idempotency-Key
           in: header

@@ -116,7 +116,11 @@ does the real work in `_Generator.run`:
 All LLM JSON responses go through `parse_llm_json` (`app/llm/output_parsers.py`), which strips
 markdown fences and repairs common malformations before `json.loads`. Any step of `_generate` that
 raises sets `Plan.status = FAILED` with the error message truncated to 1000 chars — the whole
-pipeline never leaves a plan stuck in `PROCESSING`.
+pipeline never leaves a plan stuck in `PROCESSING`. A `BackgroundTask` dies with the process
+(`--reload`, crash), so the `lifespan` runs `recover_interrupted_plans` (PROCESSING → FAILED,
+resumable, free use refunded) and `recover_interrupted_reinforcements` (PROCESSING → FAILED, no
+refund) at startup. **This assumes a single backend process** (the SQLite MVP): with several
+workers, one starting up would fail the live generations of the others.
 
 **Request volume is deliberately minimised — don't undo this.** A plan makes `2 + N` LLM calls (N =
 session count), not `2 + 2N`: step 5 used to be two separate calls (`content_gen` then `quiz_gen`,
