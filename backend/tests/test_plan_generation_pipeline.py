@@ -211,6 +211,7 @@ def test_truncated_llm_output_fails_generation_before_json_parsing(client: TestC
         max_retries=1,
     )
     monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+    monkeypatch.setattr("app.services.plan_service.time.sleep", lambda _seconds: None)
     route = respx.post("https://api.example.test/v1/chat/completions").mock(
         return_value=httpx.Response(
             200,
@@ -237,7 +238,51 @@ def test_truncated_llm_output_fails_generation_before_json_parsing(client: TestC
 
     assert plan["status"] == "FAILED"
     assert plan["error_message"] == "El proveedor de IA agotó el presupuesto de salida antes de completar la respuesta."
-    assert route.call_count == 1
+    # One retry with double the room, then the error stands.
+    assert route.call_count == 2
+    budgets = [json.loads(call.request.content)["max_tokens"] for call in route.calls]
+    assert budgets == [2048, 4096]
+
+
+class _OutputLimitOnce(MockLLMProvider):
+    """The mock, except the scripted kind runs out of room below ``below``."""
+
+    def __init__(self, kind: str, below: int) -> None:
+        super().__init__()
+        self.kind, self.below = kind, below
+        self.calls: list[tuple[str, int]] = []
+
+    def complete(self, *, kind, max_tokens=4096, **kwargs):
+        self.calls.append((kind, max_tokens))
+        if kind == self.kind and max_tokens < self.below:
+            raise LLMError("sin espacio", code="LLM_OUTPUT_LIMIT")
+        return super().complete(kind=kind, max_tokens=max_tokens, **kwargs)
+
+
+def test_session_plan_output_limit_falls_back_to_the_deterministic_layout(
+    client: TestClient, monkeypatch
+):
+    provider = _OutputLimitOnce("session_plan", below=10**6)
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+
+    plan = _build_ready_plan(client, "LEARNING", "Plan reparto truncado")
+
+    assert len(plan["sessions"]) > 0
+    assert len(provider.calls) == 2 + len(plan["sessions"])
+    assert [kind for kind, _ in provider.calls].count("session_plan") == 1
+
+
+def test_session_content_output_limit_retries_once_and_the_plan_is_ready(
+    client: TestClient, monkeypatch
+):
+    provider = _OutputLimitOnce("session_content", below=8192)
+    monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_: provider)
+
+    plan = _build_ready_plan(client, "LEARNING", "Plan contenido truncado")
+
+    content_calls = [call for call in provider.calls if call[0] == "session_content"]
+    assert content_calls[:2] == [("session_content", 4096), ("session_content", 8192)]
+    assert len(content_calls) == 2 * len(plan["sessions"])
 
 
 def test_new_plan_sessions_link_once_to_each_selected_topic(client: TestClient):

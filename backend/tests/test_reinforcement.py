@@ -326,3 +326,43 @@ def test_submit_with_unknown_question_ids_is_rejected_without_result(client, cre
     assert _detail(client, first["id"])["status"] == "PENDING"
     with SessionLocal() as db:
         assert db.query(QuizResult).filter(QuizResult.session_id == first["id"]).count() == 0
+
+
+class _OutputLimitBelow(MockLLMProvider):
+    def __init__(self, below: int) -> None:
+        super().__init__()
+        self.below = below
+        self.budgets: list[int] = []
+
+    def complete(self, *, max_tokens=4096, **kwargs):
+        self.budgets.append(max_tokens)
+        if max_tokens < self.below:
+            raise LLMError("sin espacio", code="LLM_OUTPUT_LIMIT")
+        return super().complete(max_tokens=max_tokens, **kwargs)
+
+
+def test_reinforcement_retries_once_at_8192(client, created_plans, monkeypatch, tasks):
+    _, review_id = _review(client, created_plans, "Refuerzo con reintento")
+    provider = _use_provider(monkeypatch, _OutputLimitBelow(8192))
+    client.post(f"/sessions/{review_id}/reinforcement")
+
+    generate_reinforcement_task(*tasks[0])
+
+    assert _detail(client, review_id)["reinforcement_status"] == "READY"
+    assert provider.budgets == [4096, 8192]
+
+
+def test_reinforcement_fails_cleanly_after_the_retry(client, created_plans, monkeypatch, tasks):
+    _, review_id = _review(client, created_plans, "Refuerzo sin espacio")
+    _reset_usage()
+    _bundled(monkeypatch)
+    client.post("/llm-settings/deactivate-all")
+    provider = _use_provider(monkeypatch, _OutputLimitBelow(10**6))
+    client.post(f"/sessions/{review_id}/reinforcement")
+    assert _uses() == 1
+
+    generate_reinforcement_task(*tasks[0])
+
+    assert _detail(client, review_id)["reinforcement_status"] == "FAILED"
+    assert provider.budgets == [4096, 8192]
+    assert _uses() == 0

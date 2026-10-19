@@ -20,6 +20,7 @@ from app.core.exceptions import ConflictError, DailyLimitError, LLMError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.llm.factory import get_llm_provider
+from app.llm.output_budget import complete_within_budget
 from app.llm.output_parsers import parse_llm_json
 from app.llm.prompts import session_content
 from app.llm.prompts.reinforcement import build_reinforcement_prompt
@@ -127,7 +128,8 @@ def generate_reinforcement_task(session_id: int, user_id: int, spent: bool) -> N
         excerpt = (session.material.content_markdown if session.material else "")[:4000]
         try:
             llm = get_llm_provider(db, user_id)
-            raw = llm.complete(
+            raw = complete_within_budget(
+                llm,
                 kind="session_content",
                 system=session_content.SYSTEM,
                 prompt=build_reinforcement_prompt(
@@ -141,7 +143,6 @@ def generate_reinforcement_task(session_id: int, user_id: int, spent: bool) -> N
                     "reinforcement": True,
                     "failed_points": points,
                 },
-                max_tokens=2048,
             )
             content = build_session_content(parse_llm_json(raw), config)
             if not content.material_markdown.strip() or not content.questions:

@@ -35,6 +35,7 @@ from app.algorithms.adaptive_route import normalize
 from app.algorithms.pareto import select_top_by_relevance
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.mock_provider import MockLLMProvider
+from app.llm.output_budget import complete_within_budget
 from app.llm.output_parsers import parse_llm_json
 from app.services.session_content_builder import build_session_content
 from app.llm.prompts import plan_generation, session_content, topic_analysis
@@ -258,7 +259,7 @@ class _Generator:
         self.db.flush()
 
     # --- steps ---------------------------------------------------------------
-    def _llm_call(self, *, max_tokens: int, **kwargs) -> str:
+    def _llm_call(self, *, kind: str, escalate: bool = True, **kwargs) -> str:
         """Wraps ``self.llm.complete`` with proactive inter-call pacing.
 
         A rate-limited free-tier provider (OpenRouter's ~8 req/min, etc.) can
@@ -267,11 +268,16 @@ class _Generator:
         retry-on-429. Skipped for the mock provider so local dev/tests stay
         instant.
         """
-        result = self.llm.complete(max_tokens=max_tokens, **kwargs)
+        result = complete_within_budget(
+            self.llm, kind=kind, escalate=escalate, before_retry=self._pace, **kwargs
+        )
+        self._pace()
+        return result
+
+    def _pace(self) -> None:
         pacing = self.settings.LLM_REQUEST_PACING_SECONDS
         if pacing > 0 and self.llm.requires_request_pacing:
             time.sleep(pacing)
-        return result
 
     def _analyse_topics(self, goal_text, strategy, chunks, keywords) -> list[dict]:
         prompt = (
@@ -284,9 +290,6 @@ class _Generator:
             system=topic_analysis.SYSTEM,
             prompt=prompt,
             context={"goal_title": goal_text, "keywords": keywords},
-            # Up to ~10 topics with 2-3 subtopics each fits comfortably well
-            # under 1536 tokens; far less than the previous blanket 4096.
-            max_tokens=1536,
         )
         data = parse_llm_json(raw)
         return data.get("topics", [])
@@ -320,18 +323,16 @@ class _Generator:
         try:
             raw = self._llm_call(
                 kind="session_plan",
+                escalate=False,
                 system=plan_generation.SYSTEM,
                 prompt=prompt,
                 context={"topics": [t.name for t in selected]},
-                # Just a list of {topic_name, review_offset_days} per selected
-                # topic — a few hundred tokens even for a dozen sessions.
-                max_tokens=1024,
             )
             sessions = parse_llm_json(raw).get("sessions", [])
         except LLMError as exc:
-            if exc.code != "LLM_INVALID_RESPONSE":
+            if exc.code not in {"LLM_INVALID_RESPONSE", "LLM_OUTPUT_LIMIT"}:
                 raise
-            logger.warning("Session plan output was invalid; using deterministic layout.")
+            logger.warning("Session plan output was unusable (code=%s); using deterministic layout.", exc.code)
             sessions = []
         except (TypeError, ValueError, KeyError):
             sessions = []
@@ -411,9 +412,6 @@ class _Generator:
                 "flashcards": config.flashcards,
                 "multiple_choice": config.multiple_choice,
             },
-            # Markdown summary + a handful of flashcards/MC questions —
-            # comfortably fits in far less than the previous 4096+4096.
-            max_tokens=2048,
         )
         content = build_session_content(parse_llm_json(raw), config)
 

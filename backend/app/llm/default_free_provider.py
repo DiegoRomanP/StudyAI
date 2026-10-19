@@ -153,6 +153,8 @@ class FreeTierProvider(LLMProvider):
                     kind=kind, system=system, prompt=prompt, context=context, max_tokens=max_tokens
                 )
             except LLMError as exc:
+                if exc.code == "LLM_OUTPUT_LIMIT":  # the caller retries with more room
+                    raise
                 last_error = exc
                 quota_like = quota_like and exc.code in _COOLDOWN_SECONDS
                 _start_cooldown(tier.name, exc)

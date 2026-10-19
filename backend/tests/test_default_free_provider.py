@@ -104,6 +104,20 @@ def test_surfaces_the_real_error_when_it_is_not_about_quota():
     assert failure.value.code == "LLM_REFUSED"
 
 
+def test_an_output_limit_is_raised_without_trying_the_next_tier():
+    first, first_provider = _tier("nvidia", LLMProviderName.NVIDIA, LLMError("sin espacio", code="LLM_OUTPUT_LIMIT"))
+    second, second_provider = _tier("gemini", LLMProviderName.GEMINI, "ok")
+    chain = FreeTierProvider([first, second])
+
+    with pytest.raises(LLMError) as raised:
+        _call(chain)
+
+    assert raised.value.code == "LLM_OUTPUT_LIMIT"
+    assert first_provider.calls == 1
+    assert second_provider.calls == 0
+    assert not free._cooling_down("nvidia")
+
+
 def test_close_releases_the_providers_that_were_built():
     first, first_provider = _tier("nvidia", LLMProviderName.NVIDIA, "ok")
     chain = FreeTierProvider([first])
