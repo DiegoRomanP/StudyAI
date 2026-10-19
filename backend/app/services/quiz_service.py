@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.events.session_events import (
     SESSION_COMPLETED,
     SessionCompletedEvent,
@@ -44,6 +44,11 @@ class QuizService:
             raise NotFoundError("Quiz no encontrado.")
 
         questions: dict[int, QuizQuestion] = {q.id: q for q in quiz.questions}
+        # The quiz may have been replaced (AI reinforcement) while the learner answered.
+        if any(answer.question_id not in questions for answer in submission.answers):
+            raise ConflictError(
+                "Las preguntas de este test cambiaron. Vuelve a cargarlo.", "QUIZ_OUTDATED"
+            )
         mc_total = 0
         mc_correct = 0
         detail: dict[str, dict] = {}

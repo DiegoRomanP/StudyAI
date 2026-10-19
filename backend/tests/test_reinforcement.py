@@ -304,3 +304,25 @@ def test_task_after_plan_deleted_refunds_without_error(client, created_plans, mo
     generate_reinforcement_task(*tasks[0])
 
     assert _uses() == 0
+
+
+def test_submit_with_unknown_question_ids_is_rejected_without_result(client, created_plans):
+    from app.models.quiz import QuizResult
+
+    plan = _plan(client, created_plans, "Envío con preguntas viejas")
+    first = plan["sessions"][0]
+    quiz = client.get(f"/quizzes/{first['id']}").json()
+    answers = [{"question_id": 987654, "quality": 3}]
+    answers += [
+        {"question_id": q["id"], "quality": 3} if q["question_type"] == "FLASHCARD"
+        else {"question_id": q["id"], "selected_option": q["answer"]}
+        for q in quiz["questions"]
+    ]
+
+    response = client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers})
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "QUIZ_OUTDATED"
+    assert _detail(client, first["id"])["status"] == "PENDING"
+    with SessionLocal() as db:
+        assert db.query(QuizResult).filter(QuizResult.session_id == first["id"]).count() == 0
