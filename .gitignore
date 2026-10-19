@@ -12,6 +12,8 @@ backend/.venv-qa/
 
 # Databases & storage
 *.db
+*.db-wal
+*.db-shm
 backend/storage/uploads/*
 !backend/storage/uploads/.gitkeep
 backend/storage/chroma/*
