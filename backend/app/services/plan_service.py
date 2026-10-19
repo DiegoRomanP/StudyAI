@@ -23,7 +23,7 @@ import json
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.adaptive_route import normalize
 from app.algorithms.pareto import select_top_by_relevance
+from app.llm.base import LLMProvider
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.output_budget import complete_within_budget
@@ -41,7 +42,7 @@ from app.services.session_content_builder import build_session_content
 from app.llm.prompts import plan_generation, session_content, topic_analysis
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal
-from app.models.plan import Plan, PlanStatus, PlanTopic
+from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
 from app.models.quiz import Quiz, QuizQuestion
 from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
@@ -175,24 +176,39 @@ def generate_plan_task(plan_id: int) -> None:
         db.close()
 
 
+class _PlanGone(Exception):
+    """The plan was deleted (or left PROCESSING) while it was being generated."""
+
+
 class _Generator:
-    """Encapsulates the multi-step generation so ``generate_plan_task`` stays thin."""
+    """Encapsulates the multi-step generation so ``generate_plan_task`` stays thin.
+
+    The same run generates and resumes: it works out what is missing from the rows
+    already stored, and every step ends in its own guarded commit.
+    """
 
     def __init__(self, db: Session) -> None:
         self.db = db
         self.settings = get_settings()
         self.retriever = Retriever()
+        self.llm: LLMProvider | None = None
 
     def run(self, plan_id: int) -> None:
         plan = self.db.get(Plan, plan_id)
-        if plan is None:
-            logger.warning("generate_plan_task: plan %s not found", plan_id)
+        if plan is None or plan.status != PlanStatus.PROCESSING:
+            logger.warning("generate_plan_task: plan %s not found or not processing", plan_id)
             return
-        self.llm = get_llm_provider(self.db, plan.user_id)
+        user_id = plan.user_id
         try:
+            self.llm = get_llm_provider(self.db, user_id)
             self._generate(plan)
-            plan.status = PlanStatus.READY
+            self._finish(plan_id)
+        except _PlanGone:
+            self.db.rollback()
+            self._refund_free_use(user_id)
         except Exception as exc:  # noqa: BLE001 - record a safe failure for the client
+            # A failed flush leaves the session usable only for a rollback.
+            self.db.rollback()
             upstream_status = None
             if isinstance(exc, LLMError):
                 error_message = str(exc)
@@ -207,13 +223,11 @@ class _Generator:
                 error_code,
                 upstream_status,
             )
-            plan.status = PlanStatus.FAILED
-            plan.error_message = error_message
-            self._refund_free_use(plan.user_id)
+            self._fail(plan_id, error_message[:1000])
+            self._refund_free_use(user_id)
         finally:
-            self.llm.close()
-        self.db.add(plan)
-        self.db.commit()
+            if self.llm is not None:
+                self.llm.close()
 
     def _refund_free_use(self, user_id: int) -> None:
         """A failed plan gives back the free use it spent; never let bookkeeping hide the failure."""
@@ -221,6 +235,7 @@ class _Generator:
             if _uses_free_ai(self.db, user_id):
                 FreeAiQuota(self.db).refund(user_id)
         except Exception:  # noqa: BLE001
+            self.db.rollback()
             logger.warning("Could not refund the free AI use for user %s", user_id)
 
     def _generate(self, plan: Plan) -> None:
@@ -228,34 +243,94 @@ class _Generator:
         goal_text = f"{goal.title}. {goal.description}".strip()
         strategy = GoalStrategyFactory.create(goal.goal_type)
         config = strategy.get_session_config()
+        document_ids = plan.document_ids or None
 
-        # 1. Retrieve representative chunks for the whole goal. Kept modest
-        # (8 chunks * ~500 tokens each) rather than the wider 12 previously
-        # used — a smaller prompt is one less thing to hit a token-throughput
-        # limit on, on top of the request-count reductions below.
-        chunks = self.retriever.retrieve_texts(
-            goal_text or goal.title, top_k=8, document_ids=plan.document_ids or None
+        # Relationships are not refreshed when rows are added, so work on local lists.
+        topics = list(plan.topics)
+        if not topics:
+            self._set_progress(plan.id, GenerationStage.TOPICS, 0, 0)
+            # Kept modest (8 chunks * ~500 tokens each): a smaller prompt is one
+            # less thing to hit a token-throughput limit on.
+            chunks = self.retriever.retrieve_texts(
+                goal_text or goal.title, top_k=8, document_ids=document_ids
+            )
+            keywords = extract_keywords("\n".join(chunks), limit=8)
+            topics_data = self._analyse_topics(goal_text, strategy, chunks, keywords)
+            if not topics_data:  # never a READY plan with no sessions
+                raise LLMError("La IA no devolvió temas para tu material.", code="LLM_INVALID_RESPONSE")
+            topics = self._persist_topics(plan, topics_data)
+            self._select(topics)
+            self._set_progress(plan.id, GenerationStage.SESSIONS, 0, 0)
+        elif not any(topic.selected for topic in topics):
+            self._select(topics)
+        selected = [topic for topic in topics if topic.selected]
+
+        sessions = sorted(
+            (s for s in plan.sessions if s.kind == SessionKind.NEW), key=lambda s: s.order_index
         )
-        keywords = extract_keywords("\n".join(chunks), limit=8)
+        if not sessions:
+            self._set_progress(plan.id, GenerationStage.SESSIONS, 0, 0)
+            sessions = self._create_sessions(plan, self._plan_sessions(goal_text, selected), config, start=0)
+        else:
+            # Older plans have sessions without topic_id, so match by name too.
+            covered_ids = {s.topic_id for s in sessions if s.topic_id is not None}
+            covered_names = {normalize(s.topic_name) for s in sessions}
+            missing = [
+                t for t in selected if t.id not in covered_ids and normalize(t.name) not in covered_names
+            ]
+            if missing:
+                specs = self._link_sessions_to_topics([], missing, self.settings.REVIEW_INTERVALS_DAYS)
+                start = max(s.order_index for s in sessions) + 1
+                sessions += self._create_sessions(plan, specs, config, start=start)
 
-        # 2. LLM call #1 — topic analysis.
-        topics_data = self._analyse_topics(goal_text, strategy, chunks, keywords)
-        topics = self._persist_topics(plan, topics_data)
+        total = len(sessions)
+        done = sum(1 for s in sessions if s.material is not None)
+        self._set_progress(plan.id, GenerationStage.CONTENT, done, total)
+        for session in sessions:
+            if session.material is not None:
+                continue
+            topic_chunks = self.retriever.retrieve_texts(
+                session.topic_name, top_k=4, document_ids=document_ids
+            )
+            self._attach_session_content(session, session.topic_name, goal_text, topic_chunks, config)
+            done += 1
+            self._set_progress(plan.id, GenerationStage.CONTENT, done, total)
 
-        # 3. Pareto selection.
-        selected = select_top_by_relevance(topics, relevance=lambda t: t.relevance)
-        selected_ids = {t.id for t in selected}
+    def _set_progress(self, plan_id: int, stage: GenerationStage, done: int, total: int) -> None:
+        """Commit the step so far, unless the plan was deleted meanwhile."""
+        self.db.flush()  # autoflush is off: an UPDATE would not write pending rows first
+        result = self.db.execute(
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
+            .values(progress_stage=stage, progress_done=done, progress_total=total)
+        )
+        if result.rowcount == 0:
+            raise _PlanGone
+        self.db.commit()
+
+    def _finish(self, plan_id: int) -> None:
+        result = self.db.execute(
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
+            .values(status=PlanStatus.READY, error_message="")
+        )
+        if result.rowcount == 0:
+            raise _PlanGone
+        self.db.commit()
+
+    def _fail(self, plan_id: int, message: str) -> None:
+        self.db.execute(
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
+            .values(status=PlanStatus.FAILED, error_message=message)
+        )
+        self.db.commit()
+
+    def _select(self, topics: list[PlanTopic]) -> None:
+        """Pareto selection of the high-value slice of topics."""
+        selected_ids = {t.id for t in select_top_by_relevance(topics, relevance=lambda t: t.relevance)}
         for topic in topics:
             topic.selected = topic.id in selected_ids
-        self.db.flush()
-
-        # 4. LLM call #2 — session distribution (fallback to derived if empty).
-        session_specs = self._plan_sessions(goal_text, selected)
-
-        # 5. Per-session material + quiz.
-        for index, spec in enumerate(session_specs):
-            self._build_session(plan, index, spec, goal_text, config)
-
         self.db.flush()
 
     # --- steps ---------------------------------------------------------------
@@ -375,28 +450,28 @@ class _Generator:
                 )
         return out
 
-    def _build_session(self, plan, index, spec, goal_text, config) -> None:
-        topic_name = str(spec.get("topic_name", f"Tema {index + 1}"))[:255]
-        offset = int(spec.get("review_offset_days", self.settings.REVIEW_INTERVALS_DAYS[0]))
-
+    def _create_sessions(self, plan, specs, config, *, start: int) -> list[StudySession]:
+        """Every NEW session row of the plan, without content yet."""
         created = plan.created_at or datetime.now(timezone.utc)
-        session = StudySession(
-            plan_id=plan.id,
-            order_index=index,
-            topic_name=topic_name,
-            duration_minutes=config.duration_minutes,
-            review_offset_days=offset,
-            kind=SessionKind.NEW,
-            topic_id=spec.get("topic_id"),
-            scheduled_date=created.date() + timedelta(days=index),
-        )
-        self.db.add(session)
+        sessions: list[StudySession] = []
+        for offset, spec in enumerate(specs):
+            index = start + offset
+            session = StudySession(
+                plan_id=plan.id,
+                order_index=index,
+                topic_name=str(spec.get("topic_name", f"Tema {index + 1}"))[:255],
+                duration_minutes=config.duration_minutes,
+                review_offset_days=int(
+                    spec.get("review_offset_days", self.settings.REVIEW_INTERVALS_DAYS[0])
+                ),
+                kind=SessionKind.NEW,
+                topic_id=spec.get("topic_id"),
+                scheduled_date=created.date() + timedelta(days=index),
+            )
+            self.db.add(session)
+            sessions.append(session)
         self.db.flush()
-
-        topic_chunks = self.retriever.retrieve_texts(
-            topic_name, top_k=4, document_ids=plan.document_ids or None
-        )
-        self._attach_session_content(session, topic_name, goal_text, topic_chunks, config)
+        return sessions
 
     def _attach_session_content(self, session, topic_name, goal_text, chunks, config) -> None:
         """One merged call for study material + quiz (was two calls)."""
