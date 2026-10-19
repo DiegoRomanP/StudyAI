@@ -38,3 +38,10 @@ htmlcov/
 
 # Playwright MCP debug artifacts
 .playwright-mcp/
+
+# Agents
+.claude/
+.agents/
+.alt/
+.opencode/
+.pi/
