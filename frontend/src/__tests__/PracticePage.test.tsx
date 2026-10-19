@@ -173,4 +173,28 @@ describe("PracticePage", () => {
     renderPractice();
     expect(await screen.findByRole("link", { name: "Prepara tu plan en Inicio" })).toHaveAttribute("href", "/inicio#preparar-plan");
   });
+
+  it("practice skips review copies but keeps AI reinforcement", async () => {
+    const review = (id: number, reinforcement: "NONE" | "READY") =>
+      makeSessionSummary({
+        id,
+        order_index: id,
+        topic_name: "Grafos",
+        kind: "REVIEW",
+        topic_id: 1,
+        reinforcement_status: reinforcement,
+      });
+    vi.spyOn(api, "listPlans").mockResolvedValue([
+      { ...plan, sessions: [...plan.sessions, review(72, "NONE"), review(73, "READY")] },
+    ]);
+    const getQuiz = vi.spyOn(api, "getQuiz").mockImplementation(async (sessionId: number) => ({
+      ...(quizzes[sessionId] ?? { id: sessionId * 10, session_id: sessionId, questions: [] }),
+    }));
+    renderPractice();
+
+    await screen.findByText("Pregunta 1 de 2");
+    const requested = getQuiz.mock.calls.map(([id]) => id);
+    expect(requested).not.toContain(72);
+    expect(requested).toContain(73);
+  });
 });

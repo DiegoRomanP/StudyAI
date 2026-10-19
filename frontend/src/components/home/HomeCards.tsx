@@ -52,8 +52,9 @@ export function TodaySessionCard({ plan, session }: { plan: PlanDTO; session: Se
               <h2 id="today-session-title" className="font-display text-xl font-semibold text-text-primary">
                 Sesión de hoy
               </h2>
-              <p className="mt-0.5 text-sm text-text-muted">
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-text-muted">
                 {session.duration_minutes} min de estudio · {session.topic_name}
+                {session.kind === "REVIEW" && <Badge color="brand">Repaso</Badge>}
               </p>
               <p className="mt-0.5 text-xs text-text-muted">
                 {plan.title}

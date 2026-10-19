@@ -44,6 +44,19 @@ function isCorrectChoice(choice: string, question: QuizQuestionDTO) {
   return choice.trim() === question.answer.trim();
 }
 
+/**
+ * Review sessions hold copies of questions the plan already has, so practice skips them
+ * (an AI-reinforced review has brand-new questions and stays).
+ */
+function withoutReviewCopies(plan: PlanDTO): PlanDTO {
+  return {
+    ...plan,
+    sessions: plan.sessions.filter(
+      (session) => !(session.kind === "REVIEW" && session.reinforcement_status !== "READY"),
+    ),
+  };
+}
+
 /** Every question of a plan, in session order, with its topic's estimated difficulty. */
 export function collectPracticeQuestions(
   plan: PlanDTO,
@@ -129,7 +142,7 @@ export function PracticePage() {
         {(plans) => {
           const ready = readyPlans(plans);
           const requested = Number(searchParams.get("plan"));
-          const plan = ready.find((item) => item.id === requested) ?? ready[0];
+          const plan = withoutReviewCopies(ready.find((item) => item.id === requested) ?? ready[0]);
           return (
             <div className="space-y-4">
               {ready.length === 1 && (

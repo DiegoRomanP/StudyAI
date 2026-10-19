@@ -535,4 +535,29 @@ describe("HomePage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Nueva meta" }));
     expect(screen.getByRole("textbox", { name: "Tu meta" })).toBeInTheDocument();
   });
+
+  it("today card marks review sessions", async () => {
+    mockApi({
+      plans: [
+        {
+          ...readyPlan,
+          sessions: [
+            makeSessionSummary({
+              id: 90,
+              order_index: 5,
+              topic_name: "Grafos",
+              kind: "REVIEW",
+              topic_id: 1,
+              scheduled_date: "2000-01-01",
+            }),
+          ],
+        },
+      ],
+    });
+    renderHome();
+
+    const today = await screen.findByRole("region", { name: "Sesión de hoy" });
+    expect(within(today).getByText("Repaso")).toBeInTheDocument();
+    expect(within(today).getByRole("link", { name: "Comenzar sesión" })).toHaveAttribute("href", "/session/90");
+  });
 });
