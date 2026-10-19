@@ -18,7 +18,6 @@ from app.llm.request_profiles import RequestProfile
 NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 NVIDIA_NVCF_STATUS_URL = "https://api.nvcf.nvidia.com/v2/nvcf/pexec/status/{request_id}"
 NVIDIA_ADAPTER_VERSION = "v1"
-NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS = 256
 NVIDIA_STANDARD_CHAT_PROFILE = RequestProfile(
     identifier="nvidia-standard-chat",
     version="v1",
@@ -61,12 +60,8 @@ _SPECS = (
         max_output_tokens=32768,
         request_profile=NVIDIA_STANDARD_CHAT_PROFILE,
         docs_url="https://docs.api.nvidia.com/nim/reference/nvidia-nemotron-3-super-120b-a12b-infer",
-        static_parameters=MappingProxyType(
-            {
-                "reasoning_effort": "low",
-                "reasoning_budget": NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
-            }
-        ),
+        # Reasoning tokens count against max_tokens and the JSON tasks do not need them.
+        static_parameters=MappingProxyType({"reasoning_effort": "none"}),
     ),
 )
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
+
 from app.core.config import get_settings
 from app.core.exceptions import ValidationError
 from app.llm.ollama_client import OllamaClient, OllamaModel
@@ -17,6 +19,8 @@ OLLAMA_CHAT_PROFILE = RequestProfile(
     test_max_tokens=32,
     requires_usage=False,
     json_response_kinds=frozenset({"topic_analysis", "session_plan", "session_content"}),
+    # Reasoning tokens count against max_tokens and the JSON tasks do not need them.
+    extra_parameters=MappingProxyType({"reasoning_effort": "none"}),
 )
 
 

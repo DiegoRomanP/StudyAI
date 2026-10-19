@@ -11,7 +11,6 @@ import respx
 from app.core.config import LLMCallPolicy
 from app.core.exceptions import LLMError
 from app.llm.nvidia_models import (
-    NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
     NVIDIA_NIM_BASE_URL,
     NVIDIA_NVCF_STATUS_URL,
     get_nvidia_model_spec,
@@ -77,8 +76,7 @@ def test_uses_the_fixed_hosted_endpoint_and_profile_payload():
         ],
         "stream": False,
         "max_tokens": 32768,
-        "reasoning_effort": "low",
-        "reasoning_budget": NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS,
+        "reasoning_effort": "none",
     }
 
 
@@ -99,7 +97,7 @@ def test_connection_requires_the_structured_probe_response():
 
 
 @respx.mock
-def test_nemotron_bounds_reasoning_for_the_small_structured_probe():
+def test_nemotron_turns_reasoning_off_for_every_call():
     provider = _provider("nvidia/nemotron-3-super-120b-a12b")
     route = respx.post(f"{NVIDIA_NIM_BASE_URL}/chat/completions").mock(
         return_value=httpx.Response(200, json=_completion('{"status":"ok"}'))
@@ -111,8 +109,8 @@ def test_nemotron_bounds_reasoning_for_the_small_structured_probe():
 
     payload = json.loads(route.calls.last.request.content)
     assert payload["max_tokens"] == 32
-    assert payload["reasoning_effort"] == "low"
-    assert payload["reasoning_budget"] == NVIDIA_NEMOTRON_REASONING_BUDGET_TOKENS
+    assert payload["reasoning_effort"] == "none"
+    assert "reasoning_budget" not in payload
 
 
 @respx.mock

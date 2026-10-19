@@ -128,6 +128,29 @@ def test_deepseek_disables_thinking_on_every_request():
     assert test_payload["thinking"] == {"type": "disabled"}
 
 
+@respx.mock
+def test_ollama_turns_reasoning_off_on_every_request():
+    route = respx.post(f"{BASE_URL}/chat/completions").mock(
+        return_value=httpx.Response(200, json=_successful_response("ok"))
+    )
+    provider = OpenAICompatibleProvider(
+        base_url=BASE_URL,
+        api_key=None,
+        model="gemma4:e4b",
+        request_profile=OLLAMA_CHAT_PROFILE,
+        requires_request_pacing=False,
+    )
+
+    provider.complete(kind="session_content", system="sys", prompt="prompt", max_tokens=128)
+    provider.test_connection()
+
+    payload = json.loads(route.calls[0].request.content)
+    assert payload["reasoning_effort"] == "none"
+    test_payload = json.loads(route.calls[1].request.content)
+    assert test_payload["max_tokens"] == 32
+    assert test_payload["reasoning_effort"] == "none"
+
+
 def test_standard_profile_sends_no_vendor_extras():
     assert STANDARD_CHAT_PROFILE.payload_parameters("quiz", 64) == {"max_tokens": 64}
 
@@ -164,7 +187,7 @@ def test_omits_authentication_and_requests_json_for_local_provider():
     assert payload["response_format"] == {"type": "json_object"}
     assert payload["max_tokens"] == 4096
     assert "max_completion_tokens" not in payload
-    assert set(payload) == {"model", "messages", "response_format", "max_tokens"}
+    assert set(payload) == {"model", "messages", "response_format", "max_tokens", "reasoning_effort"}
 
 
 @respx.mock

@@ -102,15 +102,26 @@ def test_active_openai_o_series_credential_uses_its_request_profile(client: Test
 
 
 @pytest.mark.parametrize(
-    ("provider_name", "model", "url", "token_limit_parameter"),
+    ("provider_name", "model", "url", "token_limit_parameter", "expected_extra"),
     [
-        ("OPENAI", "o4-mini", "https://api.openai.com/v1/chat/completions", "max_completion_tokens"),
-        ("OLLAMA", "qwen3.5:9b", "http://127.0.0.1:11434/v1/chat/completions", "max_tokens"),
+        ("OPENAI", "o4-mini", "https://api.openai.com/v1/chat/completions", "max_completion_tokens", {}),
+        (
+            "OLLAMA",
+            "qwen3.5:9b",
+            "http://127.0.0.1:11434/v1/chat/completions",
+            "max_tokens",
+            {"reasoning_effort": "none"},
+        ),
     ],
 )
 @respx.mock
 def test_factory_profile_controls_the_final_transport_payload(
-    client: TestClient, provider_name: str, model: str, url: str, token_limit_parameter: str
+    client: TestClient,
+    provider_name: str,
+    model: str,
+    url: str,
+    token_limit_parameter: str,
+    expected_extra: dict[str, object],
 ):
     _configure_and_activate(client, provider_name, model, {} if provider_name == "OLLAMA" else None)
     credential = _credential_for_demo_user(LLMProviderName(provider_name))
@@ -136,8 +147,10 @@ def test_factory_profile_controls_the_final_transport_payload(
         "max_tokens" if token_limit_parameter == "max_completion_tokens" else "max_completion_tokens"
     )
     assert other_token_limit not in payload
-    assert "reasoning_effort" not in payload
-    assert set(payload) == {"model", "messages", token_limit_parameter}
+    assert {key: payload[key] for key in expected_extra} == expected_extra
+    if provider_name == "OPENAI":
+        assert "reasoning_effort" not in payload
+    assert set(payload) == {"model", "messages", token_limit_parameter, *expected_extra}
 
 
 def test_active_nvidia_credential_builds_the_dedicated_provider(client: TestClient):

@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.llm.credential_state import is_verified, verification_fingerprint
+from app.llm.provider_registry import get_provider_definition
 from app.llm.providers.openai import OPENAI_O_SERIES_PROFILE
 from app.models.llm_credential import LLMCredential, LLMProviderName
 
@@ -50,3 +51,17 @@ def test_nvidia_contract_version_change_invalidates_verification(monkeypatch):
     )
 
     assert is_verified(credential) is False
+
+
+def test_ollama_verification_contract_survives_reasoning_changes():
+    contract = get_provider_definition(LLMProviderName.OLLAMA).verification_contract("gemma4:e4b")
+
+    assert contract == ("v1", "ollama-chat", "v2")
+
+
+def test_nvidia_verification_contract_survives_reasoning_changes():
+    contract = get_provider_definition(LLMProviderName.NVIDIA).verification_contract(
+        "nvidia/nemotron-3-super-120b-a12b"
+    )
+
+    assert contract == ("v1:nvidia-reasoning-chat:v2", "v1", "nvidia-standard-chat", "v1")
