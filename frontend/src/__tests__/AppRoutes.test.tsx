@@ -93,12 +93,9 @@ describe("App routes", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       /^Estudia de forma más inteligente, no más difícil\.$/,
     );
-    expect(
-      screen.getByText(
-        "Tu aprendizaje tiene un camino. StudyAI te ayuda a descubrirlo, enfocarte en lo esencial y dominar lo que realmente importa.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Find your flow. Master what matters.")).toBeInTheDocument();
+    // The hero is only the headline and the CTA: no badge, subtitle or tagline around them.
+    expect(screen.queryByText(/Tu aprendizaje tiene un camino/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Un mejor método. Menos tiempo. Más resultados.")).not.toBeInTheDocument();
     for (const cta of screen.getAllByRole("link", { name: /Comenzar/ })) {
       expect(cta).toHaveAttribute("href", "/inicio");
     }

@@ -127,26 +127,13 @@ export function LandingPage() {
             transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
             className="space-y-6"
           >
-            <p className="inline-flex rounded-full border border-glass-line bg-glass px-3 py-1 text-xs font-medium text-text-muted">
-              Un mejor método. Menos tiempo. Más resultados.
-            </p>
             <h1 className="font-display text-4xl font-extrabold leading-tight tracking-tight text-text-primary sm:text-5xl">
               Estudia de forma más <span className="text-flow">inteligente</span>, no más difícil.
             </h1>
-            <p className="max-w-reading text-lg leading-reading text-text-muted">
-              Tu aprendizaje tiene un camino. StudyAI te ayuda a descubrirlo, enfocarte en lo esencial
-              y dominar lo que realmente importa.
-            </p>
-            <p className="font-display text-sm font-semibold uppercase tracking-[0.18em] text-action-hover">
-              Find your flow. Master what matters.
-            </p>
             <div className="flex flex-wrap gap-3">
               <ButtonLink to={APP_HOME_PATH} className="px-6">
                 Comenzar gratis
                 <ArrowRight aria-hidden="true" className="h-4 w-4" />
-              </ButtonLink>
-              <ButtonLink to="/demo" variant="secondary" className="px-6">
-                Ver demo
               </ButtonLink>
             </div>
           </m.div>
@@ -229,8 +216,11 @@ export function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-line px-4 py-6 text-center text-xs text-text-muted">
-        StudyAI · Find your flow. Master what matters.
+      <footer className="flex flex-col items-center gap-2 border-t border-line px-4 py-6 text-center text-xs text-text-muted">
+        <p>StudyAI · Find your flow. Master what matters.</p>
+        <Link to="/demo" className="inline-flex min-h-11 items-center underline hover:text-text-primary">
+          Ver demo
+        </Link>
       </footer>
     </div>
   );
