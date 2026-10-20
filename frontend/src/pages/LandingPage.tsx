@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 import { FlowRiver } from "../components/brand/FlowRiver";
 import { Logo } from "../components/brand/Logo";
 import { APP_HOME_PATH } from "../components/AppShell";
+import { Reveal } from "../components/motion/Reveal";
 import { ButtonLink, IconTile } from "../components/ui";
 
 const FEATURES: { icon: LucideIcon; title: string; detail: string }[] = [
@@ -103,11 +104,11 @@ export function LandingPage() {
           <Logo />
         </Link>
         <nav aria-label="Secciones" className="hidden items-center gap-6 text-sm text-text-muted md:flex">
-          <a href="#caracteristicas" className="hover:text-text-primary">
-            Características
-          </a>
           <a href="#como-funciona" className="hover:text-text-primary">
             Cómo funciona
+          </a>
+          <a href="#formula" className="hover:text-text-primary">
+            Nuestra fórmula
           </a>
           <a href="#faq" className="hover:text-text-primary">
             FAQ
@@ -120,7 +121,7 @@ export function LandingPage() {
       </header>
 
       <main id="landing-content" tabIndex={-1}>
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-12">
+        <section className="mx-auto grid min-h-[calc(100svh-5.5rem)] max-w-6xl content-center items-center gap-10 px-4 pb-12 pt-6 md:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-12">
           <m.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -144,17 +145,46 @@ export function LandingPage() {
         </section>
 
         <section
-          id="caracteristicas"
-          aria-labelledby="features-title"
+          id="como-funciona"
+          aria-labelledby="how-title"
           className="mx-auto max-w-6xl scroll-mt-6 px-4 py-10 md:px-8"
         >
-          <h2 id="features-title" className="sr-only">
-            Características
-          </h2>
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {FEATURES.map((feature) => (
-              <li
+          <Reveal as="h2" id="how-title" className="font-display text-2xl font-bold text-text-primary">
+            Cómo funciona
+          </Reveal>
+          <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {STEPS.map((step, index) => (
+              <Reveal
+                as="li"
+                key={step.title}
+                index={index}
+                className="rounded-surface border border-line bg-surface-paper/70 p-4"
+              >
+                <div className="flex items-center gap-3">
+                  <IconTile icon={step.icon} />
+                  <span className="font-display text-sm font-semibold text-text-muted">Paso {index + 1}</span>
+                </div>
+                <h3 className="mt-3 font-display text-base font-semibold text-text-primary">{step.title}</h3>
+                <p className="mt-1 text-sm text-text-muted">{step.detail}</p>
+              </Reveal>
+            ))}
+          </ol>
+        </section>
+
+        <section
+          id="formula"
+          aria-labelledby="formula-title"
+          className="mx-auto max-w-6xl scroll-mt-6 px-4 py-10 md:px-8"
+        >
+          <Reveal as="h2" id="formula-title" className="font-display text-2xl font-bold text-text-primary">
+            Nuestra fórmula
+          </Reveal>
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {FEATURES.map((feature, index) => (
+              <Reveal
+                as="li"
                 key={feature.title}
+                index={index}
                 className="flex gap-3 rounded-surface border border-line bg-surface-paper/70 p-4 lg:flex-col"
               >
                 <IconTile icon={feature.icon} />
@@ -162,49 +192,32 @@ export function LandingPage() {
                   <h3 className="font-display text-base font-semibold text-text-primary">{feature.title}</h3>
                   <p className="mt-1 text-sm text-text-muted">{feature.detail}</p>
                 </div>
-              </li>
+              </Reveal>
             ))}
           </ul>
         </section>
 
-        <section
-          id="como-funciona"
-          aria-labelledby="how-title"
-          className="mx-auto max-w-6xl scroll-mt-6 px-4 py-10 md:px-8"
-        >
-          <h2 id="how-title" className="font-display text-2xl font-bold text-text-primary">
-            Cómo funciona
-          </h2>
-          <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((step, index) => (
-              <li key={step.title} className="rounded-surface border border-line bg-surface-paper/70 p-4">
-                <div className="flex items-center gap-3">
-                  <IconTile icon={step.icon} />
-                  <span className="font-display text-sm font-semibold text-text-muted">Paso {index + 1}</span>
-                </div>
-                <h3 className="mt-3 font-display text-base font-semibold text-text-primary">{step.title}</h3>
-                <p className="mt-1 text-sm text-text-muted">{step.detail}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
         <section id="faq" aria-labelledby="faq-title" className="mx-auto max-w-3xl scroll-mt-6 px-4 py-10 md:px-8">
-          <h2 id="faq-title" className="font-display text-2xl font-bold text-text-primary">
+          <Reveal as="h2" id="faq-title" className="font-display text-2xl font-bold text-text-primary">
             Preguntas frecuentes
-          </h2>
+          </Reveal>
           <div className="mt-6 space-y-3">
-            {FAQ.map((item) => (
-              <details key={item.question} className="rounded-surface border border-line bg-surface-paper/70 p-4">
+            {FAQ.map((item, index) => (
+              <Reveal
+                as="details"
+                key={item.question}
+                index={index}
+                className="rounded-surface border border-line bg-surface-paper/70 p-4"
+              >
                 <summary className="min-h-11 cursor-pointer font-medium text-text-primary">{item.question}</summary>
                 <p className="mt-2 text-sm leading-reading text-text-muted">{item.answer}</p>
-              </details>
+              </Reveal>
             ))}
           </div>
         </section>
 
         <section className="mx-auto max-w-6xl px-4 pb-16 pt-6 md:px-8">
-          <div className="flex flex-col items-start gap-4 rounded-feature border border-glass-line bg-flow-soft p-6 sm:flex-row sm:items-center sm:justify-between">
+          <Reveal className="flex flex-col items-start gap-4 rounded-feature border border-glass-line bg-flow-soft p-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="font-display text-xl font-semibold text-text-primary">
               Empieza con tu propio material en minutos.
             </p>
@@ -212,7 +225,7 @@ export function LandingPage() {
               Comenzar gratis
               <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </ButtonLink>
-          </div>
+          </Reveal>
         </section>
       </main>
 
