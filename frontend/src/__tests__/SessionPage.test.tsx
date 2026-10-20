@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -274,7 +274,8 @@ describe("SessionPage", () => {
 
     expect(await screen.findByText("No se pudo enviar el test. Tus respuestas siguen aquí.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Resultado" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "O(n)" })).toHaveAttribute("aria-pressed", "true");
+    // The pick stays marked; once corrected its name adds the verdict.
+    expect(screen.getByRole("button", { name: /^O\(n\)/ })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
     expect(await screen.findByRole("region", { name: "Resultado" })).toBeInTheDocument();
@@ -485,6 +486,101 @@ describe("SessionPage", () => {
         expect(within(summary).queryByText(new RegExp(text))).not.toBeInTheDocument();
         expect(within(summary).queryByRole("link", { name: text })).not.toBeInTheDocument();
       }
+    });
+  });
+
+  describe("immediate correction, resume and stats", () => {
+    const mcQuiz: QuizDTO = { ...quiz, questions: [quiz.questions[2]] };
+
+    it("paints a wrong pick red, reveals the right option in green and locks the question", async () => {
+      renderSession({ quiz: mcQuiz, path: "/session/5?fase=test" });
+
+      fireEvent.click(await screen.findByRole("button", { name: "O(n)" }));
+
+      const options = screen.getByRole("group", { name: "Opciones" });
+      const wrong = within(options).getByRole("button", { name: /O\(n\).*Tu respuesta, incorrecta/ });
+      const right = within(options).getByRole("button", { name: /O\(log n\).*Respuesta correcta/ });
+      expect(wrong.className).toContain("border-state-error");
+      expect(right.className).toContain("border-state-correct");
+      expect(screen.getByText("Incorrecto. La respuesta correcta está en verde.")).toBeInTheDocument();
+
+      // Locked: picking the right one now changes nothing.
+      fireEvent.click(right);
+      expect(wrong).toHaveAttribute("aria-pressed", "true");
+      expect(right).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("paints a right pick green", async () => {
+      renderSession({ quiz: mcQuiz, path: "/session/5?fase=test" });
+
+      fireEvent.click(await screen.findByRole("button", { name: "O(log n)" }));
+
+      const right = screen.getByRole("button", { name: /O\(log n\).*Respuesta correcta/ });
+      expect(right.className).toContain("border-state-correct");
+      expect(right).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByText("¡Correcto!")).toBeInTheDocument();
+    });
+
+    it("saves each answer and resumes at the first unanswered question, clearing it on submit", async () => {
+      vi.spyOn(api, "submitQuiz").mockResolvedValue(result);
+      renderSession({ path: "/session/5?fase=test" });
+      await answerFlashcard("¿Qué mide Big O?", 0);
+
+      const saved = JSON.parse(window.localStorage.getItem("studyai.quizDraft.5") ?? "null");
+      expect(saved).toEqual({ quizId: 77, answers: { 1: { question_id: 1, quality: 0 } }, order: null });
+      cleanup();
+
+      renderSession({ path: "/session/5?fase=test" });
+      expect(await screen.findByText("Pregunta 2 de 3")).toBeInTheDocument();
+      await answerFlashcard("¿Qué es una pila?", 4);
+      fireEvent.click(screen.getByRole("button", { name: "O(log n)" }));
+      fireEvent.click(screen.getByRole("button", { name: "Finalizar" }));
+
+      expect(await screen.findByRole("region", { name: "Resultado" })).toBeInTheDocument();
+      expect(api.submitQuiz).toHaveBeenLastCalledWith(77, [
+        { question_id: 1, quality: 0 },
+        { question_id: 2, quality: 4 },
+        { question_id: 3, selected_option: "O(log n)" },
+      ]);
+      expect(window.localStorage.getItem("studyai.quizDraft.5")).toBeNull();
+    });
+
+    it("shows the last result and every answer with ?fase=resultado", async () => {
+      vi.spyOn(api, "getSessionResult").mockResolvedValue({
+        ...result,
+        score: 0,
+        correct: 0,
+        detail: { ...result.detail, "3": { type: "multiple_choice", correct: false, selected: "O(n)", expected: "O(log n)" } },
+      });
+      renderSession({ session: { ...session, status: "COMPLETED" }, path: "/session/5?fase=resultado" });
+
+      const summary = await screen.findByRole("region", { name: "Resultado" });
+      expect(within(summary).getByText("0 de 1 correctas")).toBeInTheDocument();
+      const review = await screen.findByRole("region", { name: "Tus respuestas" });
+      expect(within(review).getByText("Incorrecta")).toBeInTheDocument();
+      expect(within(review).getByRole("button", { name: /O\(n\).*Tu respuesta, incorrecta/ })).toBeInTheDocument();
+      expect(within(review).getByText(/Tu valoración: 4/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Empezar sesión de nuevo" }));
+      expect(await screen.findByRole("button", { name: "Empezar" })).toBeInTheDocument();
+    });
+
+    it("explains a session with no result yet", async () => {
+      vi.spyOn(api, "getSessionResult").mockRejectedValue({ isAxiosError: true, response: { status: 404, data: {} } });
+      renderSession({ path: "/session/5?fase=resultado" });
+
+      expect(await screen.findByText("Esta sesión aún no tiene resultado")).toBeInTheDocument();
+    });
+
+    it("does not ask again for a new attempt confirmed in the plan panel", async () => {
+      renderSession({
+        session: { ...session, status: "COMPLETED", completed_at: "2026-10-10T10:00:00" },
+        path: "/session/5?reintento=1",
+      });
+      await goToQuiz();
+
+      expect(screen.queryByRole("button", { name: "Registrar un nuevo intento" })).not.toBeInTheDocument();
+      expect(await screen.findByText("¿Qué mide Big O?")).toBeInTheDocument();
     });
   });
 });

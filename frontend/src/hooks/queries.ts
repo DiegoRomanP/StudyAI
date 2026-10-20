@@ -311,6 +311,16 @@ export function useQuiz(sessionId: number | null) {
   });
 }
 
+/** The session's latest submitted test (404 while it has none). */
+export function useSessionResult(sessionId: number | null) {
+  return useQuery({
+    queryKey: ["session-result", sessionId],
+    queryFn: () => api.getSessionResult(sessionId as number),
+    enabled: sessionId != null,
+    retry: false,
+  });
+}
+
 /** Read-only quizzes for several sessions (Práctica); shares the `["quiz", id]` cache. */
 export function useSessionQuizzes(sessionIds: number[]) {
   return useQueries({
@@ -334,6 +344,7 @@ export function useSubmitQuiz() {
     }) => api.submitQuiz(quizId, answers),
     onSuccess: (_, { sessionId }) => {
       qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      qc.invalidateQueries({ queryKey: ["session-result", sessionId] });
       qc.invalidateQueries({ queryKey: ["plans"] });
       qc.invalidateQueries({ queryKey: ["plan"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });

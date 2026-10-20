@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
@@ -26,6 +26,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** Where a session panel sent the learner. */
+function SessionProbe() {
+  const location = useLocation();
+  return <p>Destino: {location.pathname + location.search}</p>;
+}
+
 function renderPlan() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -36,6 +42,7 @@ function renderPlan() {
       >
         <Routes>
           <Route path="/plan/:planId" element={<PlanDetailPage />} />
+          <Route path="/session/:sessionId" element={<SessionProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -119,11 +126,15 @@ describe("PlanDetailPage", () => {
     expect(days).toHaveLength(2);
     expect(days[0]).toMatch(/12/);
     expect(days[1]).toMatch(/15/);
-    expect(within(sessions).getByRole("link", { name: /Grafos.*Completada/ })).toHaveAttribute("href", "/session/70");
+    expect(within(sessions).getByRole("button", { name: /Grafos.*Completada/ })).toBeInTheDocument();
 
     fireEvent.click(within(sessions).getByRole("button", { name: "Lista" }));
-    const links = within(sessions).getAllByRole("link");
-    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/session/70", "/session/71", "/session/72"]);
+    const rows = within(sessions).getAllByRole("button", { name: /min/ });
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/^1Grafos/),
+      expect.stringMatching(/^2Árboles/),
+      expect.stringMatching(/^3Heaps/),
+    ]);
     expect(screen.getByRole("link", { name: /Ver temas clave/ })).toHaveAttribute("href", "/temas?plan=9");
   });
 
@@ -152,10 +163,7 @@ describe("PlanDetailPage", () => {
     );
     expect(screen.getByText("1 de 2 sesiones completadas")).toBeInTheDocument();
     const sessions = screen.getByRole("region", { name: "Sesiones" });
-    expect(within(sessions).getByRole("link", { name: /Grafos.*Repaso.*Pendiente/ })).toHaveAttribute(
-      "href",
-      "/session/72",
-    );
+    expect(within(sessions).getByRole("button", { name: /Grafos.*Repaso.*Pendiente/ })).toBeInTheDocument();
     expect(within(sessions).queryByText(/repaso a/)).not.toBeInTheDocument();
   });
 
@@ -234,6 +242,81 @@ describe("PlanDetailPage", () => {
       renderPlan();
 
       expect(await screen.findByText("Se conservaron 4 temas.")).toBeInTheDocument();
+    });
+  });
+
+  describe("the session panel", () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000 - 60_000).toISOString();
+
+    function mockSessions() {
+      vi.spyOn(api, "getPlan").mockResolvedValue({
+        ...readyPlan,
+        sessions: [
+          makeSessionSummary({
+            id: 70,
+            order_index: 0,
+            topic_name: "Grafos",
+            status: "COMPLETED",
+            last_result: { score: 75, correct: 3, total: 4, created_at: twoHoursAgo },
+          }),
+          makeSessionSummary({ id: 71, order_index: 1, topic_name: "Árboles" }),
+          makeSessionSummary({ id: 72, order_index: 2, topic_name: "Heaps" }),
+        ],
+      });
+    }
+
+    async function openRow(name: RegExp) {
+      const sessions = await screen.findByRole("region", { name: "Sesiones" });
+      fireEvent.click(within(sessions).getByRole("button", { name }));
+      return screen.getByRole("dialog");
+    }
+
+    it("offers the material or the test for a session not started, and closes with Escape", async () => {
+      mockSessions();
+      renderPlan();
+
+      let dialog = await openRow(/Árboles.*Pendiente/);
+      expect(dialog).toHaveAccessibleName("¿Qué quieres hacer?");
+      expect(within(dialog).getByRole("button", { name: "Ver sesión" })).toHaveFocus();
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      dialog = await openRow(/Árboles/);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Ir al test" }));
+      expect(await screen.findByText("Destino: /session/71?fase=test")).toBeInTheDocument();
+    });
+
+    it("resumes or restarts a test left halfway", async () => {
+      window.localStorage.setItem(
+        "studyai.quizDraft.72",
+        JSON.stringify({ quizId: 5, answers: { 1: { question_id: 1, selected_option: "a" } }, order: null }),
+      );
+      mockSessions();
+      renderPlan();
+
+      const dialog = await openRow(/Heaps.*En curso/);
+      expect(within(dialog).getByRole("button", { name: "Seguir desde la última pregunta no terminada" })).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Empezar test desde 0" }));
+
+      expect(await screen.findByText("Destino: /session/72?fase=test")).toBeInTheDocument();
+      expect(window.localStorage.getItem("studyai.quizDraft.72")).toBeNull();
+    });
+
+    it("shows the last result under a completed session and offers its stats or a new attempt", async () => {
+      mockSessions();
+      renderPlan();
+
+      const sessions = await screen.findByRole("region", { name: "Sesiones" });
+      const row = within(sessions).getByRole("button", { name: /Grafos.*Completada/ });
+      expect(row).toHaveTextContent("75% aciertos");
+      expect(row).toHaveTextContent("3 buenas");
+      expect(row).toHaveTextContent("1 malas");
+      expect(row).toHaveTextContent("Realizado hace 2 horas");
+
+      const dialog = await openRow(/Grafos.*Completada/);
+      expect(within(dialog).getByRole("button", { name: "Empezar sesión de nuevo" })).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Ver estadísticas" }));
+      expect(await screen.findByText("Destino: /session/70?fase=resultado")).toBeInTheDocument();
     });
   });
 });

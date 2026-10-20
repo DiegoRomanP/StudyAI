@@ -418,6 +418,18 @@ con la checklist). Los comandos de Ollama y las fuentes de claves viven en `lib/
 (solo texto y URLs fijos, nunca generados por el LLM). Un botón principal deshabilitado siempre
 muestra su motivo visible enlazado con `aria-describedby`.
 
+**Test feedback, drafts and the session panel**: a multiple-choice answer is corrected the moment it is
+picked (right option green with the `state-correct` token — `state-success` is the brand cyan —, a wrong
+pick red) and then locks; `ChoiceOptions` compares with `trim()` like `quiz_service.submit`. Unfinished
+test answers are saved per browser in `lib/quizDraft.ts` (`localStorage`, try/catch, cleared on a successful
+submit) and `QuizPhase` resumes at the first unanswered question. In `SessionTimeline` each session opens a
+modal `components/Dialog.tsx` (reuse it for any new confirmation panel) whose actions depend on
+`lib/sessionState.ts`: not started → material or `?fase=test`; draft → resume or clear + `?fase=test`;
+completed → `?fase=resultado` (last result + `AnswerReview`, from `GET /sessions/{id}/result`) or
+`?reintento=1` (a retake already confirmed, so `QuizPhase` doesn't ask again). Completed rows show
+`SessionSummary.last_result` (latest `QuizResult`; `correct`/`total` count only multiple choice, derived
+from `detail`) with `lib/timeAgo.ts`.
+
 **List pagination**: `useShowMore` (`src/hooks/useShowMore.ts`) caps `DocumentsPage`/`GoalsPage`/
 `PlanPage`'s "Tus ..." lists at 6 items with a "Mostrar N más" button, client-side (it slices an
 already-fetched array — there's no backend page/limit param). Reuse this hook for any new list

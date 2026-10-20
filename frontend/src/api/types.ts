@@ -71,6 +71,17 @@ export interface SessionSummaryDTO {
   /** `YYYY-MM-DD`; null on sessions created before the adaptive route. */
   scheduled_date: string | null;
   reinforcement_status: ReinforcementStatus;
+  /** Latest submitted test; null when the test was never sent. Only in `PlanDTO.sessions`. */
+  last_result?: LastResultSummaryDTO | null;
+}
+
+export interface LastResultSummaryDTO {
+  score: number;
+  correct: number;
+  /** Multiple-choice questions answered; 0 when the test only had flashcards. */
+  total: number;
+  /** Naive UTC; parse with `parseApiDate`. */
+  created_at: string;
 }
 
 export type GenerationStage = "TOPICS" | "SESSIONS" | "CONTENT";

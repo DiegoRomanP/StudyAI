@@ -77,6 +77,8 @@ export const api = {
   // Sessions
   getSession: (id: number) =>
     apiClient.get<SessionDetailDTO>(`/sessions/${id}`).then((r) => r.data),
+  getSessionResult: (id: number) =>
+    apiClient.get<QuizResultDTO>(`/sessions/${id}/result`).then((r) => r.data),
   startReinforcement: (id: number) =>
     apiClient.post<SessionDetailDTO>(`/sessions/${id}/reinforcement`).then((r) => r.data),
   cancelReinforcement: (id: number) =>
