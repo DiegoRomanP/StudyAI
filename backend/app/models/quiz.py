@@ -67,3 +67,16 @@ class QuizResult(TimestampMixin, Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict)  # per-question breakdown
 
     quiz = relationship("Quiz", back_populates="results")
+
+    # Only multiple-choice answers are graded; flashcards are self-rated for SM-2.
+    @property
+    def total(self) -> int:
+        return sum(1 for entry in (self.detail or {}).values() if entry.get("type") == "multiple_choice")
+
+    @property
+    def correct(self) -> int:
+        return sum(
+            1
+            for entry in (self.detail or {}).values()
+            if entry.get("type") == "multiple_choice" and entry.get("correct") is True
+        )

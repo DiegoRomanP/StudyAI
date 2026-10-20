@@ -39,6 +39,18 @@ class PlanTopicResponse(BaseModel):
         return topic_priority(self.relevance, self.mastery)
 
 
+class LastResultSummary(BaseModel):
+    """The session's latest submitted test, for the plan's session list."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    score: float
+    correct: int
+    # Multiple-choice questions answered; 0 when the test only had flashcards.
+    total: int
+    created_at: datetime
+
+
 class SessionSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -52,6 +64,7 @@ class SessionSummary(BaseModel):
     topic_id: int | None = None
     scheduled_date: date | None = None
     reinforcement_status: str = "NONE"
+    last_result: LastResultSummary | None = None
 
 
 class PlanStatusResponse(BaseModel):

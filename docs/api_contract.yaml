@@ -276,6 +276,19 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SessionDetail" }
 
+  /sessions/{session_id}/result:
+    get:
+      summary: Último resultado del test de la sesión (el intento más reciente)
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizResult" }
+        "404": { description: Sesión no encontrada o todavía sin resultado }
+
   /sessions/{session_id}/reinforcement:
     post:
       summary: Refuerza un repaso con IA (1 llamada; gasta 1 uso gratis si la IA es la incluida)
@@ -341,7 +354,11 @@ paths:
                       selected_option: { type: string, nullable: true }
                       quality: { type: integer, minimum: 0, maximum: 5, nullable: true }
       responses:
-        "200": { description: Resultado del quiz }
+        "200":
+          description: Resultado del quiz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizResult" }
         "409":
           description: >
             QUIZ_OUTDATED — alguna respuesta nombra una pregunta que el quiz ya no tiene
@@ -647,6 +664,26 @@ components:
           nullable: true
           description: Fecha sugerida (UTC). Null en sesiones anteriores a la ruta adaptativa.
         reinforcement_status: { type: string, enum: [NONE, PROCESSING, READY, FAILED] }
+        last_result:
+          description: >-
+            Último test enviado (solo en `Plan.sessions`; null si nunca se envió).
+            `correct`/`total` cuentan solo las preguntas de opción múltiple.
+          nullable: true
+          type: object
+          properties:
+            score: { type: number }
+            correct: { type: integer }
+            total: { type: integer }
+            created_at: { type: string, format: date-time }
+    QuizResult:
+      type: object
+      properties:
+        score: { type: number, description: "% de aciertos en opción múltiple" }
+        correct: { type: integer }
+        total: { type: integer, description: Preguntas de opción múltiple respondidas }
+        detail:
+          type: object
+          description: Por id de pregunta, `multiple_choice` (correct, selected, expected) o `flashcard` (quality).
     SessionDetail:
       allOf:
         - $ref: "#/components/schemas/SessionSummary"

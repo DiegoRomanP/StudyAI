@@ -7,7 +7,7 @@ from datetime import date
 from sqlalchemy import select
 
 from app.models.flashcard import FlashcardReview
-from app.models.quiz import Quiz
+from app.models.quiz import Quiz, QuizResult
 from app.repositories.base import BaseRepository
 
 
@@ -16,6 +16,14 @@ class QuizRepository(BaseRepository[Quiz]):
 
     def find_by_session(self, session_id: int) -> Quiz | None:
         stmt = select(Quiz).where(Quiz.session_id == session_id)
+        return self.db.execute(stmt).scalars().first()
+
+    def latest_result_for_session(self, session_id: int) -> QuizResult | None:
+        stmt = (
+            select(QuizResult)
+            .where(QuizResult.session_id == session_id)
+            .order_by(QuizResult.created_at.desc(), QuizResult.id.desc())
+        )
         return self.db.execute(stmt).scalars().first()
 
 

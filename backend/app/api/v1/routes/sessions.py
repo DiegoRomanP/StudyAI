@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.quiz import QuizResultResponse
 from app.schemas.session import SessionDetailResponse
+from app.services.quiz_service import QuizService
 from app.services.reinforcement_service import ReinforcementService, generate_reinforcement_task
 from app.services.session_service import SessionService
 
@@ -29,6 +31,16 @@ def get_session(
 ) -> SessionDetailResponse:
     service = SessionService(db)
     return SessionDetailResponse.model_validate(service.get_session(user.id, session_id))
+
+
+@router.get("/{session_id}/result", response_model=QuizResultResponse)
+def get_session_result(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> QuizResultResponse:
+    """The latest submitted test of the session (404 while it has none)."""
+    return QuizService(db).latest_result(user.id, session_id)
 
 
 @router.post("/{session_id}/complete", response_model=SessionDetailResponse)

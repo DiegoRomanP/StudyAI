@@ -117,6 +117,19 @@ class QuizService:
             detail=detail,
         )
 
+    def latest_result(self, user_id: int, session_id: int) -> QuizResultResponse:
+        if not self._owns_session(user_id, session_id):
+            raise NotFoundError("Sesión no encontrada.")
+        result = self.repo.latest_result_for_session(session_id)
+        if result is None:
+            raise NotFoundError("Esta sesión aún no tiene resultado.")
+        return QuizResultResponse(
+            score=result.score,
+            correct=result.correct,
+            total=result.total,
+            detail=result.detail or {},
+        )
+
     def _owns_session(self, user_id: int, session_id: int) -> bool:
         session = self.db.get(StudySession, session_id)
         if session is None:

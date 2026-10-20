@@ -70,6 +70,18 @@ class Session(TimestampMixin, Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    # Read-only: results are owned (and deleted) through Quiz. Newest first.
+    quiz_results = relationship(
+        "QuizResult",
+        viewonly=True,
+        lazy="selectin",
+        order_by="(QuizResult.created_at.desc(), QuizResult.id.desc())",
+    )
+
+    @property
+    def last_result(self):
+        """The latest graded attempt, or None if the test was never submitted."""
+        return self.quiz_results[0] if self.quiz_results else None
 
 
 class SessionMaterial(Base):
