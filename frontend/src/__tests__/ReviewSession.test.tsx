@@ -247,7 +247,8 @@ describe("review quiz", () => {
     expect(await screen.findByText("Las preguntas de este test cambiaron. Vuelve a cargarlo.")).toBeInTheDocument();
     await waitFor(() => expect(getQuiz).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("Pregunta 1 de 2")).toBeInTheDocument();
-    expect(within(screen.getByRole("group", { name: "Opciones" })).getByRole("button", { name: "a" })).toHaveAttribute(
+    // The kept answer is still marked (and corrected, so its name adds the verdict).
+    expect(within(screen.getByRole("group", { name: "Opciones" })).getByRole("button", { name: /^a\b/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

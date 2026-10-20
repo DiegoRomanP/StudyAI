@@ -11,6 +11,7 @@
   --color-surface-success: 18 46 57;
   --color-surface-warning: 54 44 24;
   --color-surface-error: 56 29 43;
+  --color-surface-correct: 19 48 34;
 
   --color-text-primary: 246 248 255;
   --color-text-muted: 158 173 201;
@@ -27,6 +28,7 @@
   --color-state-success: 97 217 242;
   --color-state-warning: 232 185 101;
   --color-state-error: 255 139 154;
+  --color-state-correct: 74 222 128;
 
   --font-display: "Manrope", "Segoe UI", sans-serif;
   --font-ui: "Inter", "Segoe UI", sans-serif;

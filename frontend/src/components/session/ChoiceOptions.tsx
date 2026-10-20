@@ -4,8 +4,8 @@ const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 /**
  * Multiple-choice options as the mockup's 2×2 grid with A–D badges. With `expected`
- * the grid shows feedback (practice mode): the right option is marked and a wrong
- * pick is flagged, and the options lock.
+ * the grid shows feedback: the right option turns green, a wrong pick red, and the
+ * options lock.
  */
 export function ChoiceOptions({
   options,
@@ -31,7 +31,7 @@ export function ChoiceOptions({
         const isCorrect = revealed && option.trim() === expected.trim();
         const isWrongPick = revealed && isSelected && !isCorrect;
         const tone = isCorrect
-          ? "border-state-success bg-state-success-subtle text-text-primary"
+          ? "border-state-correct bg-state-correct-subtle text-text-primary"
           : isWrongPick
             ? "border-state-error bg-state-error-subtle text-text-primary"
             : isSelected
@@ -52,14 +52,20 @@ export function ChoiceOptions({
             <span
               aria-hidden="true"
               className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                isSelected || isCorrect ? "bg-flow text-text-on-action" : "bg-surface-muted text-text-muted"
+                isCorrect
+                  ? "bg-state-correct text-text-on-action"
+                  : isWrongPick
+                    ? "bg-state-error text-text-on-action"
+                    : isSelected
+                      ? "bg-flow text-text-on-action"
+                      : "bg-surface-muted text-text-muted"
               }`}
             >
               {LETTERS[index] ?? index + 1}
             </span>
             <span className="min-w-0 flex-1 break-words">{option}</span>
             {isCorrect && (
-              <Check role="img" aria-label="Respuesta correcta" className="h-4 w-4 shrink-0 text-state-success" />
+              <Check role="img" aria-label="Respuesta correcta" className="h-4 w-4 shrink-0 text-state-correct" />
             )}
             {isWrongPick && <X role="img" aria-label="Tu respuesta, incorrecta" className="h-4 w-4 shrink-0 text-state-error" />}
           </button>

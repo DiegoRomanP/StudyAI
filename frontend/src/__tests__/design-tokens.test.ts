@@ -102,6 +102,11 @@ describe("StudyAI dark design tokens", () => {
     expect(
       contrastRatio(readRgbToken("color-state-error"), readRgbToken("color-surface-error")),
     ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(readRgbToken("color-state-correct"), readRgbToken("color-surface-correct")),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(textOnAction, readRgbToken("color-state-correct"))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(textOnAction, readRgbToken("color-state-error"))).toBeGreaterThanOrEqual(4.5);
   });
 
   it("connects loaded font families, accessible action aliases, and visible focus tokens", () => {

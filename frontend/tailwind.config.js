@@ -35,6 +35,9 @@ export default {
         "state-warning-subtle": tokenColor("--color-surface-warning"),
         "state-error": tokenColor("--color-state-error"),
         "state-error-subtle": tokenColor("--color-surface-error"),
+        // Answer feedback: a right answer reads green (success is the cyan of the brand).
+        "state-correct": tokenColor("--color-state-correct"),
+        "state-correct-subtle": tokenColor("--color-surface-correct"),
         white: tokenColor("--color-text-primary"),
         glass: "var(--surface-glass)",
         "glass-line": "var(--border-glass)",

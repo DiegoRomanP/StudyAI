@@ -12,3 +12,10 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 }
 
 afterEach(cleanup);
+
+// A test's unfinished quiz answers must not resume in the next test.
+afterEach(() => {
+  for (const key of Object.keys(window.localStorage)) {
+    if (key.startsWith("studyai.quizDraft.")) window.localStorage.removeItem(key);
+  }
+});

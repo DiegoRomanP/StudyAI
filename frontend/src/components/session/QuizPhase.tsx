@@ -5,13 +5,14 @@ import { ArrowRight, ListChecks } from "lucide-react";
 import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
+import { clearQuizDraft, readQuizDraft, writeQuizDraft } from "../../lib/quizDraft";
 import { EmptyState } from "../EmptyState";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
 import { ChoiceOptions } from "./ChoiceOptions";
 import { SafeMarkdown } from "./SafeMarkdown";
 
 /** Short visible labels for the 0–5 recall scale; the long ones name each button. */
-const QUALITY_SHORT_LABELS = ["Nada", "Me sonaba", "Casi", "Con esfuerzo", "Con dudas", "Perfecto"];
+export const QUALITY_SHORT_LABELS = ["Nada", "Me sonaba", "Casi", "Con esfuerzo", "Con dudas", "Perfecto"];
 
 const QUALITY_LABELS = [
   "no la recordé",
@@ -37,6 +38,7 @@ export function QuizPhase({
   planId,
   alreadyCompleted,
   allowShuffle = false,
+  retakeAlreadyConfirmed = false,
   onSubmitted,
 }: {
   sessionId: number;
@@ -44,17 +46,22 @@ export function QuizPhase({
   alreadyCompleted: boolean;
   /** Reviews can reorder their questions (before the first answer). */
   allowShuffle?: boolean;
+  /** The learner already chose to start again (plan panel), so don't ask twice. */
+  retakeAlreadyConfirmed?: boolean;
   onSubmitted: (result: QuizResultDTO) => void;
 }) {
   const { data: quiz, isLoading, isError, isFetching, refetch } = useQuiz(sessionId);
   const submit = useSubmitQuiz();
-  const [retakeConfirmed, setRetakeConfirmed] = useState(false);
-  const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, QuizAnswer>>({});
+  const [retakeConfirmed, setRetakeConfirmed] = useState(retakeAlreadyConfirmed);
+  // Answers saved in this browser by an unfinished attempt; the test resumes from them.
+  const [draft] = useState(() => readQuizDraft(sessionId));
+  // null until the learner moves: then it starts at the first unanswered question.
+  const [index, setIndex] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<Record<number, QuizAnswer>>(() => draft?.answers ?? {});
   const [submitError, setSubmitError] = useState<string | null>(null);
   // The quiz was replaced while the learner answered: the server asked to reload it.
   const [outdated, setOutdated] = useState<string | null>(null);
-  const [shuffledIds, setShuffledIds] = useState<number[] | null>(null);
+  const [shuffledIds, setShuffledIds] = useState<number[] | null>(() => draft?.order ?? null);
   // Blocks a second submission synchronously, before the pending state re-renders.
   const submitting = useRef(false);
 
@@ -102,13 +109,17 @@ export function QuizPhase({
     );
   }
 
-  const questions = shuffledIds
+  const shuffled = shuffledIds
     ? shuffledIds
         .map((id) => quiz.questions.find((item) => item.id === id))
         .filter((item): item is QuizQuestionDTO => item !== undefined)
-    : quiz.questions;
-  const question = questions[Math.min(index, questions.length - 1)];
-  const isLast = index >= questions.length - 1;
+    : null;
+  // A saved order that no longer matches the quiz (replaced by a reinforcement) is ignored.
+  const questions = shuffled && shuffled.length === quiz.questions.length ? shuffled : quiz.questions;
+  const firstUnanswered = questions.findIndex((item) => answers[item.id] === undefined);
+  const position = index ?? (firstUnanswered === -1 ? questions.length - 1 : firstUnanswered);
+  const question = questions[Math.min(position, questions.length - 1)];
+  const isLast = position >= questions.length - 1;
   const currentAnswered = answers[question.id] !== undefined;
   const answeredCount = questions.filter((item) => answers[item.id] !== undefined).length;
   const nextHintId = `quiz-next-hint-${question.id}`;
@@ -126,12 +137,19 @@ export function QuizPhase({
   function record(answer: QuizAnswer) {
     setSubmitError(null);
     setOutdated(null);
-    setAnswers((previous) => ({ ...previous, [answer.question_id]: answer }));
+    const updated = { ...answers, [answer.question_id]: answer };
+    setAnswers(updated);
+    setIndex(position);
+    writeQuizDraft(sessionId, {
+      quizId: quiz!.id,
+      answers: updated,
+      order: questions === quiz!.questions ? null : questions.map((item) => item.id),
+    });
   }
 
   async function next() {
     if (!isLast) {
-      setIndex((current) => current + 1);
+      setIndex(position + 1);
       return;
     }
     if (submitting.current) return;
@@ -142,6 +160,7 @@ export function QuizPhase({
         .map((item) => answers[item.id])
         .filter((answer): answer is QuizAnswer => answer !== undefined);
       const result = await submit.mutateAsync({ quizId: quiz!.id, sessionId, answers: payload });
+      clearQuizDraft(sessionId);
       onSubmitted(result);
     } catch (caught: unknown) {
       if (axios.isAxiosError(caught) && caught.response?.data?.code === "QUIZ_OUTDATED") {
@@ -164,7 +183,7 @@ export function QuizPhase({
       <ProgressBar value={(answeredCount / questions.length) * 100} label="Preguntas respondidas" />
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-text-muted">
-          Pregunta {index + 1} de {questions.length}
+          Pregunta {position + 1} de {questions.length}
         </p>
         {allowShuffle && answeredCount === 0 && (
           <Button type="button" variant="ghost" aria-pressed={shuffledIds !== null} onClick={toggleShuffle}>
@@ -297,13 +316,25 @@ function MultipleChoice({
   selected: string | null;
   onSelect: (option: string) => void;
 }) {
+  const answered = selected !== null;
+  // Same comparison the server grades with (quiz_service.submit).
+  const correct = answered && selected.trim() === question.answer.trim();
   return (
     <Card className="space-y-4">
       <Badge color="brand">Opción múltiple</Badge>
       <div className="prose-study max-w-none font-medium text-text-primary">
         <SafeMarkdown>{question.prompt}</SafeMarkdown>
       </div>
-      <ChoiceOptions options={question.options} selected={selected} onSelect={onSelect} />
+      {/* Once picked, the answer is corrected on the spot and locked. */}
+      <ChoiceOptions
+        options={question.options}
+        selected={selected}
+        onSelect={onSelect}
+        expected={answered ? question.answer : undefined}
+      />
+      <p role="status" className={`text-sm font-medium ${correct ? "text-state-correct" : "text-state-error"}`}>
+        {answered && (correct ? "¡Correcto!" : "Incorrecto. La respuesta correcta está en verde.")}
+      </p>
     </Card>
   );
 }
