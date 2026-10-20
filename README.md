@@ -87,7 +87,7 @@ Criterios que la interfaz mantiene:
 - **Solo datos reales.** Cada métrica se deriva de la API. Los widgets del mockup
   sin contrato todavía (explicaciones, historial de incorrectas, tiempo de
   estudio…) aparecen solo en `/demo` y están listados en
-  [`docs/frontend-integration/t12-contract-gaps.md`](docs/frontend-integration/t12-contract-gaps.md).
+  [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) (§3).
 - **Sin duplicados.** «Estudiar» reutiliza la meta ya creada y envía
   `Idempotency-Key` al generar el plan, así que reintentar no duplica nada.
 - **Errores distintos de vacío.** Un fallo de carga muestra un aviso con
@@ -98,7 +98,7 @@ Criterios que la interfaz mantiene:
   enlaces ni imágenes externas.
 
 El historial de integración (A05–A07 y el plan ODD) está en
-[`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md) y
+[`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) y
 `odd/tasks/studyai-fluid-learning.md`.
 
 ---
@@ -151,7 +151,7 @@ Para validar el cliente ejecuta `npm run lint`, `npm test` y `npm run build`.
 Las pruebas de API y navegador con Playwright/Bruno usan dependencias npm
 fijadas, Chromium instalado por `npm --prefix frontend exec -- playwright install chromium`
 y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core. Sigue
-[`docs/frontend-integration/qa.md`](docs/frontend-integration/qa.md) para
+[`docs/qa-aislado.md`](docs/qa-aislado.md) para
 prepararlo y ejecutar `npm --prefix frontend run test:qa`. `test:api` ejecuta
 readiness Playwright y el flujo HTTP A04 completo de Bruno; `test:qa` añade el
 smoke de la UI de producción, incluido foco A05 y navegación A06 a 320 px (no es
@@ -435,16 +435,15 @@ en `/docs`.
 
 ## Documentación de mantenimiento
 
-- [`docs/Plan-New-Frontend.md`](docs/Plan-New-Frontend.md): actividades A01–A18 para integrar Penpot y verificar el frontend. En OpenCode, selecciona `Dev-Project` y pide, por ejemplo, «haz la tarea 1 de @docs/Plan-New-Frontend.md»; coordina `Dev-Code` y `Dev-Reviewer` secuencialmente. Ver [guía de agentes y skills locales](.opencode/skills/README.md). Reinicia OpenCode después de modificar agentes o skills.
-- [`docs/frontend-integration/a05-tokens-and-components.md`](docs/frontend-integration/a05-tokens-and-components.md): tokens implementados, componentes base, contraste calculado y límites/gaps A01 de la entrega A05.
-- [`docs/frontend-integration/a06-responsive-navigation.md`](docs/frontend-integration/a06-responsive-navigation.md): rutas, navegación móvil/teclado, guardas de IDs, evidencias y decisiones abiertas de A06.
+- [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md): resumen de la integración del frontend (A01–A18), huecos de contrato y pendientes.
+- [`docs/HISTORIAL-producto-backend.md`](docs/HISTORIAL-producto-backend.md): resumen de los planes ya ejecutados (proveedores, ruta adaptativa, generación reanudable, onboarding) y sus pendientes.
+- [`docs/qa-aislado.md`](docs/qa-aislado.md): entorno aislado de QA (Playwright, Bruno).
+- [`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md): hoja de ruta para llevar StudyAI a SaaS de pago.
 - [`odd/tasks/studyai-fluid-learning.md`](odd/tasks/studyai-fluid-learning.md): plan ODD de la interfaz «flow» (A08–A13, landing, demo), decisiones y registro de verificación.
-- [`docs/frontend-integration/t12-contract-gaps.md`](docs/frontend-integration/t12-contract-gaps.md): widgets del mockup y defectos de contrato que la API aún no cubre.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
 - [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
 - [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
 - [`studyai_multiagent_plan.md`](studyai_multiagent_plan.md): plan histórico de ejecución multi-agente.
-- [`plans/ResolveProblems.md`](plans/ResolveProblems.md): diagnóstico histórico y estado de sus propuestas.
 
 ## Tests
 

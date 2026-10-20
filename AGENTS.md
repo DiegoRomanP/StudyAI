@@ -80,4 +80,4 @@ npm run build
 - Use FastAPI `/openapi.json` and `/docs` as the runtime API contract; keep `docs/api_contract.yaml` synchronized.
 - `README.md`, `CLAUDE.md`, and `docs/api_contract.yaml` describe the current product and runtime contract.
 - `docs/AGENTS_STATUS.md` is the current phase/status summary.
-- `studyai_multiagent_plan.md` and `plans/ResolveProblems.md` preserve historical planning context; use their current-status banners and the executable code/tests over any old task prompt or line reference.
+- `studyai_multiagent_plan.md`, `docs/HISTORIAL-producto-backend.md` and `docs/HISTORIAL-frontend.md` preserve historical planning context; use their current-status banners and the executable code/tests over any old task prompt or line reference.
