@@ -2,6 +2,10 @@
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["AGENTS.md"],
   "mcp": {
+    "eraser": {
+      "type": "remote",
+      "url": "https://app.eraser.io/api/mcp"
+    },
     "headroom": {
       "type": "local",
       "command": ["headroom", "mcp", "serve"],
