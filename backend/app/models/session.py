@@ -94,5 +94,8 @@ class SessionMaterial(Base):
     content_markdown: Mapped[str] = mapped_column(Text, default="")
     # Keywords the frontend turns into YouTube *search* URLs (never raw LLM URLs).
     youtube_keywords: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Versioned v2 content is additive; legacy Markdown/keywords remain unchanged.
+    pedagogy_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    lesson_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
 
     session = relationship("Session", back_populates="material")

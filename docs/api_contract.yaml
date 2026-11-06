@@ -163,6 +163,22 @@ paths:
                 document_ids:
                   type: array
                   items: { type: integer }
+                content_version:
+                  type: integer
+                  enum: [1, 2]
+                  default: 1
+                  description: >-
+                    Versión de contenido. El valor 1 conserva exactamente la
+                    generación pública actual; el valor 2 habilita los contratos
+                    de enseñanza y evaluación adaptativos.
+                subject_hint:
+                  type: string
+                  nullable: true
+                  enum: [auto, history, mathematics, general]
+                  description: >-
+                    Perfil pedagógico opcional, válido solo con content_version=2.
+                    Si se omite en v2 se resuelve como auto; en v1 debe omitirse
+                    o ser null. Un hint con content_version=1 devuelve 422.
       responses:
         "202":
           description: Aceptado; una repetición devuelve el estado actual del mismo plan

@@ -23,6 +23,9 @@ class Quiz(TimestampMixin, Base):
     session_id: Mapped[int] = mapped_column(
         ForeignKey("sessions.id", ondelete="CASCADE"), index=True
     )
+    adaptive_assessment: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    assessment_revision: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    assessment_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     session = relationship("Session", back_populates="quiz")
     questions = relationship(

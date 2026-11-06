@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.algorithms.adaptive_route import priority as topic_priority
 from app.algorithms.adaptive_route import topic_state
@@ -14,6 +15,16 @@ from app.models.plan import GenerationStage, PlanStatus
 class PlanGenerateRequest(BaseModel):
     goal_id: int
     document_ids: list[int] = Field(default_factory=list)
+    content_version: Literal[1, 2] = 1
+    subject_hint: Literal["auto", "history", "mathematics", "general"] | None = None
+
+    @model_validator(mode="after")
+    def require_v2_for_subject_hint(self) -> PlanGenerateRequest:
+        if self.content_version != 2 and self.subject_hint is not None:
+            raise ValueError("subject_hint requires content_version=2")
+        if self.content_version == 2 and self.subject_hint is None:
+            self.subject_hint = "auto"
+        return self
 
 
 class PlanTopicResponse(BaseModel):

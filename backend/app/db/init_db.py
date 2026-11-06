@@ -16,6 +16,8 @@ from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
 from app.models.plan import Plan
+from app.models.quiz import Quiz, QuizQuestion, QuizResult  # noqa: F401 - register before create_all
+from app.models.session import Session as StudySession, SessionMaterial  # noqa: F401 - register before create_all
 from app.models.user import User
 
 logger = get_logger(__name__)
@@ -83,6 +85,7 @@ def init_db() -> None:
     _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
+    _ensure_adaptive_content_columns()
     _seed_default_user()
 
 
@@ -184,6 +187,32 @@ def _ensure_adaptive_route_columns() -> None:
     if "sessions" in inspect(engine).get_table_names():
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sessions_topic_id ON sessions (topic_id)"))
+
+
+def _ensure_adaptive_content_columns() -> None:
+    """Add v2 pedagogy columns without rewriting existing v1 rows."""
+    _add_missing_columns(
+        "plans",
+        {
+            "content_version": "INTEGER NOT NULL DEFAULT 1",
+            "subject_hint": "VARCHAR(16)",
+        },
+    )
+    _add_missing_columns(
+        "session_materials",
+        {
+            "pedagogy_snapshot": "JSON",
+            "lesson_blocks": "JSON",
+        },
+    )
+    _add_missing_columns(
+        "quizzes",
+        {
+            "adaptive_assessment": "JSON",
+            "assessment_revision": "VARCHAR(255)",
+            "assessment_state": "VARCHAR(16)",
+        },
+    )
 
 
 def _ensure_llm_verification_columns() -> None:
