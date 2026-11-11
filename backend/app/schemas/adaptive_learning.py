@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, model_validator
 
 from app.pedagogy.contracts import (
+    AssessmentMatchingItem,
+    AssessmentMatchingPair,
     AssessmentRubricCriterion,
     AssessmentSequenceItem,
     LessonBlock,
     LegacyPedagogySnapshot,
+    MinuteRange,
     PedagogySnapshot,
 )
 
@@ -35,6 +38,7 @@ class _AssessmentQuestionBase(_StrictDTO):
     question_id: str
     prompt: str
     objective_ids: list[str]
+    estimated_minutes_per_question: MinuteRange | None = None
 
 
 class FlashcardQuestionResponseV2(_AssessmentQuestionBase):
@@ -45,7 +49,18 @@ class FlashcardQuestionResponseV2(_AssessmentQuestionBase):
 
 class MultipleChoiceQuestionResponseV2(_AssessmentQuestionBase):
     kind: Literal["multiple_choice"]
+    mode: Literal["single", "multiple"] = "single"
     options: list[str]
+
+
+class TrueFalseQuestionResponseV2(_AssessmentQuestionBase):
+    kind: Literal["true_false"]
+
+
+class MatchingQuestionResponseV2(_AssessmentQuestionBase):
+    kind: Literal["matching"]
+    matching_left: list[AssessmentMatchingItem]
+    matching_right: list[AssessmentMatchingItem]
 
 
 class NumericQuestionResponseV2(_AssessmentQuestionBase):
@@ -67,6 +82,8 @@ AssessmentQuestionV2 = Annotated[
     Union[
         FlashcardQuestionResponseV2,
         MultipleChoiceQuestionResponseV2,
+        TrueFalseQuestionResponseV2,
+        MatchingQuestionResponseV2,
         NumericQuestionResponseV2,
         SequenceQuestionResponseV2,
         RubricQuestionResponseV2,
@@ -90,7 +107,40 @@ class FlashcardAnswerV2(_StrictDTO):
 class MultipleChoiceAnswerV2(_StrictDTO):
     kind: Literal["multiple_choice"]
     question_id: str = Field(min_length=1)
-    selected_option: str
+    selected_option: StrictStr | None = None
+    selected_options: list[StrictStr] | None = Field(default=None, min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def exactly_one_selection_shape(self) -> MultipleChoiceAnswerV2:
+        if (self.selected_option is None) == (self.selected_options is None):
+            raise ValueError("Provide either selected_option or selected_options.")
+        if self.selected_option is not None and not self.selected_option:
+            raise ValueError("selected_option cannot be empty.")
+        if self.selected_options is not None and len(self.selected_options) != len(
+            set(self.selected_options)
+        ):
+            raise ValueError("selected_options must be unique.")
+        return self
+
+
+class TrueFalseAnswerV2(_StrictDTO):
+    kind: Literal["true_false"]
+    question_id: str = Field(min_length=1)
+    answer: StrictBool
+
+
+class MatchingAnswerV2(_StrictDTO):
+    kind: Literal["matching"]
+    question_id: str = Field(min_length=1)
+    pairs: list[AssessmentMatchingPair] = Field(min_length=2, max_length=8)
+
+    @model_validator(mode="after")
+    def pairs_form_a_bijection(self) -> MatchingAnswerV2:
+        left_ids = [pair.left_id for pair in self.pairs]
+        right_ids = [pair.right_id for pair in self.pairs]
+        if len(set(left_ids)) != len(self.pairs) or len(set(right_ids)) != len(self.pairs):
+            raise ValueError("A matching answer must use each left and right item once.")
+        return self
 
 
 class NumericAnswerV2(_StrictDTO):
@@ -116,6 +166,8 @@ AssessmentAnswerV2 = Annotated[
     Union[
         FlashcardAnswerV2,
         MultipleChoiceAnswerV2,
+        TrueFalseAnswerV2,
+        MatchingAnswerV2,
         NumericAnswerV2,
         SequenceAnswerV2,
         RubricAnswerV2,
@@ -131,11 +183,17 @@ class AssessmentSubmissionV2(_StrictDTO):
 
 class AssessmentResultItemV2(_StrictDTO):
     question_id: str
-    kind: Literal["flashcard", "multiple_choice", "numeric", "sequence"]
+    kind: Literal[
+        "flashcard", "multiple_choice", "true_false", "matching", "numeric", "sequence"
+    ]
     correct: bool | None = None
     quality: int | None = None
-    submitted_answer: str | list[str] | None = None
-    expected_answer: str | list[str] | None = None
+    submitted_answer: (
+        StrictBool | StrictStr | list[StrictStr] | list[AssessmentMatchingPair] | None
+    ) = None
+    expected_answer: (
+        StrictBool | StrictStr | list[StrictStr] | list[AssessmentMatchingPair] | None
+    ) = None
     feedback: str = ""
 
 

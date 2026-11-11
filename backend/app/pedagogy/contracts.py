@@ -6,7 +6,15 @@ from collections.abc import Mapping
 from random import SystemRandom
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ModelWrapValidatorHandler, ValidationInfo, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ModelWrapValidatorHandler,
+    StrictBool,
+    ValidationInfo,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
 _STORED_CONTENT_CONTEXT = object()
@@ -149,6 +157,16 @@ class AssessmentSequenceItem(ContractModel):
     text: str = Field(min_length=1)
 
 
+class AssessmentMatchingItem(ContractModel):
+    id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class AssessmentMatchingPair(ContractModel):
+    left_id: str = Field(min_length=1)
+    right_id: str = Field(min_length=1)
+
+
 class AssessmentRubricCriterion(ContractModel):
     criterion_id: str = Field(min_length=1)
     description: str = Field(min_length=1)
@@ -159,15 +177,22 @@ class StoredAssessmentQuestion(ContractModel):
     """Private v2 question data stored in ``Quiz.adaptive_assessment``."""
 
     question_id: str = Field(min_length=1)
-    kind: Literal["numeric", "sequence", "rubric"]
+    kind: Literal[
+        "multiple_choice", "true_false", "matching", "numeric", "sequence", "rubric"
+    ]
     prompt: str = Field(min_length=1)
     objective_ids: list[str]
+    mode: Literal["single", "multiple"] = "single"
     options: list[str] = Field(default_factory=list)
+    matching_left: list[AssessmentMatchingItem] = Field(default_factory=list)
+    matching_right: list[AssessmentMatchingItem] = Field(default_factory=list)
+    matching_pairs: list[AssessmentMatchingPair] = Field(default_factory=list)
+    matching_presentation_initialized: SkipJsonSchema[bool] = False
     sequence_items: list[AssessmentSequenceItem] = Field(default_factory=list)
     sequence_presentation_initialized: SkipJsonSchema[bool] = False
     rubric_criteria: list[AssessmentRubricCriterion] = Field(default_factory=list)
     units: str | None = None
-    expected_answer: str | list[str] | None = None
+    expected_answer: StrictBool | str | list[str] | None = None
     exemplar: str | None = None
 
     @model_validator(mode="wrap")
@@ -178,19 +203,75 @@ class StoredAssessmentQuestion(ContractModel):
         handler: ModelWrapValidatorHandler[StoredAssessmentQuestion],
         info: ValidationInfo,
     ) -> StoredAssessmentQuestion:
-        if (
-            isinstance(value, Mapping)
-            and "sequence_presentation_initialized" in value
-            and info.context is not _STORED_CONTENT_CONTEXT
-        ):
-            raise ValueError("Sequence presentation marker is storage-only.")
+        presentation_markers = (
+            "sequence_presentation_initialized",
+            "matching_presentation_initialized",
+        )
+        if isinstance(value, Mapping) and info.context is not _STORED_CONTENT_CONTEXT:
+            if any(marker in value for marker in presentation_markers):
+                raise ValueError("The presentation marker is storage-only.")
         return handler(value)
 
     @model_validator(mode="after")
-    def keep_sequence_answer_private(self) -> StoredAssessmentQuestion:
-        if self.kind != "sequence":
-            return self
+    def validate_question_shape_and_presentation(self) -> StoredAssessmentQuestion:
+        if self.kind == "multiple_choice":
+            self._validate_multiple_choice()
+        elif self.kind == "true_false":
+            if not isinstance(self.expected_answer, bool):
+                raise ValueError("True/false questions require a strict boolean answer.")
+        elif self.kind == "matching":
+            self._validate_matching()
+        elif self.kind == "sequence":
+            self._shuffle_sequence_presentation()
+        return self
 
+    def _validate_multiple_choice(self) -> None:
+        if any(not option or option != option.strip() for option in self.options):
+            raise ValueError("Multiple-choice options must be non-empty and trimmed.")
+        if len(self.options) != len(set(option.casefold() for option in self.options)):
+            raise ValueError("Multiple-choice options must be unique.")
+
+        if self.mode == "single":
+            if len(self.options) != 4 or not isinstance(self.expected_answer, str):
+                raise ValueError("Single-choice questions require four options and one answer.")
+            if self.expected_answer not in self.options:
+                raise ValueError("The single-choice answer must match one option.")
+            return
+
+        if (
+            not 4 <= len(self.options) <= 8
+            or not isinstance(self.expected_answer, list)
+            or len(self.expected_answer) < 2
+            or len(self.expected_answer) >= len(self.options)
+            or len(self.expected_answer) != len(set(self.expected_answer))
+            or not set(self.expected_answer).issubset(self.options)
+        ):
+            raise ValueError("Multiple-select questions require a valid set of two or more keys.")
+
+    def _validate_matching(self) -> None:
+        left_ids = [item.id for item in self.matching_left]
+        right_ids = [item.id for item in self.matching_right]
+        pair_left_ids = [pair.left_id for pair in self.matching_pairs]
+        pair_right_ids = [pair.right_id for pair in self.matching_pairs]
+        item_count = len(left_ids)
+        if (
+            not 2 <= item_count <= 8
+            or len(right_ids) != item_count
+            or len(set(left_ids)) != item_count
+            or len(set(right_ids)) != item_count
+            or len(self.matching_pairs) != item_count
+            or len(set(pair_left_ids)) != item_count
+            or len(set(pair_right_ids)) != item_count
+            or set(pair_left_ids) != set(left_ids)
+            or set(pair_right_ids) != set(right_ids)
+        ):
+            raise ValueError("Matching questions require a complete unique bijection.")
+
+        if not self.matching_presentation_initialized:
+            SystemRandom().shuffle(self.matching_right)
+            self.matching_presentation_initialized = True
+
+    def _shuffle_sequence_presentation(self) -> None:
         expected_order = self.expected_answer
         item_ids = [item.id for item in self.sequence_items]
         if (
@@ -210,8 +291,6 @@ class StoredAssessmentQuestion(ContractModel):
             SystemRandom().shuffle(presentation_items)
             self.sequence_items = presentation_items
             self.sequence_presentation_initialized = True
-
-        return self
 
 
 class AdaptiveAssessmentPayload(ContractModel):
