@@ -150,6 +150,10 @@ def _literal_match(source: str, quote: str) -> re.Match[str] | None:
         return None
     start = r"(?<!\w)" if tokens[0][0].isalnum() else ""
     end = r"(?!\w)" if tokens[-1][-1].isalnum() else ""
+    if tokens[0][0].isdigit():
+        start += r"(?<!\d[.,/])(?<![+\-−])"
+    if tokens[-1][-1].isdigit():
+        end += r"(?![.,/]\d)"
     pattern = start + r"\s+".join(map(re.escape, tokens)) + end
     return re.search(pattern, unicodedata.normalize("NFKC", source))
 

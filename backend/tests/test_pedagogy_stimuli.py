@@ -156,3 +156,10 @@ def test_diagram_text_equivalent_includes_isolated_nodes():
 def test_evidence_cannot_extract_partial_words():
     with pytest.raises(ValueError, match="contexto"):
         evidence_excerpt({"excerpt-a": "La desinformación circula."}, "excerpt-a", "información circula")
+
+
+@pytest.mark.parametrize("quote", ["3/4 = 0", "4 = 0,75", "0,75 representa", "2 corresponde"])
+def test_evidence_keeps_complete_numeric_tokens(quote):
+    sources = {"excerpt-a": "3/4 = 0,75 y 10,75 representa otra cantidad. -2 corresponde a un descenso."}
+    with pytest.raises(ValueError, match="contexto"):
+        evidence_excerpt(sources, "excerpt-a", quote)
