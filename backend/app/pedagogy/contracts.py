@@ -17,6 +17,8 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from app.pedagogy.answer_normalization import normalize_exact_answer, parse_numeric_answer
+
 _STORED_CONTENT_CONTEXT = object()
 
 
@@ -178,7 +180,15 @@ class StoredAssessmentQuestion(ContractModel):
 
     question_id: str = Field(min_length=1)
     kind: Literal[
-        "multiple_choice", "true_false", "matching", "numeric", "sequence", "rubric"
+        "multiple_choice",
+        "true_false",
+        "matching",
+        "numeric",
+        "sequence",
+        "rubric",
+        "short_answer",
+        "essay",
+        "step_by_step",
     ]
     prompt: str = Field(min_length=1)
     objective_ids: list[str]
@@ -193,6 +203,7 @@ class StoredAssessmentQuestion(ContractModel):
     rubric_criteria: list[AssessmentRubricCriterion] = Field(default_factory=list)
     units: str | None = None
     expected_answer: StrictBool | str | list[str] | None = None
+    grading_mode: Literal["exact", "numeric", "formative"] | None = None
     exemplar: str | None = None
 
     @model_validator(mode="wrap")
@@ -223,7 +234,77 @@ class StoredAssessmentQuestion(ContractModel):
             self._validate_matching()
         elif self.kind == "sequence":
             self._shuffle_sequence_presentation()
+        elif self.kind == "short_answer":
+            self._validate_text_grading()
+        elif self.kind == "essay":
+            self._validate_essay()
+        elif self.kind == "step_by_step":
+            self._validate_step_by_step()
+        elif self.grading_mode is not None:
+            raise ValueError("Only text questions support a grading mode.")
         return self
+
+    def _validate_exact_text_answer_keys(self) -> None:
+        keys = self.expected_answer
+        if (
+            not isinstance(keys, list)
+            or not 1 <= len(keys) <= 16
+            or any(not key.strip() or len(key) > 2000 for key in keys)
+        ):
+            raise ValueError("Exact text answers require one to sixteen bounded answer keys.")
+        normalized = [normalize_exact_answer(key) for key in keys]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Exact answer keys must be unique after normalization.")
+
+    def _validate_formative_rubric(self) -> None:
+        criteria = self.rubric_criteria
+        criterion_ids = [criterion.criterion_id for criterion in criteria]
+        if not criteria or len(criterion_ids) != len(set(criterion_ids)):
+            raise ValueError("Formative text questions require unique rubric criteria.")
+        if any(
+            not criterion.criterion_id.strip()
+            or not criterion.description.strip()
+            or not criterion.descriptors
+            or any(not descriptor.strip() for descriptor in criterion.descriptors)
+            for criterion in criteria
+        ):
+            raise ValueError("Rubric criteria require non-empty descriptions and descriptors.")
+
+    def _validate_text_grading(self) -> None:
+        if self.grading_mode == "exact":
+            self._validate_exact_text_answer_keys()
+            if self.rubric_criteria:
+                raise ValueError("Exact short answers cannot include formative rubric criteria.")
+        elif self.grading_mode == "formative":
+            if self.expected_answer is not None:
+                raise ValueError("Formative short answers cannot include objective answer keys.")
+            self._validate_formative_rubric()
+        else:
+            raise ValueError("Short answers require exact or formative grading mode.")
+
+    def _validate_essay(self) -> None:
+        if self.grading_mode is not None:
+            raise ValueError("Essay questions are formative and do not accept a grading mode.")
+        if self.expected_answer is not None:
+            raise ValueError("Essay questions cannot include objective answer keys.")
+        self._validate_formative_rubric()
+
+    def _validate_step_by_step(self) -> None:
+        self._validate_formative_rubric()
+        if self.grading_mode == "exact":
+            self._validate_exact_text_answer_keys()
+        elif self.grading_mode == "numeric":
+            if not isinstance(self.expected_answer, str):
+                raise ValueError("Numeric step-by-step questions require one numeric answer key.")
+            try:
+                parse_numeric_answer(self.expected_answer)
+            except ValueError as exc:
+                raise ValueError("Numeric step-by-step answer keys must be valid numbers.") from exc
+        elif self.grading_mode == "formative":
+            if self.expected_answer is not None:
+                raise ValueError("Formative step-by-step questions cannot include objective keys.")
+        else:
+            raise ValueError("Step-by-step questions require exact, numeric, or formative mode.")
 
     def _validate_multiple_choice(self) -> None:
         if any(not option or option != option.strip() for option in self.options):

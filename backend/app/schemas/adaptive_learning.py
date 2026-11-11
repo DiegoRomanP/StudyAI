@@ -15,6 +15,7 @@ from app.pedagogy.contracts import (
     LegacyPedagogySnapshot,
     MinuteRange,
     PedagogySnapshot,
+    ProcedureRubricWeights,
 )
 
 
@@ -78,6 +79,20 @@ class RubricQuestionResponseV2(_AssessmentQuestionBase):
     rubric_criteria: list[AssessmentRubricCriterion]
 
 
+class ShortAnswerQuestionResponseV2(_AssessmentQuestionBase):
+    kind: Literal["short_answer"]
+    grading_mode: Literal["exact", "formative"]
+
+
+class EssayQuestionResponseV2(_AssessmentQuestionBase):
+    kind: Literal["essay"]
+
+
+class StepByStepQuestionResponseV2(_AssessmentQuestionBase):
+    kind: Literal["step_by_step"]
+    grading_mode: Literal["exact", "numeric", "formative"]
+
+
 AssessmentQuestionV2 = Annotated[
     Union[
         FlashcardQuestionResponseV2,
@@ -87,6 +102,9 @@ AssessmentQuestionV2 = Annotated[
         NumericQuestionResponseV2,
         SequenceQuestionResponseV2,
         RubricQuestionResponseV2,
+        ShortAnswerQuestionResponseV2,
+        EssayQuestionResponseV2,
+        StepByStepQuestionResponseV2,
     ],
     Field(discriminator="kind"),
 ]
@@ -162,6 +180,43 @@ class RubricAnswerV2(_StrictDTO):
     criterion_ratings: dict[str, Annotated[int, Field(ge=0, le=2)]]
 
 
+class ShortAnswerAnswerV2(_StrictDTO):
+    kind: Literal["short_answer"]
+    question_id: str = Field(min_length=1)
+    text: StrictStr = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def answer_is_not_blank(self) -> ShortAnswerAnswerV2:
+        if not self.text.strip():
+            raise ValueError("Answer text cannot be blank.")
+        return self
+
+
+class EssayAnswerV2(_StrictDTO):
+    kind: Literal["essay"]
+    question_id: str = Field(min_length=1)
+    text: StrictStr = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def answer_is_not_blank(self) -> EssayAnswerV2:
+        if not self.text.strip():
+            raise ValueError("Answer text cannot be blank.")
+        return self
+
+
+class StepByStepAnswerV2(_StrictDTO):
+    kind: Literal["step_by_step"]
+    question_id: str = Field(min_length=1)
+    steps: StrictStr = Field(default="", max_length=2000)
+    final_answer: StrictStr = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def final_answer_is_not_blank(self) -> StepByStepAnswerV2:
+        if not self.final_answer.strip():
+            raise ValueError("Final answer cannot be blank.")
+        return self
+
+
 AssessmentAnswerV2 = Annotated[
     Union[
         FlashcardAnswerV2,
@@ -171,6 +226,9 @@ AssessmentAnswerV2 = Annotated[
         NumericAnswerV2,
         SequenceAnswerV2,
         RubricAnswerV2,
+        ShortAnswerAnswerV2,
+        EssayAnswerV2,
+        StepByStepAnswerV2,
     ],
     Field(discriminator="kind"),
 ]
@@ -184,7 +242,15 @@ class AssessmentSubmissionV2(_StrictDTO):
 class AssessmentResultItemV2(_StrictDTO):
     question_id: str
     kind: Literal[
-        "flashcard", "multiple_choice", "true_false", "matching", "numeric", "sequence"
+        "flashcard",
+        "multiple_choice",
+        "true_false",
+        "matching",
+        "numeric",
+        "sequence",
+        "short_answer",
+        "essay",
+        "step_by_step",
     ]
     correct: bool | None = None
     quality: int | None = None
@@ -199,10 +265,25 @@ class AssessmentResultItemV2(_StrictDTO):
 
 class FormativeFeedbackV2(_StrictDTO):
     question_id: str
-    criterion_ratings: dict[str, int]
+    criterion_ratings: dict[str, int] = Field(default_factory=dict)
     criteria: list[AssessmentRubricCriterion] = Field(default_factory=list)
     exemplar: str | None = None
     message: str
+    submitted_text: StrictStr | None = Field(default=None, max_length=2000)
+    submitted_final_answer: StrictStr | None = Field(default=None, max_length=2000)
+    procedure_rubric_weights: ProcedureRubricWeights | None = None
+
+
+class ObjectiveResultV2(_StrictDTO):
+    objective_id: str = Field(min_length=1)
+    correct: int = Field(ge=0)
+    total: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def correct_count_does_not_exceed_total(self) -> ObjectiveResultV2:
+        if self.correct > self.total:
+            raise ValueError("Correct answers cannot exceed the objective total.")
+        return self
 
 
 class AssessmentResultV2(_StrictDTO):
@@ -213,3 +294,4 @@ class AssessmentResultV2(_StrictDTO):
     total: int = Field(ge=0)
     detail: list[AssessmentResultItemV2]
     formative_feedback: list[FormativeFeedbackV2] = Field(default_factory=list)
+    objective_results: list[ObjectiveResultV2] = Field(default_factory=list)
