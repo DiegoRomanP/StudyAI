@@ -64,6 +64,7 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "_purge_retired_provider_credentials",
         "_ensure_llm_verification_columns",
         "_ensure_adaptive_route_columns",
+        "_ensure_adaptive_content_columns",
         "_seed_default_user",
     ):
         monkeypatch.setattr(init_db_module, name, lambda: None)

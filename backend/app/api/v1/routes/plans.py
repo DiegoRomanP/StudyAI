@@ -58,6 +58,9 @@ def generate_plan(
         payload.goal_id,
         payload.document_ids,
         idempotency_key=idempotency_key,
+        content_version=payload.content_version,
+        subject_hint=payload.subject_hint,
+        profile_hint=payload.profile_hint,
     )
     if created:
         background_tasks.add_task(generate_plan_task, plan.id)

@@ -17,11 +17,37 @@ class PlanGenerateRequest(BaseModel):
     document_ids: list[int] = Field(default_factory=list)
     content_version: Literal[1, 2] = 1
     subject_hint: Literal["auto", "history", "mathematics", "general"] | None = None
+    profile_hint: Literal[
+        "logical_deductive",
+        "critical_argumentative",
+        "linguistic_interpretive",
+        "systemic_empirical",
+        "applied_practical",
+        "auto",
+    ] | None = None
 
     @model_validator(mode="after")
-    def require_v2_for_subject_hint(self) -> PlanGenerateRequest:
+    def validate_profile_hints(self) -> PlanGenerateRequest:
+        profile_hint_supplied = "profile_hint" in self.model_fields_set
+        subject_hint_supplied = "subject_hint" in self.model_fields_set
         if self.content_version != 2 and self.subject_hint is not None:
             raise ValueError("subject_hint requires content_version=2")
+        if profile_hint_supplied and self.content_version != 2:
+            raise ValueError("profile_hint requires content_version=2")
+        if (
+            self.content_version == 2
+            and profile_hint_supplied
+            and subject_hint_supplied
+            and self.subject_hint is not None
+            and self.profile_hint is not None
+        ):
+            equivalent_profile = {
+                "history": "critical_argumentative",
+                "mathematics": "logical_deductive",
+                "auto": "auto",
+            }.get(self.subject_hint)
+            if self.profile_hint != equivalent_profile:
+                raise ValueError("subject_hint and profile_hint must refer to the same profile")
         if self.content_version == 2 and self.subject_hint is None:
             self.subject_hint = "auto"
         return self

@@ -138,11 +138,14 @@ paths:
       summary: Inicia la generación asíncrona de un plan
       description: >-
         Acepta una cabecera Idempotency-Key opcional (1–255 caracteres). Para
-        el mismo usuario, la misma clave y el mismo goal_id/document_ids
-        canónicos (document_ids se compara como un conjunto ordenado), devuelve
-        el mismo plan y no registra otra tarea. Reutilizar la clave con otro
-        payload devuelve 409. Sin clave, conserva el comportamiento anterior y
-        crea un plan nuevo. La tarea usa FastAPI BackgroundTasks en el proceso
+        v1, la misma clave y el mismo goal_id/document_ids canónicos (document_ids
+        se compara como un conjunto ordenado) conserva exactamente la identidad
+        anterior. Para v2, la identidad también incluye la versión y el hint
+        efectivo normalizado; history/critical_argumentative y
+        mathematics/logical_deductive son aliases equivalentes. Reutilizar la
+        clave entre versiones o con otro hint efectivo devuelve 409. Sin clave,
+        conserva el comportamiento anterior y crea un plan nuevo. La tarea usa
+        FastAPI BackgroundTasks en el proceso
         actual; no es una cola durable. Si la generación falla, o el servidor se
         reinicia a mitad (al arrancar, todo plan PROCESSING pasa a FAILED), el plan
         conserva lo generado y se puede continuar con `/plans/{plan_id}/resume`.
@@ -169,16 +172,42 @@ paths:
                   default: 1
                   description: >-
                     Versión de contenido. El valor 1 conserva exactamente la
-                    generación pública actual; el valor 2 habilita los contratos
-                    de enseñanza y evaluación adaptativos.
+                    solicitud e identidad públicas actuales; el valor 2 habilita
+                    la solicitud/persistencia versionada del hint académico. Este
+                    slice todavía no adapta la generación, los prompts ni el
+                    contenido de las sesiones.
                 subject_hint:
                   type: string
                   nullable: true
                   enum: [auto, history, mathematics, general]
                   description: >-
-                    Perfil pedagógico opcional, válido solo con content_version=2.
-                    Si se omite en v2 se resuelve como auto; en v1 debe omitirse
-                    o ser null. Un hint con content_version=1 devuelve 422.
+                    Hint legado, válido solo con content_version=2. En v2, history
+                    corresponde a critical_argumentative, mathematics a
+                    logical_deductive y general conserva el fallback técnico. Si
+                    se omite en v2 se resuelve como auto; en v1 debe omitirse o ser
+                    null. Un hint no nulo con content_version=1 devuelve 422.
+                profile_hint:
+                  type: string
+                  nullable: true
+                  enum:
+                    - logical_deductive
+                    - critical_argumentative
+                    - linguistic_interpretive
+                    - systemic_empirical
+                    - applied_practical
+                    - auto
+                  description: >-
+                    Hint académico opcional, solo para content_version=2; omitido
+                    o null equivale a no enviar un perfil. Se guarda en
+                    Plan.profile_hint sin valor histórico inferido. En v1, cualquier
+                    profile_hint suministrado, incluso null, devuelve 422. No acepta
+                    history, mathematics ni general; esos son valores de
+                    subject_hint. Si ambos hints se envían explícitamente, solo se
+                    aceptan los pares history/critical_argumentative,
+                    mathematics/logical_deductive y auto/auto. El auto de
+                    subject_hint sintetizado al omitirlo no causa conflicto. Una
+                    petición inválida devuelve 422. Este contrato aún no modifica
+                    prompts ni generación adaptativa.
       responses:
         "202":
           description: Aceptado; una repetición devuelve el estado actual del mismo plan

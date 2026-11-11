@@ -65,12 +65,21 @@ class PlanService:
         goal_id: int,
         document_ids: list[int],
         idempotency_key: str | None = None,
+        content_version: int = 1,
+        subject_hint: str | None = None,
+        profile_hint: str | None = None,
     ) -> tuple[Plan, bool]:
         goal = self.db.get(Goal, goal_id)
         if goal is None or goal.user_id != user_id:
             raise NotFoundError("Meta no encontrada.")
 
-        request_hash = self._idempotency_request_hash(goal_id, document_ids)
+        request_hash = self._idempotency_request_hash(
+            goal_id,
+            document_ids,
+            content_version=content_version,
+            subject_hint=subject_hint,
+            profile_hint=profile_hint,
+        )
         if idempotency_key is not None:
             existing = self._find_idempotent_plan(user_id, idempotency_key)
             if existing is not None:
@@ -85,6 +94,9 @@ class PlanService:
             title=f"Plan: {goal.title}",
             status=PlanStatus.PROCESSING,
             document_ids=list(document_ids),
+            content_version=content_version,
+            subject_hint=subject_hint,
+            profile_hint=profile_hint,
             idempotency_key=idempotency_key,
             idempotency_request_hash=request_hash if idempotency_key is not None else None,
             free_ai_use_date=spent_day,
@@ -106,11 +118,28 @@ class PlanService:
         return plan, True
 
     @staticmethod
-    def _idempotency_request_hash(goal_id: int, document_ids: list[int]) -> str:
+    def _idempotency_request_hash(
+        goal_id: int,
+        document_ids: list[int],
+        *,
+        content_version: int = 1,
+        subject_hint: str | None = None,
+        profile_hint: str | None = None,
+    ) -> str:
         canonical_payload = {
             "goal_id": goal_id,
             "document_ids": sorted(set(document_ids)),
         }
+        if content_version == 2:
+            effective_profile_hint = profile_hint or {
+                "history": "critical_argumentative",
+                "mathematics": "logical_deductive",
+                "general": "general",
+                "auto": "auto",
+            }.get(subject_hint or "auto", "auto")
+            canonical_payload.update(
+                {"content_version": 2, "profile_hint": effective_profile_hint}
+            )
         encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 

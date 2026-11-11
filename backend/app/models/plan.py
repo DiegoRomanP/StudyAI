@@ -48,6 +48,7 @@ class Plan(TimestampMixin, Base):
     # Content v2 is opt-in; every existing/new plan remains on public v1 by default.
     content_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     subject_hint: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    profile_hint: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error_message: Mapped[str] = mapped_column(String(1024), default="")
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

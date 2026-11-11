@@ -196,6 +196,7 @@ def _ensure_adaptive_content_columns() -> None:
         {
             "content_version": "INTEGER NOT NULL DEFAULT 1",
             "subject_hint": "VARCHAR(16)",
+            "profile_hint": "VARCHAR(32)",
         },
     )
     _add_missing_columns(
