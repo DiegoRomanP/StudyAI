@@ -502,6 +502,44 @@ describe("HomePage", () => {
     expect(generatePlan).toHaveBeenCalledOnce();
   });
 
+  it("keeps the academic profile opt-in on Inicio and forwards the chosen goal type", async () => {
+    mockApi({ documents: [indexedDocument] });
+    vi.spyOn(api, "createGoal").mockResolvedValue({
+      id: 3,
+      goal_type: "MEMORIZATION",
+      title: "Preparar entrevistas técnicas",
+      description: "",
+      created_at: "2026-10-16T09:00:00Z",
+    });
+    const generatePlan = vi
+      .spyOn(api, "generatePlan")
+      .mockResolvedValue({ id: 9, status: "PROCESSING", error_message: "" });
+    vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
+    renderHome();
+
+    await reachGoalStep();
+    fireEvent.click(screen.getByRole("button", { name: /Entrevistas técnicas/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Adaptar la enseñanza y evaluación al perfil académico" }),
+    );
+    expect(screen.getByRole("combobox", { name: "Perfil académico" })).toHaveValue("auto");
+
+    next();
+    await screen.findByRole("heading", { name: "Paso 3 de 4: Elige tu IA" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled());
+    next();
+    await screen.findByRole("heading", { name: "Paso 4 de 4: Todo listo" });
+    fireEvent.click(screen.getByRole("button", { name: "Estudiar" }));
+
+    await waitFor(() =>
+      expect(generatePlan).toHaveBeenCalledWith(3, [4], expect.any(String), {
+        content_version: 2,
+        profile_hint: "auto",
+      }),
+    );
+    expect(generatePlan).toHaveBeenCalledOnce();
+  });
+
   it("does not show an endless generation when the followed plan cannot be read", async () => {
     window.sessionStorage.setItem("studyai.study-start", JSON.stringify({ v: 1, planId: 9 }));
     mockApi();

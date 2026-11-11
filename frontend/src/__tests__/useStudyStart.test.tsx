@@ -64,6 +64,91 @@ afterEach(() => {
 });
 
 describe("useStudyStart", () => {
+  it("sends adaptive plan options and reuses the same key for an identical retry", async () => {
+    const generatePlan = vi
+      .spyOn(api, "generatePlan")
+      .mockRejectedValueOnce({ isAxiosError: true, request: {}, message: "Network Error" })
+      .mockResolvedValueOnce({ id: 51, status: "PROCESSING", error_message: "" });
+    vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
+    const { result } = setup();
+    const input: StudyStartInput = {
+      goal: { kind: "existing", goalId: 3 },
+      documentIds: [4],
+      generationGoalType: "MEMORIZATION",
+      pedagogy: { content_version: 2, profile_hint: "critical_argumentative" },
+    };
+
+    await act(async () => {
+      await result.current.start(input);
+    });
+    await act(async () => {
+      await result.current.start(input);
+    });
+
+    expect(generatePlan).toHaveBeenCalledTimes(2);
+    expect(generatePlan.mock.calls[0]).toEqual([
+      3,
+      [4],
+      expect.any(String),
+      { content_version: 2, profile_hint: "critical_argumentative" },
+    ]);
+    expect(generatePlan.mock.calls[1][2]).toBe(generatePlan.mock.calls[0][2]);
+    await waitFor(() => expect(result.current.phase).toBe("ready"));
+  });
+
+  it("uses a new idempotency key after changing the profile during an uncertain retry", async () => {
+    const generatePlan = vi
+      .spyOn(api, "generatePlan")
+      .mockRejectedValueOnce({ isAxiosError: true, request: {}, message: "Network Error" })
+      .mockResolvedValueOnce({ id: 51, status: "PROCESSING", error_message: "" });
+    vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
+    const { result } = setup();
+    const input: StudyStartInput = {
+      goal: { kind: "existing", goalId: 3 },
+      documentIds: [4],
+      generationGoalType: "EXAM",
+      pedagogy: { content_version: 2, profile_hint: "critical_argumentative" },
+    };
+
+    await act(async () => {
+      await result.current.start(input);
+    });
+    await act(async () => {
+      await result.current.start({
+        ...input,
+        pedagogy: { content_version: 2, profile_hint: "logical_deductive" },
+      });
+    });
+
+    expect(generatePlan).toHaveBeenCalledTimes(2);
+    expect(generatePlan.mock.calls[0][2]).not.toBe(generatePlan.mock.calls[1][2]);
+  });
+
+  it("uses a new idempotency key when the effective goal type changes", async () => {
+    const generatePlan = vi
+      .spyOn(api, "generatePlan")
+      .mockRejectedValueOnce({ isAxiosError: true, request: {}, message: "Network Error" })
+      .mockResolvedValueOnce({ id: 51, status: "PROCESSING", error_message: "" });
+    vi.spyOn(api, "getPlan").mockResolvedValue(readyPlan);
+    const { result } = setup();
+    const input: StudyStartInput = {
+      goal: { kind: "existing", goalId: 3 },
+      documentIds: [4],
+      generationGoalType: "EXAM",
+      pedagogy: { content_version: 2, profile_hint: "auto" },
+    };
+
+    await act(async () => {
+      await result.current.start(input);
+    });
+    await act(async () => {
+      await result.current.start({ ...input, generationGoalType: "LEARNING" });
+    });
+
+    expect(generatePlan).toHaveBeenCalledTimes(2);
+    expect(generatePlan.mock.calls[0][2]).not.toBe(generatePlan.mock.calls[1][2]);
+  });
+
   it("saves a template goal, requests the plan once and waits for a ready plan with sessions", async () => {
     const createGoal = vi.spyOn(api, "createGoal").mockResolvedValue({
       id: 9,

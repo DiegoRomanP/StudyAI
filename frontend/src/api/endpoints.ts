@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type {
+  AdaptivePlanOptions,
   DashboardDTO,
   DocumentDTO,
   GoalCreate,
@@ -56,14 +57,27 @@ export const api = {
    * Same `idempotencyKey` + same payload replays the original plan (202); the same
    * key with another payload is a 409 `IDEMPOTENCY_KEY_REUSED`.
    */
-  generatePlan: (goal_id: number, document_ids: number[], idempotencyKey?: string) =>
-    apiClient
+  generatePlan: (
+    goal_id: number,
+    document_ids: number[],
+    idempotencyKey?: string,
+    pedagogy?: AdaptivePlanOptions,
+  ) => {
+    const payload = {
+      goal_id,
+      document_ids,
+      ...(pedagogy
+        ? { content_version: pedagogy.content_version, profile_hint: pedagogy.profile_hint ?? "auto" }
+        : {}),
+    };
+    return apiClient
       .post<PlanStatusDTO>(
         "/plans/generate",
-        { goal_id, document_ids },
+        payload,
         idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
       )
-      .then((r) => r.data),
+      .then((r) => r.data);
+  },
   getPlanStatus: (id: number) =>
     apiClient.get<PlanStatusDTO>(`/plans/${id}/status`).then((r) => r.data),
   getPlan: (id: number) =>

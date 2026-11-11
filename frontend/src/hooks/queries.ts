@@ -10,6 +10,7 @@ import {
 import { api } from "../api/endpoints";
 import { isNotFoundError } from "../api/errors";
 import type {
+  AdaptivePlanOptions,
   DocumentDTO,
   LLMCredentialDTO,
   GoalCreate,
@@ -199,12 +200,17 @@ export function useGeneratePlan() {
       goalId,
       documentIds,
       idempotencyKey,
+      pedagogy,
     }: {
       goalId: number;
       documentIds: number[];
       /** Reuse the same key when retrying the same logical request. */
       idempotencyKey?: string;
-    }) => api.generatePlan(goalId, documentIds, idempotencyKey),
+      pedagogy?: AdaptivePlanOptions;
+    }) =>
+      pedagogy
+        ? api.generatePlan(goalId, documentIds, idempotencyKey, pedagogy)
+        : api.generatePlan(goalId, documentIds, idempotencyKey),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
   });
 }

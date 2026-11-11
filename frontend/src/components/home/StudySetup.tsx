@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { GoalType } from "../../api/types";
+import type { AcademicProfileHint, GoalType } from "../../api/types";
 import {
   getDocumentsListSnapshot,
   useDocuments,
@@ -29,6 +29,7 @@ import {
 } from "../../lib/goalTemplates";
 import { DocumentPicker } from "../documents/DocumentPicker";
 import { generationLabel } from "../plan/GenerationProgress";
+import { ACADEMIC_PROFILE_OPTIONS, PedagogySelector } from "../plan/PedagogySelector";
 import { DocumentUpload } from "../documents/DocumentUpload";
 import { GoalTemplatePicker } from "../goals/GoalTemplatePicker";
 import {
@@ -81,6 +82,8 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
   const [title, setTitle] = useState("");
+  const [adaptiveTeachingEnabled, setAdaptiveTeachingEnabled] = useState(false);
+  const [profileHint, setProfileHint] = useState<AcademicProfileHint>("auto");
 
   // Planes recién terminados aparecen en el resto de Inicio (read-only refetch).
   useEffect(() => {
@@ -163,12 +166,19 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   }
 
   async function handleStart() {
+    const generationGoalType = goalMode === "existing" ? savedGoal?.goal_type : goalType;
     const input: StudyStartInput = {
       goal:
         goalMode === "existing" && existingGoalId !== ""
           ? { kind: "existing", goalId: existingGoalId }
           : { kind: "template", payload: { goal_type: goalType, title: title.trim(), description: "" } },
       documentIds: selectedIndexed,
+      ...(adaptiveTeachingEnabled
+        ? {
+            ...(generationGoalType ? { generationGoalType } : {}),
+            pedagogy: { content_version: 2, profile_hint: profileHint },
+          }
+        : {}),
     };
     lastInput.current = input;
     await study.start(input);
@@ -356,6 +366,13 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                     </div>
                   </div>
                 )}
+                <PedagogySelector
+                  enabled={adaptiveTeachingEnabled}
+                  profileHint={profileHint}
+                  onEnabledChange={setAdaptiveTeachingEnabled}
+                  onProfileChange={setProfileHint}
+                  idPrefix="study-pedagogy"
+                />
               </div>
             )}
 
@@ -378,6 +395,16 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                       : title.trim()
                         ? `${title.trim()} · ${GOAL_TYPE_LABELS[goalType]}`
                         : "—"
+                  }
+                  onChange={() => goTo(1)}
+                />
+                <RecapRow
+                  label="Enseñanza"
+                  value={
+                    adaptiveTeachingEnabled
+                      ? ACADEMIC_PROFILE_OPTIONS.find((profile) => profile.value === profileHint)?.label ??
+                        "Perfil académico"
+                      : "Estándar"
                   }
                   onChange={() => goTo(1)}
                 />

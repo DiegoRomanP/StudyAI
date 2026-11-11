@@ -1,5 +1,5 @@
 import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -43,6 +43,68 @@ afterEach(() => {
 });
 
 describe("PlanPage generation", () => {
+  it("shows the five academic profiles and sends v2 only after opting in", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+    const goal = {
+      id: 73,
+      goal_type: "MEMORIZATION" as const,
+      title: "Memorizar biología",
+      description: "",
+      created_at: "2026-09-30T00:00:00Z",
+    };
+    queryClient.setQueryData(["goals"], [goal]);
+    seedConfirmedDocuments(queryClient, [documents[0]]);
+    queryClient.setQueryData(["plans"], []);
+    vi.spyOn(api, "listGoals").mockResolvedValue([goal]);
+    vi.spyOn(api, "listDocuments").mockResolvedValue([documents[0]]);
+    vi.spyOn(api, "listPlans").mockResolvedValue([]);
+    const generatePlan = vi.spyOn(api, "generatePlan").mockResolvedValue({
+      id: 51,
+      status: "PROCESSING",
+      error_message: "",
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <PlanPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText("Meta"), { target: { value: "73" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: documents[0].filename }));
+    const adaptCheckbox = screen.getByRole("checkbox", {
+      name: "Adaptar la enseñanza y evaluación al perfil académico",
+    });
+    expect(adaptCheckbox).not.toBeChecked();
+    fireEvent.click(adaptCheckbox);
+    const profileSelect = screen.getByRole("combobox", { name: "Perfil académico" });
+    expect(within(profileSelect).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Automático por tema",
+      "Lógico-Deductivo (Matemáticas, Física, Programación)",
+      "Crítico-Argumentativo (Historia, Filosofía, Ciencias Políticas)",
+      "Lingüístico-Interpretativo (Letras, Literatura, Idiomas)",
+      "Sistémico-Empírico (Biología, Química, Medicina)",
+      "Aplicado-Práctico (Economía, Ingeniería aplicada, Negocios)",
+    ]);
+    fireEvent.change(profileSelect, { target: { value: "systemic_empirical" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generar plan" }));
+
+    await waitFor(() => {
+      expect(generatePlan).toHaveBeenCalledWith(73, [12], expect.any(String), {
+        content_version: 2,
+        profile_hint: "systemic_empirical",
+      });
+    });
+    expect(generatePlan.mock.calls[0][2]).toEqual(expect.any(String));
+  });
+
   it("blocks generation when the last selected indexed document disappears, including a stale click", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {

@@ -3,7 +3,13 @@ import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getApiErrorMessage, isNotFoundError } from "../api/errors";
-import type { GoalCreate, PlanDTO, SessionSummaryDTO } from "../api/types";
+import type {
+  AdaptivePlanOptions,
+  GoalCreate,
+  GoalType,
+  PlanDTO,
+  SessionSummaryDTO,
+} from "../api/types";
 import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
 import { routeOrder } from "../lib/studyProgress";
 import {
@@ -28,6 +34,8 @@ export type GoalSelection =
 export interface StudyStartInput {
   goal: GoalSelection;
   documentIds: number[];
+  generationGoalType?: GoalType;
+  pedagogy?: AdaptivePlanOptions;
 }
 
 export type StudyStartPhase =
@@ -179,13 +187,23 @@ export function useStudyStart() {
         setGoalId(confirmedGoalId);
 
         setStep({ phase: "requesting-plan" });
-        const idempotencyKey = requestKey.keyFor(planRequestFingerprint(confirmedGoalId, documentIds));
+        const goalType = input.generationGoalType ??
+          (input.goal.kind === "template" ? input.goal.payload.goal_type : undefined);
+        const fingerprint = input.pedagogy
+          ? planRequestFingerprint(confirmedGoalId, documentIds, {
+              pedagogy: input.pedagogy,
+              goalType,
+            })
+          : planRequestFingerprint(confirmedGoalId, documentIds);
+        const idempotencyKey = requestKey.keyFor(fingerprint);
         try {
-          const status = await generatePlan.mutateAsync({
+          const request = {
             goalId: confirmedGoalId,
             documentIds,
             idempotencyKey,
-          });
+            ...(input.pedagogy ? { pedagogy: input.pedagogy } : {}),
+          };
+          const status = await generatePlan.mutateAsync(request);
           requestKey.reset();
           writeStoredPlanId(status.id);
           setPlanId(status.id);

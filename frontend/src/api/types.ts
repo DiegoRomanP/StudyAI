@@ -2,6 +2,17 @@
 
 export type DocumentStatus = "PENDING" | "INDEXED" | "FAILED";
 export type GoalType = "EXAM" | "LEARNING" | "MEMORIZATION";
+export type AcademicProfileHint =
+  | "auto"
+  | "logical_deductive"
+  | "critical_argumentative"
+  | "linguistic_interpretive"
+  | "systemic_empirical"
+  | "applied_practical";
+export interface AdaptivePlanOptions {
+  content_version: 2;
+  profile_hint?: AcademicProfileHint;
+}
 export type PlanStatus = "PROCESSING" | "READY" | "FAILED";
 export type QuestionType = "FLASHCARD" | "MULTIPLE_CHOICE";
 

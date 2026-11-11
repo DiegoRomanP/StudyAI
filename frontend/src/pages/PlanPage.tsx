@@ -4,12 +4,13 @@ import { CalendarDays } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getApiErrorMessage } from "../api/errors";
-import type { PlanDTO } from "../api/types";
+import type { AdaptivePlanOptions, AcademicProfileHint, PlanDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
 import { PageGuide } from "../components/help/PageGuide";
 import { Alert, Badge, Button, ButtonLink, Card, Select, Skeleton } from "../components/ui";
 import { DocumentPicker } from "../components/documents/DocumentPicker";
+import { PedagogySelector } from "../components/plan/PedagogySelector";
 import {
   getDocumentsListSnapshot,
   useDeletePlan,
@@ -44,6 +45,8 @@ export function PlanPage() {
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
 
   const [goalId, setGoalId] = useState<number | "">("");
+  const [adaptiveTeachingEnabled, setAdaptiveTeachingEnabled] = useState(false);
+  const [profileHint, setProfileHint] = useState<AcademicProfileHint>("auto");
   const [searchParams] = useSearchParams();
   const requestedGoal = Number(searchParams.get("meta"));
   const appliedRequestedGoal = useRef(false);
@@ -95,11 +98,22 @@ export function PlanPage() {
     generating.current = true;
     setGenerateError(null);
     try {
+      const pedagogy: AdaptivePlanOptions | undefined = adaptiveTeachingEnabled
+        ? { content_version: 2, profile_hint: profileHint }
+        : undefined;
+      const selectedGoal = (goals ?? []).find((goal) => goal.id === Number(goalId));
+      const fingerprint = pedagogy
+        ? planRequestFingerprint(Number(goalId), documentIds, {
+            pedagogy,
+            goalType: selectedGoal?.goal_type,
+          })
+        : planRequestFingerprint(Number(goalId), documentIds);
       const res = await generate.mutateAsync({
         goalId: Number(goalId),
         documentIds,
-        // A retry of the same goal + documents replays the original request server-side.
-        idempotencyKey: requestKey.keyFor(planRequestFingerprint(Number(goalId), documentIds)),
+        // Retries of the same goal, documents, and pedagogy replay the original request.
+        idempotencyKey: requestKey.keyFor(fingerprint),
+        ...(pedagogy ? { pedagogy } : {}),
       });
       requestKey.reset();
       navigate(`/plan/${res.id}`);
@@ -176,6 +190,20 @@ export function PlanPage() {
             </div>
           ) : null}
         </div>
+
+        <PedagogySelector
+          enabled={adaptiveTeachingEnabled}
+          profileHint={profileHint}
+          onEnabledChange={(enabled) => {
+            setAdaptiveTeachingEnabled(enabled);
+            setGenerateError(null);
+          }}
+          onProfileChange={(profile) => {
+            setProfileHint(profile);
+            setGenerateError(null);
+          }}
+          idPrefix="plan-pedagogy"
+        />
 
         <DocumentPicker
           documents={documents ?? []}
