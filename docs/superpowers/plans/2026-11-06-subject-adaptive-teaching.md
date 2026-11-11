@@ -10,6 +10,26 @@
 
 **Spec:** `odd/tasks/subject-adaptive-teaching.md`, S1–S6; S4 amplía los perfiles y S5 exige guardar y explicar el plan. S6 autoriza commits locales, una rama nueva y comenzar la implementación allí.
 
+## Revisión de implementación aprobada
+
+El registro de tareas conserva el estado de cada unidad. T0 ya está entregada y T1 tiene implementados los perfiles, la lectura histórica, el hint de solicitud y la identidad v2. El orden de continuación es **V1 → resto de T1 → T2 → T3 → T4 → T5 → T6**. Las decisiones de esta revisión precisan las tareas de abajo.
+
+| Unidad | Entrega verificable |
+|---|---|
+| V1 | Verificar independientemente el candidato actual con un manifiesto de Python versionado más los dos tests nuevos nombrados en el registro. La copia de hasta 64 MiB y los datos de prueba quedan bajo `backend/.pytest_cache`. Verificar privacidad de secuencias, backfill, presets, requests e identidad. Registrar el manifiesto, el resultado de pytest y el código de retorno. |
+| T1 | Completar las variantes públicas, privadas y de envío de los seis formatos, conservando las cuatro extensiones. Guardar la presentación de secuencias y columnas al generar, independientemente de la clave. Validar los datos del generador antes de construir el modelo privado, que incluye el marcador de presentación. |
+| T2 | Guardar el snapshot resuelto en `PlanTopic` mediante un backfill JSON aditivo. Reanudar usando esa versión y publicar lección, tarjetas y quiz en una transacción de sesión. Mantener `2 + N` llamadas exitosas y cantidades tarjetas/preguntas EXAM 3/7, LEARNING 5/5, MEMORIZATION 8/2, con al menos un ítem objetivo. Asociar cada objetivo a un bloque y una pregunta. |
+| T3 | Publicar las cinco rutas v2 y guardar un resultado por revisión. Reclamar sesión y quiz en ese orden; revertir la entrega v2 si falla un efecto obligatorio de progreso. Incorporar `objective_results` con `objective_id`, `correct` y `total` por objetivo evaluado. Una pregunta multiobjetivo cuenta en cada desglose y una vez en la nota global. Crear el repaso automático v2 a partir del snapshot y del contenido previo, con nueva revisión, ítems fallados primero y origen de tarjetas conservado. |
+| T4 | Activar desde ambos formularios con «Automático por tema» como primera opción adaptativa. Incluir perfil/versión en la huella del cliente y resolver el modo antes de consultar la lección, el quiz o el resultado. En Práctica → Preguntas, consultar el modo de la primera sesión del plan listo; mostrar enlaces a las evaluaciones para v2. Simulacro conserva sus enlaces y delega la versión a la sesión. |
+| T5 | Renderizar los formatos, estimaciones, estímulos y feedback con controles por teclado. Mostrar la nota, el desglose por objetivo y la rúbrica junto a la respuesta entregada. La reflexión del estudiante dura la visita; el resultado y la rúbrica se recuperan desde la API. |
+| T6 | Reforzar con el mismo quiz y snapshot, una llamada y una nueva revisión abierta solo al publicar. Identificar cada ejecución de refuerzo v2 para distinguir cancelación y reinicio. Invalidar las consultas v2 al publicar. Verificar suites, navegador, diferencial v1 y piloto comparativo. |
+
+En T2, el lógico-deductivo usa ejemplo resuelto y problema, el crítico-argumentativo contexto y contraste de fuentes, el lingüístico-interpretativo inferencia y evidencia textual, el sistémico-empírico estructura e interpretación de observaciones, y el aplicado-práctico caso, datos y decisión. El servidor asigna IDs a los fragmentos y comprueba citas textuales y encabezados exactos. Un caso ficticio se rotula como ejemplo generado.
+
+En T3, el detalle compartido de sesión conserva los metadatos y omite puntos de repaso con claves v2. Las rutas antiguas de quiz, resultado y finalización rechazan contenido v2 con `CONTENT_VERSION_MISMATCH`. Una sesión v2 histórica sin contenido íntegro devuelve `CONTENT_NOT_READY`; cuando el plan figura listo, la interfaz guía a crear un plan nuevo. Las tarjetas conservan su interacción de revelado y su ID entero de SM-2.
+
+El piloto usa cinco materiales representativos y un documento mixto, con material e intención fijos para cada par v1/v2. Registra alineación de objetivo/lección/pregunta, formato, claves y respaldo del feedback. Claves incorrectas, filtraciones y fuentes inventadas bloquean la aceptación del caso. Registrar por separado resultados automatizados, navegador y revisión humana por materia.
+
 **Estado de esta revisión:** El usuario autorizó comenzar en `feature/academic-reasoning-profiles`, creada desde `feature/subject-adaptive-teaching`, sin push, PR ni merge. Existe el commit histórico `38aed29`, que solo cubre la fundación T1 anterior de tres perfiles; no satisface S4. La corrección local de privacidad de T1 sigue sin commit y falta su verificación independiente: la preparación anterior falló (`cp: unrecognized option '--exclude=.git'`) antes de ejecutar pruebas. No se reintenta automáticamente; comenzar código autorizado no equivale a verificarlo ni permite cerrar o entregar una unidad sin sus pruebas requeridas. El trabajador documental dejó una edición parcial y falló por disponibilidad; el padre termina su revisión estructural. S4 todavía no está implementado.
 
 ## Global Constraints
