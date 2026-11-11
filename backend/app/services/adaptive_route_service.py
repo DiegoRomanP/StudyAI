@@ -8,15 +8,18 @@ session per topic, built deterministically from the exam — no LLM calls.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.algorithms.adaptive_route import (
     DOMINADO,
+    adaptive_objective_grades,
     effective_ladder,
     exam_score,
     failed_question_ids,
+    is_adaptive_result,
     normalize,
     order_for_review,
     review_interval_days,
@@ -31,6 +34,8 @@ from app.models.plan import Plan, PlanTopic
 from app.models.quiz import QuestionType, Quiz, QuizQuestion, QuizResult
 from app.models.session import Session as StudySession
 from app.models.session import SessionKind, SessionMaterial, SessionStatus
+from app.pedagogy.contracts import AdaptiveSessionDraft, StoredAssessmentQuestion
+from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 
 logger = get_logger(__name__)
 
@@ -53,6 +58,7 @@ def register_handlers() -> None:
 class AdaptiveRouteService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.content = AdaptiveContentRepository(db)
 
     def apply_exam(self, session_id: int, quiz_result_id: int) -> None:
         session = self.db.get(StudySession, session_id)
@@ -83,11 +89,21 @@ class AdaptiveRouteService:
             return
 
         interval = review_interval_days(topic.review_box, ladder)
-        failed = failed_question_ids(detail)
         source_questions = self._questions(session)
-        points = [
-            {"prompt": q.prompt, "answer": q.answer} for q in source_questions if q.id in failed
-        ]
+        draft = None
+        missed_adaptive: set[str] = set()
+        if is_adaptive_result(detail):
+            draft = self.content.get(session.id)
+            if draft is None:
+                raise ValueError("Adaptive review requires published assessment content.")
+            missed_adaptive = {key for key, correct in adaptive_objective_grades(detail).items() if not correct}
+            failed = {q.id for q in source_questions if f"legacy:{q.id}" in missed_adaptive}
+            points = self._adaptive_review_points(draft, source_questions, missed_adaptive)
+        else:
+            failed = failed_question_ids(detail)
+            points = [
+                {"prompt": q.prompt, "answer": q.answer} for q in source_questions if q.id in failed
+            ]
         pending = self.db.scalars(
             select(StudySession).where(
                 StudySession.plan_id == session.plan_id,
@@ -98,15 +114,68 @@ class AdaptiveRouteService:
             )
         ).first()
         if pending is not None:
-            # Only legacy plans can get here: never more than one pending review per topic.
+            # An existing pending review keeps its published assessment revision.
             pending.scheduled_date = today + timedelta(days=interval)
             pending.review_offset_days = interval
             pending.review_points = points
             self.db.flush()
             return
 
-        self.db.add(self._build_review(session, topic, result, source_questions, points, interval, today))
+        review = self._build_review(session, topic, result, source_questions, failed, points, interval, today)
+        self.db.add(review)
         self.db.flush()
+        if draft is not None:
+            self._attach_adaptive_review(review, draft, source_questions, failed, missed_adaptive)
+
+    @staticmethod
+    def _adaptive_review_points(
+        draft: AdaptiveSessionDraft,
+        legacy_questions: list[QuizQuestion],
+        failed: set[str],
+    ) -> list[dict[str, str]]:
+        points = [
+            {"question_id": question.question_id, "prompt": question.prompt, "answer": _solution_text(question)}
+            for question in draft.adaptive_assessment.questions
+            if question.question_id in failed
+        ]
+        points.extend(
+            {"question_id": f"legacy:{question.id}", "prompt": question.prompt, "answer": question.answer}
+            for question in legacy_questions
+            if f"legacy:{question.id}" in failed
+        )
+        return points
+
+    def _attach_adaptive_review(
+        self,
+        review: StudySession,
+        draft: AdaptiveSessionDraft,
+        source_questions: list[QuizQuestion],
+        failed_legacy: set[int],
+        failed_adaptive: set[str],
+    ) -> None:
+        ordered_source_ids = order_for_review([q.id for q in source_questions], failed_legacy)
+        copied_ids = {
+            f"legacy:{original}": f"legacy:{copy.id}"
+            for original, copy in zip(ordered_source_ids, review.quiz.questions, strict=True)
+        }
+        assessment = draft.adaptive_assessment
+        question_objectives = {
+            copied_ids.get(key, key): objectives
+            for key, objectives in assessment.question_objectives.items()
+        }
+        review.review_points = [
+            {**point, "question_id": copied_ids.get(point["question_id"], point["question_id"])}
+            for point in review.review_points or []
+        ]
+
+        self.content.save(review.id, draft.model_copy(update={
+            "adaptive_assessment": assessment.model_copy(update={
+                "question_objectives": question_objectives,
+                "questions": sorted(assessment.questions, key=lambda q: q.question_id not in failed_adaptive),
+            }),
+            "assessment_revision": uuid4().hex,
+            "assessment_state": "open",
+        }))
 
     def _resolve_topic(self, session: StudySession) -> PlanTopic | None:
         if session.topic_id:
@@ -134,12 +203,13 @@ class AdaptiveRouteService:
         topic: PlanTopic,
         result: QuizResult,
         questions: list[QuizQuestion],
+        failed: set[int],
         points: list[dict],
         interval: int,
         today: date,
     ) -> StudySession:
         by_id = {q.id: q for q in questions}
-        ids = order_for_review([q.id for q in questions], failed_question_ids(result.detail or {}))
+        ids = order_for_review([q.id for q in questions], failed)
         copies = [
             QuizQuestion(
                 order_index=index,
@@ -175,3 +245,19 @@ class AdaptiveRouteService:
             ),
             quiz=Quiz(questions=copies),
         )
+
+
+def _solution_text(question: StoredAssessmentQuestion) -> str:
+    expected = question.expected_answer
+    if question.kind == "matching":
+        left = {item.id: item.text for item in question.matching_left}
+        right = {item.id: item.text for item in question.matching_right}
+        return " | ".join(f"{left[pair.left_id]} → {right[pair.right_id]}" for pair in question.matching_pairs)
+    if question.kind == "sequence" and isinstance(expected, list):
+        text = {item.id: item.text for item in question.sequence_items}
+        return " → ".join(text[item_id] for item_id in expected)
+    if isinstance(expected, list):
+        return " / ".join(expected)
+    if isinstance(expected, bool):
+        return "Verdadero" if expected else "Falso"
+    return expected or ""
