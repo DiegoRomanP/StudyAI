@@ -39,14 +39,21 @@ from app.llm.base import LLMProvider
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.output_budget import complete_within_budget
 from app.llm.output_parsers import parse_llm_json
+from app.llm.prompts import (
+    adaptive_session_content,
+    plan_generation,
+    session_content,
+    topic_analysis,
+)
+from app.services.adaptive_content_builder import build_adaptive_session_content
 from app.services.session_content_builder import build_session_content
-from app.llm.prompts import plan_generation, session_content, topic_analysis
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
-from app.models.quiz import Quiz, QuizQuestion
+from app.models.quiz import QuestionType, Quiz, QuizQuestion
 from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
+from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
@@ -434,7 +441,11 @@ class _Generator:
             strategy_type = GoalType(plan.generation_goal_type)
         strategy = GoalStrategyFactory.create(strategy_type)
         config = strategy.get_session_config()
-        document_ids = plan.document_ids or None
+        document_ids = (
+            plan.document_ids
+            if plan.content_version == 2
+            else plan.document_ids or None
+        )
 
         # Relationships are not refreshed when rows are added, so work on local lists.
         topics = list(plan.topics)
@@ -442,8 +453,12 @@ class _Generator:
             self._set_progress(plan.id, GenerationStage.TOPICS, 0, 0)
             # Kept modest (8 chunks * ~500 tokens each): a smaller prompt is one
             # less thing to hit a token-throughput limit on.
-            chunks = self.retriever.retrieve_texts(
-                goal_text or goal.title, top_k=8, document_ids=document_ids
+            chunks = (
+                self.retriever.retrieve_texts(
+                    goal_text or goal.title, top_k=8, document_ids=document_ids
+                )
+                if plan.content_version != 2 or document_ids
+                else []
             )
             keywords = extract_keywords("\n".join(chunks), limit=8)
             topics_data = self._analyse_topics(
@@ -487,17 +502,144 @@ class _Generator:
                 sessions += self._create_sessions(plan, specs, config, start=start)
 
         total = len(sessions)
-        done = sum(1 for s in sessions if s.material is not None)
+        published_v2_session_ids: set[int] = set()
+        session_snapshots: dict[int, PedagogySnapshot] = {}
+        if plan.content_version == 2:
+            session_snapshots = {
+                session.id: self._topic_snapshot_for_session(session, topics)
+                for session in sessions
+            }
+            for session in sessions:
+                if self._has_complete_adaptive_content(
+                    session, config, session_snapshots[session.id]
+                ):
+                    published_v2_session_ids.add(session.id)
+            done = len(published_v2_session_ids)
+        else:
+            done = sum(1 for session in sessions if session.material is not None)
         self._set_progress(plan.id, GenerationStage.CONTENT, done, total)
         for session in sessions:
-            if session.material is not None:
-                continue
-            topic_chunks = self.retriever.retrieve_texts(
-                session.topic_name, top_k=4, document_ids=document_ids
-            )
-            self._attach_session_content(session, session.topic_name, goal_text, topic_chunks, config)
+            if plan.content_version == 2:
+                if session.id in published_v2_session_ids:
+                    continue
+                topic_chunks = (
+                    self.retriever.retrieve_texts(
+                        session.topic_name, top_k=4, document_ids=document_ids
+                    )
+                    if document_ids
+                    else []
+                )
+                self._attach_session_content(
+                    session,
+                    session.topic_name,
+                    goal_text,
+                    topic_chunks,
+                    config,
+                    snapshot=session_snapshots[session.id],
+                )
+            else:
+                if session.material is not None:
+                    continue
+                topic_chunks = self.retriever.retrieve_texts(
+                    session.topic_name, top_k=4, document_ids=document_ids
+                )
+                self._attach_session_content(
+                    session, session.topic_name, goal_text, topic_chunks, config
+                )
             done += 1
             self._set_progress(plan.id, GenerationStage.CONTENT, done, total)
+
+    def _topic_snapshot_for_session(
+        self, session: StudySession, topics: list[PlanTopic]
+    ) -> PedagogySnapshot:
+        if session.topic_id is not None:
+            topic = next((item for item in topics if item.id == session.topic_id), None)
+        else:
+            matches = [
+                item
+                for item in topics
+                if normalize(item.name) == normalize(session.topic_name)
+            ]
+            topic = matches[0] if len(matches) == 1 else None
+        if topic is None or topic.pedagogy_snapshot is None:
+            raise LLMError(
+                "El plan adaptativo no tiene una instantánea válida para esta sesión.",
+                code="LLM_INVALID_RESPONSE",
+            )
+        try:
+            return PedagogySnapshot.model_validate(topic.pedagogy_snapshot)
+        except (PydanticValidationError, TypeError, ValueError) as exc:
+            raise LLMError(
+                "El plan adaptativo no tiene una instantánea válida para esta sesión.",
+                code="LLM_INVALID_RESPONSE",
+            ) from exc
+
+    def _has_complete_adaptive_content(
+        self,
+        session: StudySession,
+        config,
+        snapshot: PedagogySnapshot,
+    ) -> bool:
+        if session.material is None and session.quiz is None:
+            return False
+        if session.material is None or session.quiz is None:
+            raise LLMError(
+                "La sesión adaptativa contiene una publicación incompleta.",
+                code="LLM_INVALID_RESPONSE",
+            )
+        try:
+            draft = AdaptiveContentRepository(self.db).get(session.id)
+        except (PydanticValidationError, TypeError, ValueError) as exc:
+            raise LLMError(
+                "La sesión adaptativa contiene una publicación inválida.",
+                code="LLM_INVALID_RESPONSE",
+            ) from exc
+        if draft is None or not draft.assessment_revision or draft.assessment_state is None:
+            raise LLMError(
+                "La sesión adaptativa contiene una publicación incompleta.",
+                code="LLM_INVALID_RESPONSE",
+            )
+        stored_snapshot = draft.pedagogy_snapshot
+        objective_ids = {objective.id for objective in snapshot.objectives}
+        flashcards = [
+            question
+            for question in session.quiz.questions
+            if question.question_type == QuestionType.FLASHCARD
+        ]
+        mapped_flashcards = {
+            question_id: objectives
+            for question_id, objectives in draft.adaptive_assessment.question_objectives.items()
+            if question_id.startswith("legacy:")
+        }
+        lesson_objectives = {
+            objective_id
+            for block in draft.lesson_blocks
+            for objective_id in block.objective_ids
+        }
+        assessment_objectives = {
+            objective_id
+            for question in draft.adaptive_assessment.questions
+            for objective_id in question.objective_ids
+        }
+        if (
+            not isinstance(stored_snapshot, PedagogySnapshot)
+            or stored_snapshot.model_dump(mode="json") != snapshot.model_dump(mode="json")
+            or len(session.quiz.questions) != config.flashcards
+            or len(flashcards) != config.flashcards
+            or len(draft.adaptive_assessment.questions) != config.multiple_choice
+            or any(
+                not mapped_flashcards.get(f"legacy:{question.id}")
+                or not set(mapped_flashcards[f"legacy:{question.id}"]).issubset(objective_ids)
+                for question in flashcards
+            )
+            or lesson_objectives != objective_ids
+            or assessment_objectives != objective_ids
+        ):
+            raise LLMError(
+                "La sesión adaptativa contiene una publicación incompleta.",
+                code="LLM_INVALID_RESPONSE",
+            )
+        return True
 
     def _set_progress(self, plan_id: int, stage: GenerationStage, done: int, total: int) -> None:
         """Commit the step so far, unless the plan was deleted meanwhile."""
@@ -742,8 +884,23 @@ class _Generator:
         self.db.flush()
         return sessions
 
-    def _attach_session_content(self, session, topic_name, goal_text, chunks, config) -> None:
+    def _attach_session_content(
+        self,
+        session,
+        topic_name,
+        goal_text,
+        chunks,
+        config,
+        *,
+        snapshot: PedagogySnapshot | None = None,
+    ) -> None:
         """One merged call for study material + quiz (was two calls)."""
+        if snapshot is not None:
+            self._attach_adaptive_session_content(
+                session, topic_name, goal_text, chunks, config, snapshot
+            )
+            return
+
         raw = self._llm_call(
             kind="session_content",
             system=session_content.SYSTEM,
@@ -771,3 +928,72 @@ class _Generator:
         self.db.flush()
         for question in content.questions:
             self.db.add(QuizQuestion(quiz_id=quiz.id, **question))
+
+    def _attach_adaptive_session_content(
+        self,
+        session: StudySession,
+        topic_name: str,
+        goal_text: str,
+        chunks: list[str],
+        config,
+        snapshot: PedagogySnapshot,
+    ) -> None:
+        """Build and atomically publish one validated v2 lesson and assessment."""
+        sources = adaptive_session_content.index_source_chunks(chunks)
+        raw = self._llm_call(
+            kind="session_content",
+            system=adaptive_session_content.SYSTEM,
+            prompt=adaptive_session_content.build_adaptive_session_prompt(
+                topic_name, goal_text, sources, config, snapshot
+            ),
+            context={
+                "content_version": 2,
+                "pedagogy_snapshot": snapshot.model_dump(mode="json"),
+                "sources": sources,
+                "topic": topic_name,
+                "goal_title": goal_text,
+                "flashcards": config.flashcards,
+                "multiple_choice": config.multiple_choice,
+            },
+        )
+        content = build_adaptive_session_content(
+            parse_llm_json(raw), config, snapshot, sources
+        )
+
+        self.db.add(
+            SessionMaterial(
+                session_id=session.id,
+                content_markdown=content.content_markdown,
+                youtube_keywords=content.keywords,
+            )
+        )
+        quiz = Quiz(session_id=session.id)
+        self.db.add(quiz)
+        self.db.flush()
+
+        flashcard_questions: list[QuizQuestion] = []
+        for index, card in enumerate(content.flashcards):
+            question = QuizQuestion(
+                quiz_id=quiz.id,
+                order_index=index,
+                question_type=QuestionType.FLASHCARD,
+                prompt=card["prompt"],
+                answer=card["answer"],
+                options=[],
+            )
+            self.db.add(question)
+            flashcard_questions.append(question)
+        self.db.flush()
+
+        question_objectives = {
+            f"legacy:{question.id}": card["objective_ids"]
+            for question, card in zip(flashcard_questions, content.flashcards, strict=True)
+        }
+        draft = content.draft.model_copy(
+            update={
+                "adaptive_assessment": content.draft.adaptive_assessment.model_copy(
+                    update={"question_objectives": question_objectives}
+                )
+            }
+        )
+        AdaptiveContentRepository(self.db).save(session.id, draft)
