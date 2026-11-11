@@ -22,7 +22,9 @@ import hashlib
 import json
 import time
 from datetime import date, datetime, timedelta, timezone
+from typing import get_args
 
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -40,7 +42,7 @@ from app.llm.output_parsers import parse_llm_json
 from app.services.session_content_builder import build_session_content
 from app.llm.prompts import plan_generation, session_content, topic_analysis
 from app.models.flashcard import FlashcardReview
-from app.models.goal import Goal
+from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
 from app.models.quiz import Quiz, QuizQuestion
 from app.models.session import Session as StudySession, SessionKind
@@ -48,10 +50,15 @@ from app.models.session import SessionMaterial
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
+from app.pedagogy.contracts import LearningObjective, PedagogySnapshot, ProfileId
+from app.pedagogy.registry import resolve_profile, snapshot_profile
 from app.strategies.goal_strategies import GoalStrategyFactory
 from app.utils.text import extract_keywords
 
 logger = get_logger(__name__)
+_CANONICAL_TOPIC_PROFILES = tuple(
+    profile_id for profile_id in get_args(ProfileId) if profile_id != "general"
+)
 
 
 class PlanService:
@@ -73,17 +80,32 @@ class PlanService:
         if goal is None or goal.user_id != user_id:
             raise NotFoundError("Meta no encontrada.")
 
+        generation_goal_type = goal.goal_type.value if content_version == 2 else None
         request_hash = self._idempotency_request_hash(
             goal_id,
             document_ids,
             content_version=content_version,
             subject_hint=subject_hint,
             profile_hint=profile_hint,
+            generation_goal_type=generation_goal_type,
+        )
+        legacy_v2_request_hash = (
+            self._idempotency_request_hash(
+                goal_id,
+                document_ids,
+                content_version=content_version,
+                subject_hint=subject_hint,
+                profile_hint=profile_hint,
+            )
+            if content_version == 2
+            else None
         )
         if idempotency_key is not None:
             existing = self._find_idempotent_plan(user_id, idempotency_key)
             if existing is not None:
-                return self._check_idempotency_payload(existing, request_hash), False
+                return self._check_idempotency_payload(
+                    existing, request_hash, legacy_v2_request_hash
+                ), False
 
         # Spent before the plan exists, so a learner over the daily limit gets a 429 and no row.
         spent_day = FreeAiQuota(self.db).consume(user_id) if uses_free_ai(self.db, user_id) else None
@@ -97,6 +119,7 @@ class PlanService:
             content_version=content_version,
             subject_hint=subject_hint,
             profile_hint=profile_hint,
+            generation_goal_type=generation_goal_type,
             idempotency_key=idempotency_key,
             idempotency_request_hash=request_hash if idempotency_key is not None else None,
             free_ai_use_date=spent_day,
@@ -113,7 +136,9 @@ class PlanService:
             winner = self._find_idempotent_plan(user_id, idempotency_key)
             if winner is None:
                 raise
-            return self._check_idempotency_payload(winner, request_hash), False
+            return self._check_idempotency_payload(
+                winner, request_hash, legacy_v2_request_hash
+            ), False
         self.db.refresh(plan)
         return plan, True
 
@@ -125,6 +150,7 @@ class PlanService:
         content_version: int = 1,
         subject_hint: str | None = None,
         profile_hint: str | None = None,
+        generation_goal_type: str | None = None,
     ) -> str:
         canonical_payload = {
             "goal_id": goal_id,
@@ -140,6 +166,8 @@ class PlanService:
             canonical_payload.update(
                 {"content_version": 2, "profile_hint": effective_profile_hint}
             )
+            if generation_goal_type is not None:
+                canonical_payload["generation_goal_type"] = generation_goal_type
         encoded = json.dumps(canonical_payload, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 
@@ -152,8 +180,17 @@ class PlanService:
         ).scalar_one_or_none()
 
     @staticmethod
-    def _check_idempotency_payload(plan: Plan, request_hash: str) -> Plan:
-        if plan.idempotency_request_hash != request_hash:
+    def _check_idempotency_payload(
+        plan: Plan, request_hash: str, legacy_v2_request_hash: str | None = None
+    ) -> Plan:
+        matches_current = plan.idempotency_request_hash == request_hash
+        matches_legacy_v2 = (
+            legacy_v2_request_hash is not None
+            and plan.content_version == 2
+            and plan.generation_goal_type is None
+            and plan.idempotency_request_hash == legacy_v2_request_hash
+        )
+        if not matches_current and not matches_legacy_v2:
             raise ConflictError(
                 "La clave de idempotencia ya se utilizó con una solicitud diferente.",
                 "IDEMPOTENCY_KEY_REUSED",
@@ -309,6 +346,32 @@ def _as_number(value, default, kind):
         return default
 
 
+def _explicit_profile_hint(plan: Plan) -> str | None:
+    profile_hint = plan.profile_hint
+    if profile_hint is not None and profile_hint.strip().casefold() != "auto":
+        return profile_hint
+
+    subject_hint = plan.subject_hint
+    if subject_hint is not None and subject_hint.strip().casefold() != "auto":
+        return subject_hint
+    return None
+
+
+def _topic_profile_bloom_levels(plan: Plan) -> dict[str, list[str]]:
+    explicit_hint = _explicit_profile_hint(plan)
+    if explicit_hint is not None:
+        profile = resolve_profile(explicit_hint, None)
+        return {profile.id: list(profile.bloom_levels)}
+
+    profiles = {
+        profile_id: list(resolve_profile(None, profile_id).bloom_levels)
+        for profile_id in _CANONICAL_TOPIC_PROFILES
+    }
+    general = resolve_profile("general", None)
+    profiles["general"] = list(general.bloom_levels)
+    return profiles
+
+
 class _PlanGone(Exception):
     """The plan was deleted (or left PROCESSING) while it was being generated."""
 
@@ -366,7 +429,10 @@ class _Generator:
     def _generate(self, plan: Plan) -> None:
         goal = self.db.get(Goal, plan.goal_id)
         goal_text = f"{goal.title}. {goal.description}".strip()
-        strategy = GoalStrategyFactory.create(goal.goal_type)
+        strategy_type = goal.goal_type
+        if plan.content_version == 2 and plan.generation_goal_type is not None:
+            strategy_type = GoalType(plan.generation_goal_type)
+        strategy = GoalStrategyFactory.create(strategy_type)
         config = strategy.get_session_config()
         document_ids = plan.document_ids or None
 
@@ -380,11 +446,24 @@ class _Generator:
                 goal_text or goal.title, top_k=8, document_ids=document_ids
             )
             keywords = extract_keywords("\n".join(chunks), limit=8)
-            topics_data = self._analyse_topics(goal_text, strategy, chunks, keywords)
+            topics_data = self._analyse_topics(
+                goal_text, strategy, chunks, keywords, plan=plan
+            )
             if not topics_data:  # never a READY plan with no sessions
                 raise LLMError("La IA no devolvió temas para tu material.", code="LLM_INVALID_RESPONSE")
             topics = self._persist_topics(plan, topics_data)
             self._select(topics)
+            if plan.content_version == 2:
+                self._set_progress(
+                    plan.id, GenerationStage.TOPICS, len(topics), len(topics)
+                )
+        elif plan.content_version == 2 and any(
+            topic.pedagogy_snapshot is None for topic in topics
+        ):
+            raise LLMError(
+                "El plan adaptativo no contiene una instantánea válida para cada tema.",
+                code="LLM_INVALID_RESPONSE",
+            )
         elif not any(topic.selected for topic in topics):
             self._select(topics)
         selected = [topic for topic in topics if topic.selected]
@@ -478,17 +557,38 @@ class _Generator:
         if pacing > 0 and self.llm.requires_request_pacing:
             time.sleep(pacing)
 
-    def _analyse_topics(self, goal_text, strategy, chunks, keywords) -> list[dict]:
+    def _analyse_topics(
+        self, goal_text, strategy, chunks, keywords, *, plan: Plan
+    ) -> list[dict]:
+        adaptive = plan.content_version == 2
         prompt = (
-            topic_analysis.build_topic_analysis_prompt(chunks, goal_text)
+            topic_analysis.build_topic_analysis_prompt(
+                chunks,
+                goal_text,
+                adaptive=adaptive,
+                profile_hint=plan.profile_hint,
+                subject_hint=plan.subject_hint,
+                profile_bloom_levels=(
+                    _topic_profile_bloom_levels(plan) if adaptive else None
+                ),
+            )
             + "\n\n"
             + strategy.get_weighting_prompt()
         )
+        context = {"goal_title": goal_text, "keywords": keywords}
+        if adaptive:
+            context.update(
+                {
+                    "content_version": 2,
+                    "profile_hint": plan.profile_hint,
+                    "subject_hint": plan.subject_hint,
+                }
+            )
         raw = self._llm_call(
             kind="topic_analysis",
             system=topic_analysis.SYSTEM,
             prompt=prompt,
-            context={"goal_title": goal_text, "keywords": keywords},
+            context=context,
         )
         topics = parse_llm_json(raw).get("topics", [])
         if not isinstance(topics, list):
@@ -500,17 +600,58 @@ class _Generator:
         topics: list[PlanTopic] = []
         for item in topics_data:
             subtopics = item.get("subtopics") or []
+            pedagogy_snapshot = None
+            if plan.content_version == 2:
+                pedagogy_snapshot = self._snapshot_topic_pedagogy(plan, item)
             topic = PlanTopic(
                 plan_id=plan.id,
                 name=str(item.get("name") or "Tema")[:255],
                 subtopics=[str(s) for s in subtopics] if isinstance(subtopics, list) else [str(subtopics)],
                 difficulty=min(max(_as_number(item.get("difficulty"), 3, int), 1), 5),
                 relevance=min(max(_as_number(item.get("relevance"), 0.5, float), 0.0), 1.0),
+                pedagogy_snapshot=(
+                    pedagogy_snapshot.model_dump(mode="json")
+                    if pedagogy_snapshot is not None
+                    else None
+                ),
             )
             self.db.add(topic)
             topics.append(topic)
         self.db.flush()
         return topics
+
+    @staticmethod
+    def _snapshot_topic_pedagogy(plan: Plan, item: dict) -> PedagogySnapshot:
+        objectives_data = item.get("objectives")
+        if not isinstance(objectives_data, list) or not 1 <= len(objectives_data) <= 3:
+            raise LLMError(
+                "El proveedor de IA devolvió un tema adaptativo con objetivos inválidos.",
+                code="LLM_INVALID_RESPONSE",
+            )
+
+        try:
+            objectives = [
+                LearningObjective.model_validate(objective)
+                for objective in objectives_data
+            ]
+            objective_ids = [objective.id for objective in objectives]
+            if len(objective_ids) != len(set(objective_ids)):
+                raise ValueError("Learning objective identifiers must be unique per topic.")
+            candidate = item.get("topic_profile")
+            if (
+                not isinstance(candidate, str)
+                or candidate not in _CANONICAL_TOPIC_PROFILES
+            ):
+                candidate = None
+            profile = resolve_profile(
+                _explicit_profile_hint(plan), candidate
+            )
+            return snapshot_profile(profile, objectives)
+        except (PydanticValidationError, TypeError, ValueError) as exc:
+            raise LLMError(
+                "El proveedor de IA devolvió metadatos pedagógicos inválidos.",
+                code="LLM_INVALID_RESPONSE",
+            ) from exc
 
     def _plan_sessions(self, goal_text: str, selected: list[PlanTopic]) -> list[dict]:
         intervals = self.settings.REVIEW_INTERVALS_DAYS

@@ -54,14 +54,27 @@ class MockLLMProvider(LLMProvider):
             # has a meaningful signal.
             difficulty = (i % 5) + 1
             relevance = round(1.0 - (i / max(len(keywords), 1)) * 0.8, 3)
-            topics.append(
-                {
-                    "name": str(name)[:120],
-                    "subtopics": [f"{name} — parte {j + 1}" for j in range(2)],
-                    "difficulty": difficulty,
-                    "relevance": relevance,
-                }
-            )
+            topic = {
+                "name": str(name)[:120],
+                "subtopics": [f"{name} — parte {j + 1}" for j in range(2)],
+                "difficulty": difficulty,
+                "relevance": relevance,
+            }
+            if ctx.get("content_version") == 2:
+                topic.update(
+                    {
+                        "topic_profile": None,
+                        "objectives": [
+                            {
+                                "id": f"topic-{i + 1}-objective-1",
+                                "skill": f"Reconocer las ideas centrales de {name}",
+                                "description": f"Explicar una idea central de {name}.",
+                                "bloom_target": "understand",
+                            }
+                        ],
+                    }
+                )
+            topics.append(topic)
         return {"topics": topics}
 
     def _sessions(self, ctx: dict) -> dict:
