@@ -1,6 +1,6 @@
 # Enseñanza y evaluación adaptadas por perfil académico — Implementation Plan
 
-> **Para implementar:** seguir ODD y `odd/tasks/subject-adaptive-teaching.md` por unidad de comportamiento, con RED/GREEN y evidencia real. Usar solo herramientas y skills disponibles; este plan no presupone subskills `superpowers:*` ni instala herramientas. Las casillas describen trabajo pendiente, no pruebas ejecutadas.
+> Las casillas conservan la secuencia planificada. El [registro de tareas](../../../odd/tasks/subject-adaptive-teaching.md) contiene el estado vigente, los comandos observados y los commits locales de cada unidad.
 
 **Goal:** Incorporar cinco perfiles versionados de razonamiento académico que alineen por tema la enseñanza, las preguntas, la evaluación formativa y la guía de tiempo, sin cambiar el comportamiento v1 ni las sesiones históricas.
 
@@ -12,7 +12,7 @@
 
 ## Revisión de implementación aprobada
 
-El registro de tareas conserva el estado de cada unidad. T0 ya está entregada y T1 tiene implementados los perfiles, la lectura histórica, el hint de solicitud y la identidad v2. El orden de continuación es **V1 → resto de T1 → T2 → T3 → T4 → T5 → T6**. Las decisiones de esta revisión precisan las tareas de abajo.
+V1 verificó la privacidad de la presentación y T1 completó los contratos. Las decisiones de esta revisión precisan las tareas de abajo y permiten que la lectura, la entrega y la interfaz se desarrollen en paralelo una vez fijados los contratos que comparten.
 
 | Unidad | Entrega verificable |
 |---|---|
@@ -28,9 +28,9 @@ En T2, el lógico-deductivo usa ejemplo resuelto y problema, el crítico-argumen
 
 En T3, el detalle compartido de sesión conserva los metadatos y omite puntos de repaso con claves v2. Las rutas antiguas de quiz, resultado y finalización rechazan contenido v2 con `CONTENT_VERSION_MISMATCH`. Una sesión v2 histórica sin contenido íntegro devuelve `CONTENT_NOT_READY`; cuando el plan figura listo, la interfaz guía a crear un plan nuevo. Las tarjetas conservan su interacción de revelado y su ID entero de SM-2.
 
-El piloto usa cinco materiales representativos y un documento mixto, con material e intención fijos para cada par v1/v2. Registra alineación de objetivo/lección/pregunta, formato, claves y respaldo del feedback. Claves incorrectas, filtraciones y fuentes inventadas bloquean la aceptación del caso. Registrar por separado resultados automatizados, navegador y revisión humana por materia.
+El [piloto comparativo](../../subject-adaptive-pilot.md) usa materiales para los cinco perfiles y el respaldo general, además de un documento mixto. Mantiene el material y la intención fijos para cada par v1/v2. Registra alineación de objetivo, lección y pregunta, formato, claves y respaldo del feedback. Claves incorrectas, filtraciones y fuentes inventadas bloquean la aceptación del caso.
 
-**Estado de esta revisión:** El usuario autorizó comenzar en `feature/academic-reasoning-profiles`, creada desde `feature/subject-adaptive-teaching`, sin push, PR ni merge. Existe el commit histórico `38aed29`, que solo cubre la fundación T1 anterior de tres perfiles; no satisface S4. La corrección local de privacidad de T1 sigue sin commit y falta su verificación independiente: la preparación anterior falló (`cp: unrecognized option '--exclude=.git'`) antes de ejecutar pruebas. No se reintenta automáticamente; comenzar código autorizado no equivale a verificarlo ni permite cerrar o entregar una unidad sin sus pruebas requeridas. El trabajador documental dejó una edición parcial y falló por disponibilidad; el padre termina su revisión estructural. S4 todavía no está implementado.
+**Entrega local:** `feature/academic-reasoning-profiles`. El registro documenta los commits verificados y el alcance de la entrega autorizada. El commit `38aed29` pertenece a la primera fundación de perfiles. La corrección de privacidad y sus pruebas independientes posteriores están registradas en V1.
 
 ## Global Constraints
 
@@ -261,7 +261,7 @@ Dependencias secuenciales: T1 → T2 → T3 → T4 → T5 → T6. S6 autoriza co
 
 **Files:** Fila T6. **Consume:** snapshots/perfiles T1, generación T2, entrega T3 y UI T4/T5.
 
-**Interfaces:** mantener `generate_reinforcement_task(session_id: int, user_id: int, spent_day: date | None) -> None`; agregar `build_adaptive_reinforcement_prompt(topic: str, goal: str, failed_points: list[str], excerpt: str, config: SessionConfig, snapshot: PedagogySnapshot) -> str` y utilizar el constructor validado existente.
+**Interfaces:** `generate_reinforcement_task(session_id: int, user_id: int, spent_day: date | None, run_token: str | None = None) -> None`. La llamada de v1 conserva tres argumentos. El trabajo v2 pasa el token y reutiliza `build_adaptive_session_prompt` y el constructor validado de T2. El material anterior orienta el refuerzo y las citas se comprueban contra fragmentos de los documentos seleccionados.
 
 - [ ] **1. RED:** Agregar `test_reinforcement_preserves_full_snapshot_and_revision`, `test_failed_reinforcement_keeps_previous_content`, `test_adaptive_plan_resume_and_delete` y `test_end_to_end_five_profiles_fallback_and_mixed_topics`. Recorrer APIs públicas generar → enseñar → entregar → resultado → refuerzo para cada uno de los cinco perfiles, general fallback y PDF mixto. Comparar todas las propiedades del snapshot (Bloom, formatos, criterio, rangos/overrides, feedback, versión, objetivos y estímulos) antes/después; cambiar el registro no altera lo guardado; nueva revisión invalida entrega anterior; fallo conserva contenido/snapshot; recarga muestra los mismos rangos; borrado conserva cleanup explícito existente.
 - [ ] **2. Observar RED:** `cd backend && python -m pytest tests/test_adaptive_reinforcement.py tests/test_subject_adaptive_flow.py tests/test_session_content_builder.py -q`; nuevos casos v2/refuerzo fallan donde aún no hay integración.
@@ -295,12 +295,11 @@ Dependencias secuenciales: T1 → T2 → T3 → T4 → T5 → T6. S6 autoriza co
 - **Renderizado:** estructuras acotadas y equivalentes textuales previenen XSS y dependencia gráfica; no se generan imágenes ni se ejecuta HTML/SVG modelo.
 - Slices locales según `feature-branch-chain` y S6. Ninguna evidencia ausente se fabrica: antes de cerrar una unidad de riesgo se requiere verificación independiente aplicable; si falta, informar `Needs your decision`. La revisión nativa se rige únicamente por el switch RDD y consentimiento real del usuario; el plan no los reemplaza. No push, PR ni merge.
 
-## Evidencia histórica y verificación pendiente
+## Evidencia del borrador y de la implementación
 
-- **Histórico del borrador previo:** el documento anterior afirmaba una verificación estructural PASS para el plan de seis tareas; eso ocurrió antes de incorporar S4 y no prueba este plan revisado.
-- **Histórico T1:** existe el commit base `38aed29`; la corrección de privacidad permanece local y sin commit. Un verificador independiente devolvió T1/S3 UNVERIFIED porque la preparación del scratch falló con `cp: unrecognized option '--exclude=.git'`; ejecutó cero pruebas y sus restricciones prohíben reintento/fallback. En una ejecución local histórica separada, el round-trip fortalecido reportó 1 prueba y contracts + pipeline reportaron 32; una advertencia deprecada de Starlette y `git diff --check` PASS. Esa evidencia no desbloquea T1 ni valida S4.
-- **Esta revisión documental:** ejecutar solo el chequeo estructural síncrono autorizado. No ejecutar tests backend/frontend, build, linter, navegador, piloto ni el verificador T1. Los comandos RED/GREEN escritos en T1–T6 son checks futuros de implementación; no están ejecutados ni se marcan como hechos aquí.
-- **Implementación S4:** autorizada por S6, todavía no realizada al guardar esta revisión. No hay evidencia de aplicación, navegador o piloto nueva. Los checks estructurales del padre se registran en `odd/tasks/subject-adaptive-teaching.md`, no se confunden con pruebas funcionales.
+- El borrador previo a S4 pasó una verificación estructural. El registro de tareas conserva por separado las pruebas ejecutadas durante la implementación.
+- La primera verificación independiente de T1/S3 se detuvo al preparar su copia temporal. La corrección de privacidad quedó en `ae92bb6` y la verificación independiente de V1 quedó registrada en `22e5567`.
+- El [registro de tareas](../../../odd/tasks/subject-adaptive-teaching.md) recoge la evidencia por unidad. El [piloto](../../subject-adaptive-pilot.md) registra los resultados en modo demo y la revisión pedagógica pendiente.
 
 ## Fuentes educativas conservadas del plan original
 

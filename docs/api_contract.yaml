@@ -333,6 +333,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LearningMode" }
         "404": { description: Sesión no encontrada }
+        "422": { description: Identificador de sesión inválido }
 
   /sessions/{session_id}/learning-v2:
     get:
@@ -347,6 +348,7 @@ paths:
               schema: { $ref: "#/components/schemas/AdaptiveLesson" }
         "404": { description: Sesión no encontrada }
         "409": { description: CONTENT_VERSION_MISMATCH o CONTENT_NOT_READY }
+        "422": { description: Identificador de sesión inválido }
 
   /sessions/{session_id}/result:
     get:
@@ -365,6 +367,7 @@ paths:
   /sessions/{session_id}/reinforcement:
     post:
       summary: Refuerza un repaso con IA (1 llamada; gasta 1 uso gratis si la IA es la incluida)
+      description: En v2 conserva el perfil y el ID del quiz, y abre una revisión nueva al publicar.
       parameters:
         - { name: session_id, in: path, required: true, schema: { type: integer } }
       responses:
@@ -374,12 +377,14 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SessionDetail" }
         "404": { description: Sesión no encontrada }
-        "409": { description: REINFORCEMENT_NOT_AVAILABLE — no es un repaso pendiente, o ya está READY }
+        "409":
+          description: REINFORCEMENT_NOT_AVAILABLE o CONTENT_NOT_READY para contenido v2 incompleto
         "429": { description: FREE_AI_DAILY_LIMIT — sin usos gratis hoy; el estado vuelve a NONE }
 
   /sessions/{session_id}/reinforcement/cancel:
     post:
-      summary: PROCESSING → NONE; en cualquier otro estado no hace nada (no devuelve el uso)
+      summary: Cancela un refuerzo en PROCESSING
+      description: El worker devuelve el uso gratis de la ejecución cancelada al descartar su resultado.
       parameters:
         - { name: session_id, in: path, required: true, schema: { type: integer } }
       responses:
@@ -438,6 +443,79 @@ paths:
           description: >
             CONTENT_VERSION_MISMATCH para contenido v2, o QUIZ_OUTDATED si alguna respuesta nombra una pregunta que el quiz ya no tiene
             (p. ej. lo reemplazó un refuerzo con IA). No se guarda resultado.
+
+  /quizzes/{session_id}/assessment-v2:
+    get:
+      summary: Evaluación adaptativa publicada
+      description: >-
+        Devuelve la revisión, las preguntas y sus estímulos. Cada pregunta tiene
+        una estimación del perfil guardado o una guía de referencia del perfil
+        equivalente para snapshots históricos. Las tarjetas incluyen el texto
+        de revelado. Las soluciones y el feedback respaldado se entregan al calificar.
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Evaluación disponible
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentResponseV2" }
+        "404": { description: Sesión no encontrada }
+        "409":
+          description: CONTENT_VERSION_MISMATCH o CONTENT_NOT_READY
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdaptiveContentConflict" }
+        "422": { description: Identificador de sesión inválido }
+
+  /quizzes/{quiz_id}/assessment-v2/submit:
+    post:
+      summary: Entrega la revisión publicada y actualiza el progreso
+      description: >-
+        Envía exactamente una respuesta por pregunta. La entrega guarda la
+        nota objetiva, el desglose por objetivo y la rúbrica formativa, y
+        completa la sesión en una transacción. Repetir respuestas equivalentes
+        de la misma revisión recupera el resultado guardado.
+      parameters:
+        - { name: quiz_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssessmentSubmissionV2" }
+      responses:
+        "200":
+          description: Resultado de la evaluación adaptativa
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentResultV2" }
+        "400": { description: Respuestas inválidas o incompletas }
+        "404": { description: Quiz no encontrado }
+        "409":
+          description: CONTENT_VERSION_MISMATCH, CONTENT_NOT_READY, QUIZ_OUTDATED o ASSESSMENT_ALREADY_SUBMITTED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdaptiveContentConflict" }
+        "422": { description: Cuerpo de solicitud inválido }
+
+  /quizzes/{session_id}/assessment-v2/result:
+    get:
+      summary: Recupera el resultado guardado de la revisión vigente
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Mismo resultado que la entrega
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentResultV2" }
+        "404": { description: Sesión o resultado no encontrado }
+        "409":
+          description: CONTENT_VERSION_MISMATCH o CONTENT_NOT_READY
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdaptiveContentConflict" }
+        "422": { description: Identificador de sesión inválido }
 
   /dashboard:
     get:
@@ -742,7 +820,8 @@ components:
         last_result:
           description: >-
             Último test enviado (solo en `Plan.sessions`; null si nunca se envió).
-            `correct`/`total` cuentan solo las preguntas de opción múltiple.
+            En v1, `correct` y `total` cuentan preguntas de opción múltiple.
+            En v2 cuentan las preguntas con una clave objetiva.
           nullable: true
           type: object
           properties:
@@ -809,7 +888,729 @@ components:
               objective_ids: { type: array, items: { type: string } }
               content_markdown: { type: string }
               source_refs: { type: array, items: { type: string } }
+              stimulus_id: { type: string, nullable: true }
         content_markdown: { type: string }
+        stimuli: { type: array, items: { $ref: "#/components/schemas/AdaptiveStimulus" } }
+    AdaptiveContentConflict:
+      type: object
+      required: [detail, code]
+      properties:
+        detail: { type: string }
+        code:
+          type: string
+          enum: [CONTENT_VERSION_MISMATCH, CONTENT_NOT_READY, QUIZ_OUTDATED, ASSESSMENT_ALREADY_SUBMITTED]
+    # Public v2 assessment schemas
+    AssessmentResponseV2:
+      properties:
+        quiz_id: {type: integer}
+        revision: {type: string}
+        questions:
+          items:
+            oneOf:
+              - {$ref: '#/components/schemas/FlashcardQuestionResponseV2'}
+              - {$ref: '#/components/schemas/MultipleChoiceQuestionResponseV2'}
+              - {$ref: '#/components/schemas/TrueFalseQuestionResponseV2'}
+              - {$ref: '#/components/schemas/MatchingQuestionResponseV2'}
+              - {$ref: '#/components/schemas/NumericQuestionResponseV2'}
+              - {$ref: '#/components/schemas/SequenceQuestionResponseV2'}
+              - {$ref: '#/components/schemas/RubricQuestionResponseV2'}
+              - {$ref: '#/components/schemas/ShortAnswerQuestionResponseV2'}
+              - {$ref: '#/components/schemas/EssayQuestionResponseV2'}
+              - {$ref: '#/components/schemas/StepByStepQuestionResponseV2'}
+            discriminator:
+              propertyName: kind
+              mapping:
+                essay: '#/components/schemas/EssayQuestionResponseV2'
+                flashcard: '#/components/schemas/FlashcardQuestionResponseV2'
+                matching: '#/components/schemas/MatchingQuestionResponseV2'
+                multiple_choice: '#/components/schemas/MultipleChoiceQuestionResponseV2'
+                numeric: '#/components/schemas/NumericQuestionResponseV2'
+                rubric: '#/components/schemas/RubricQuestionResponseV2'
+                sequence: '#/components/schemas/SequenceQuestionResponseV2'
+                short_answer: '#/components/schemas/ShortAnswerQuestionResponseV2'
+                step_by_step: '#/components/schemas/StepByStepQuestionResponseV2'
+                true_false: '#/components/schemas/TrueFalseQuestionResponseV2'
+          type: array
+        stimuli:
+          items: {$ref: '#/components/schemas/AdaptiveStimulus'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [quiz_id, revision, questions]
+    AssessmentSubmissionV2:
+      properties:
+        revision: {type: string}
+        answers:
+          items:
+            oneOf:
+              - {$ref: '#/components/schemas/FlashcardAnswerV2'}
+              - {$ref: '#/components/schemas/MultipleChoiceAnswerV2'}
+              - {$ref: '#/components/schemas/TrueFalseAnswerV2'}
+              - {$ref: '#/components/schemas/MatchingAnswerV2'}
+              - {$ref: '#/components/schemas/NumericAnswerV2'}
+              - {$ref: '#/components/schemas/SequenceAnswerV2'}
+              - {$ref: '#/components/schemas/RubricAnswerV2'}
+              - {$ref: '#/components/schemas/ShortAnswerAnswerV2'}
+              - {$ref: '#/components/schemas/EssayAnswerV2'}
+              - {$ref: '#/components/schemas/StepByStepAnswerV2'}
+            discriminator:
+              propertyName: kind
+              mapping:
+                essay: '#/components/schemas/EssayAnswerV2'
+                flashcard: '#/components/schemas/FlashcardAnswerV2'
+                matching: '#/components/schemas/MatchingAnswerV2'
+                multiple_choice: '#/components/schemas/MultipleChoiceAnswerV2'
+                numeric: '#/components/schemas/NumericAnswerV2'
+                rubric: '#/components/schemas/RubricAnswerV2'
+                sequence: '#/components/schemas/SequenceAnswerV2'
+                short_answer: '#/components/schemas/ShortAnswerAnswerV2'
+                step_by_step: '#/components/schemas/StepByStepAnswerV2'
+                true_false: '#/components/schemas/TrueFalseAnswerV2'
+          type: array
+      additionalProperties: false
+      type: object
+      required: [revision, answers]
+    AssessmentResultV2:
+      properties:
+        quiz_id: {type: integer}
+        revision: {type: string}
+        score: {type: number, maximum: 100.0, minimum: 0.0}
+        correct: {type: integer, minimum: 0.0}
+        total: {type: integer, minimum: 0.0}
+        detail:
+          items: {$ref: '#/components/schemas/AssessmentResultItemV2'}
+          type: array
+        formative_feedback:
+          items: {$ref: '#/components/schemas/FormativeFeedbackV2'}
+          type: array
+        objective_results:
+          items: {$ref: '#/components/schemas/ObjectiveResultV2'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [quiz_id, revision, score, correct, total, detail]
+    AdaptiveStimulus:
+      oneOf:
+        - {$ref: '#/components/schemas/DiagramStimulus'}
+        - {$ref: '#/components/schemas/GraphStimulus'}
+        - {$ref: '#/components/schemas/CaseStimulus'}
+        - {$ref: '#/components/schemas/LongTextStimulus'}
+      discriminator:
+        propertyName: kind
+        mapping: {case: '#/components/schemas/CaseStimulus', diagram: '#/components/schemas/DiagramStimulus', graph: '#/components/schemas/GraphStimulus',
+          long_text: '#/components/schemas/LongTextStimulus'}
+    FlashcardQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [flashcard]
+        flashcard_answer: {type: string}
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, flashcard_answer]
+    MultipleChoiceQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [multiple_choice]
+        mode:
+          type: string
+          enum: [single, multiple]
+          default: single
+        options:
+          items: {type: string}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, options]
+    TrueFalseQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [true_false]
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind]
+    MatchingQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [matching]
+        matching_left:
+          items: {$ref: '#/components/schemas/AssessmentMatchingItem'}
+          type: array
+        matching_right:
+          items: {$ref: '#/components/schemas/AssessmentMatchingItem'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, matching_left, matching_right]
+    NumericQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [numeric]
+        units: {type: string, nullable: true}
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind]
+    SequenceQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [sequence]
+        sequence_items:
+          items: {$ref: '#/components/schemas/AssessmentSequenceItem'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, sequence_items]
+    RubricQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [rubric]
+        rubric_criteria:
+          items: {$ref: '#/components/schemas/AssessmentRubricCriterion'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, rubric_criteria]
+    ShortAnswerQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [short_answer]
+        grading_mode:
+          type: string
+          enum: [exact, formative]
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, grading_mode]
+    EssayQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [essay]
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind]
+    StepByStepQuestionResponseV2:
+      properties:
+        question_id: {type: string}
+        prompt: {type: string}
+        objective_ids:
+          items: {type: string}
+          type: array
+        estimated_minutes_per_question:
+          anyOf:
+            - {$ref: '#/components/schemas/MinuteRange'}
+            - type: string
+              nullable: true
+              enum: [null]
+        stimulus_id: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [step_by_step]
+        grading_mode:
+          type: string
+          enum: [exact, numeric, formative]
+      additionalProperties: false
+      type: object
+      required: [question_id, prompt, objective_ids, kind, grading_mode]
+    FlashcardAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [flashcard]
+        question_id: {type: string, minLength: 1}
+        quality: {type: integer, maximum: 5.0, minimum: 0.0}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, quality]
+    MultipleChoiceAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [multiple_choice]
+        question_id: {type: string, minLength: 1}
+        selected_option: {type: string, nullable: true}
+        selected_options:
+          items: {type: string}
+          type: array
+          maxItems: 8
+          minItems: 1
+          nullable: true
+      additionalProperties: false
+      type: object
+      required: [kind, question_id]
+    TrueFalseAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [true_false]
+        question_id: {type: string, minLength: 1}
+        answer: {type: boolean}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, answer]
+    MatchingAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [matching]
+        question_id: {type: string, minLength: 1}
+        pairs:
+          items: {$ref: '#/components/schemas/AssessmentMatchingPair'}
+          type: array
+          maxItems: 8
+          minItems: 2
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, pairs]
+    NumericAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [numeric]
+        question_id: {type: string, minLength: 1}
+        value: {type: string, maxLength: 64}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, value]
+    SequenceAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [sequence]
+        question_id: {type: string, minLength: 1}
+        ordered_ids:
+          items: {type: string}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, ordered_ids]
+    RubricAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [rubric]
+        question_id: {type: string, minLength: 1}
+        text: {type: string, maxLength: 2000, minLength: 1}
+        criterion_ratings:
+          additionalProperties: {type: integer, maximum: 2.0, minimum: 0.0}
+          type: object
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, text, criterion_ratings]
+    ShortAnswerAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [short_answer]
+        question_id: {type: string, minLength: 1}
+        text: {type: string, maxLength: 2000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, text]
+    EssayAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [essay]
+        question_id: {type: string, minLength: 1}
+        text: {type: string, maxLength: 2000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, text]
+    StepByStepAnswerV2:
+      properties:
+        kind:
+          type: string
+          enum: [step_by_step]
+        question_id: {type: string, minLength: 1}
+        steps: {type: string, maxLength: 2000, default: ''}
+        final_answer: {type: string, maxLength: 2000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [kind, question_id, final_answer]
+    AssessmentResultItemV2:
+      properties:
+        question_id: {type: string}
+        kind:
+          type: string
+          enum: [flashcard, multiple_choice, true_false, matching, numeric, sequence, short_answer, essay, step_by_step]
+        correct: {type: boolean, nullable: true}
+        quality: {type: integer, nullable: true}
+        submitted_answer:
+          anyOf:
+            - {type: boolean}
+            - {type: string}
+            - items: {type: string}
+              type: array
+            - items: {$ref: '#/components/schemas/AssessmentMatchingPair'}
+              type: array
+            - type: string
+              nullable: true
+              enum: [null]
+        expected_answer:
+          anyOf:
+            - {type: boolean}
+            - {type: string}
+            - items: {type: string}
+              type: array
+            - items: {$ref: '#/components/schemas/AssessmentMatchingPair'}
+              type: array
+            - type: string
+              nullable: true
+              enum: [null]
+        feedback: {type: string, default: ''}
+        grounded_feedback:
+          items: {$ref: '#/components/schemas/GroundedAssessmentFeedback'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, kind]
+    FormativeFeedbackV2:
+      properties:
+        question_id: {type: string}
+        criterion_ratings:
+          additionalProperties: {type: integer}
+          type: object
+        criteria:
+          items: {$ref: '#/components/schemas/AssessmentRubricCriterion'}
+          type: array
+        exemplar: {type: string, nullable: true}
+        message: {type: string}
+        submitted_text: {type: string, maxLength: 2000, nullable: true}
+        submitted_final_answer: {type: string, maxLength: 2000, nullable: true}
+        procedure_rubric_weights:
+          anyOf:
+            - {$ref: '#/components/schemas/ProcedureRubricWeights'}
+            - type: string
+              nullable: true
+              enum: [null]
+        grounded_feedback:
+          items: {$ref: '#/components/schemas/GroundedAssessmentFeedback'}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [question_id, message]
+    ObjectiveResultV2:
+      properties:
+        objective_id: {type: string, minLength: 1}
+        correct: {type: integer, minimum: 0.0}
+        total: {type: integer, minimum: 1.0}
+      additionalProperties: false
+      type: object
+      required: [objective_id, correct, total]
+    DiagramStimulus:
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        objective_ids:
+          items: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+          type: array
+          maxItems: 12
+          minItems: 1
+        origin:
+          type: string
+          enum: [derived]
+        source_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
+          nullable: true
+        kind:
+          type: string
+          enum: [diagram]
+        nodes:
+          items: {$ref: '#/components/schemas/DiagramNode'}
+          type: array
+          maxItems: 12
+          minItems: 2
+        edges:
+          items: {$ref: '#/components/schemas/DiagramEdge'}
+          type: array
+          maxItems: 18
+          minItems: 1
+        text_alternative: {type: string, maxLength: 24000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, kind, nodes, edges, text_alternative]
+    GraphStimulus:
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        objective_ids:
+          items: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+          type: array
+          maxItems: 12
+          minItems: 1
+        origin:
+          type: string
+          enum: [derived]
+        source_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
+          nullable: true
+        kind:
+          type: string
+          enum: [graph]
+        x_label: {type: string, maxLength: 160, minLength: 1}
+        y_label: {type: string, maxLength: 160, minLength: 1}
+        x_unit: {type: string, maxLength: 160, minLength: 1, nullable: true}
+        y_unit: {type: string, maxLength: 160, minLength: 1, nullable: true}
+        series:
+          items: {$ref: '#/components/schemas/GraphSeries'}
+          type: array
+          maxItems: 4
+          minItems: 1
+        text_alternative: {type: string, maxLength: 24000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, kind, x_label, y_label, series, text_alternative]
+    CaseStimulus:
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        objective_ids:
+          items: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+          type: array
+          maxItems: 12
+          minItems: 1
+        origin:
+          type: string
+          enum: [derived, generated_example]
+        source_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
+          nullable: true
+        kind:
+          type: string
+          enum: [case]
+        body_markdown: {type: string, maxLength: 4000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, kind, body_markdown]
+    LongTextStimulus:
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        objective_ids:
+          items: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+          type: array
+          maxItems: 12
+          minItems: 1
+        origin:
+          type: string
+          enum: [derived]
+        source_id:
+          type: string
+          maxLength: 80
+          minLength: 1
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_.:-]*$
+          nullable: true
+        kind:
+          type: string
+          enum: [long_text]
+        body_markdown: {type: string, maxLength: 4000, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, kind, body_markdown]
+    AssessmentMatchingItem:
+      properties:
+        id: {type: string, minLength: 1}
+        text: {type: string, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, text]
+    AssessmentSequenceItem:
+      properties:
+        id: {type: string, minLength: 1}
+        text: {type: string, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, text]
+    AssessmentRubricCriterion:
+      properties:
+        criterion_id: {type: string, minLength: 1}
+        description: {type: string, minLength: 1}
+        descriptors:
+          items: {type: string}
+          type: array
+      additionalProperties: false
+      type: object
+      required: [criterion_id, description]
+    AssessmentMatchingPair:
+      properties:
+        left_id: {type: string, minLength: 1}
+        right_id: {type: string, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [left_id, right_id]
+    GroundedAssessmentFeedback:
+      properties:
+        mode:
+          type: string
+          enum: [formula, chapter_reference, counterargument]
+        text: {type: string, maxLength: 1400, minLength: 1}
+        source_id: {type: string, nullable: true}
+      additionalProperties: false
+      type: object
+      required: [mode, text]
+    ProcedureRubricWeights:
+      properties:
+        result: {type: number, maximum: 1.0, exclusiveMinimum: true, minimum: 0.0}
+        procedure: {type: number, maximum: 1.0, exclusiveMinimum: true, minimum: 0.0}
+      additionalProperties: false
+      type: object
+      required: [result, procedure]
+    DiagramNode:
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        label: {type: string, maxLength: 160, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [id, label]
+    DiagramEdge:
+      properties:
+        from_id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        to_id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        label: {type: string, maxLength: 160, minLength: 1}
+      additionalProperties: false
+      type: object
+      required: [from_id, to_id, label]
+    GraphSeries:
+      properties:
+        name: {type: string, maxLength: 160, minLength: 1}
+        points:
+          items: {$ref: '#/components/schemas/GraphPoint'}
+          type: array
+          maxItems: 30
+          minItems: 1
+      additionalProperties: false
+      type: object
+      required: [name, points]
+    GraphPoint:
+      properties:
+        x:
+          anyOf:
+            - {type: string, maxLength: 160, minLength: 1}
+            - {type: number}
+        y: {type: number}
+      additionalProperties: false
+      type: object
+      required: [x, y]
     PedagogySnapshot:
       type: object
       additionalProperties: false

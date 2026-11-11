@@ -1,6 +1,6 @@
 # Estado del Proyecto — StudyAI
 
-Última actualización: 2026-09-30.
+Última actualización: 2026-11-11.
 
 Este archivo describe el estado implementado del monorepo. El plan multi-agente
 original se conserva en `studyai_multiagent_plan.md` como referencia histórica;
@@ -11,9 +11,10 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - Backend FastAPI y frontend Vite/React funcionando como monorepo.
 - Modo demo operativo sin claves ni dependencias RAG pesadas.
 - Generación de planes en segundo plano con `2 + N` llamadas LLM.
+- Enseñanza y evaluación v2 opt-in con cinco perfiles académicos y respaldo general.
 - Configuración BYO-key con ciclo `PUT clave → PATCH borrador → POST test → POST activate`.
-- Suite backend: `239 passed` en la última verificación.
-- Frontend: lint, 107 pruebas Vitest, build de producción, typecheck QA y suites QA pasan en la verificación del 2026-09-30; el build aún advierte un chunk JS >500 kB (825.02 kB minificado, 244.66 kB gzip en build local).
+- Backend: `733 passed` en la verificación del 2026-11-11. El diferencial de 21 respuestas v1 coincide con la base `59a73b4`.
+- Frontend: 391 pruebas Vitest, chequeo TypeScript y build de producción en la verificación del 2026-11-11. QA aislado pasó 11 pruebas de navegador, 3 de API con Playwright y 21 solicitudes con Bruno. Vite advierte un chunk JS de 524,81 kB minificado (165,66 kB gzip).
 
 ## Fases
 
@@ -39,10 +40,12 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - [x] NVIDIA limitado a modelos curados, endpoint fijo, polling NVCF tras `202` y sin repetir POST.
 - [x] Revisión, fingerprint y evidencia persistida para activar credenciales verificadas.
 - [x] SM-2, Pareto, estrategias de meta, generación asíncrona y eventos de sesión.
+- [x] Instantáneas de perfil por tema, lecciones y evaluaciones con objetivos, y refuerzo v2 con control de revisión.
 
 ### Fase 3 — Frontend ✅
 
 - [x] Documentos, metas, planes con polling, sesiones, quizzes y dashboard.
+- [x] Selector opt-in desde Inicio y Planes, lecciones por perfil y evaluación v2 con resultado recuperable y reflexión local.
 - [x] Página de configuración con catálogo servido por backend y estado runtime efectivo.
 - [x] Manejo de conflictos de revisión, modelos históricos incompatibles y restricciones de NVIDIA.
 - [x] Enlaces de YouTube construidos como búsquedas a partir de keywords.
@@ -52,6 +55,7 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - [x] Pruebas backend unitarias, de integración y de contratos de proveedores.
 - [x] Pruebas frontend de errores API y `SettingsPage` con Vitest/Testing Library.
 - [x] Typecheck, build frontend y sincronización del contrato API.
+- [x] Piloto comparativo automatizado en modo demo, diferencial v1 y recorridos v2 en Chromium.
 - [x] README, instrucciones de agentes y documentación de arquitectura actualizados.
 
 ## Seguridad y límites vigentes
@@ -67,11 +71,12 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 
 - Autenticación real y multiusuario.
 - Rate limiting propio de la aplicación.
-- Ocultar respuestas del quiz hasta el envío.
+- Ocultar las respuestas del quiz v1 hasta el envío. La evaluación v2 ya aplica la proyección pública y el revelado posterior.
 - Integración de suscripciones ChatGPT Plus/Pro mediante Local Codex.
 - Integración de Claude Pro/Max, pendiente de autorización y contrato oficial.
 - Rediseño visual amplio y optimización adicional de PDF/tokens; la extracción y recuperación actuales siguen funcionando con fallbacks.
 - Verificación live con cuentas reales de cada proveedor; la suite usa transporte simulado y no consume claves.
+- Revisión pedagógica humana del [piloto de perfiles académicos](subject-adaptive-pilot.md).
 
 ## Fuentes de verdad
 

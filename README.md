@@ -398,6 +398,40 @@ dedicadas siguen disponibles para tener más control.
 7. **Estadísticas**: precisión por periodo, racha, temas débiles y próximas
    revisiones.
 
+### Enseñanza por perfil académico
+
+En **Inicio** y **Planes**, activa «Adaptar la enseñanza y evaluación al perfil
+académico» antes de generar. «Automático por tema» puede elegir un perfil
+distinto para cada tema del mismo documento. También puedes elegir un perfil
+lógico-deductivo, crítico-argumentativo, lingüístico-interpretativo,
+sistémico-empírico o aplicado-práctico. StudyAI conserva el perfil general como
+respaldo y admite las solicitudes antiguas con `subject_hint` `history`,
+`mathematics` o `general`.
+
+Cada sesión adaptativa guarda sus objetivos, los niveles de Bloom disponibles,
+los formatos y la configuración del perfil que usó al generar. Los rangos de
+tiempo se muestran como guía de estudio. Son valores iniciales configurados
+por perfil. Las sesiones v2 históricas con una configuración anterior reciben
+la guía de referencia del perfil equivalente. Los diagramas y gráficas
+incluyen una descripción o una tabla. Los casos inventados se identifican como
+ejemplos generados y las referencias al material se limitan a los fragmentos
+recuperados.
+
+Según el perfil, la evaluación puede combinar tarjetas, selección única o
+múltiple, verdadero/falso, emparejamiento, ordenamiento, respuesta numérica o
+corta, ensayo, desarrollo paso a paso y ejercicios con rúbrica. La nota y el
+desglose por objetivo cuentan preguntas con clave exacta. Las tarjetas
+actualizan SM-2. Después de entregar puedes consultar las soluciones y
+contrastar tus respuestas escritas con una rúbrica. La reflexión personal dura
+la visita y el resultado guardado se recupera al volver.
+
+Desde **Práctica → Preguntas**, un plan adaptativo ofrece enlaces a las
+evaluaciones de sus sesiones. Un repaso con refuerzo puede publicar una nueva
+revisión conservando el perfil y los objetivos. Si la evaluación cambia
+mientras la respondes, vuelve a cargar las preguntas antes de entregar.
+Si un plan histórico figura listo y su contenido v2 está incompleto, crea un
+plan nuevo para generar la lección y la evaluación.
+
 ---
 
 ## API (resumen)
@@ -419,9 +453,14 @@ en `/docs`.
 | `POST` | `/plans/{id}/resume` | Continúa un plan incompleto (`FAILED`); genera solo lo que falta (409 si no es reanudable, 429 sin usos gratis) |
 | `DELETE` | `/plans/{id}` | Elimina el plan (sesiones, quizzes y repasos incluidos) |
 | `GET`  | `/sessions/{id}` | Detalle de sesión (con material) |
+| `GET`  | `/sessions/{id}/learning-mode` | Versión del contenido de la sesión |
+| `GET`  | `/sessions/{id}/learning-v2` | Lección adaptativa publicada |
 | `POST` | `/sessions/{id}/complete` | Marca la sesión como completada |
 | `GET`  | `/quizzes/{session_id}` | Quiz de una sesión |
 | `POST` | `/quizzes/{quiz_id}/submit` | Envía respuestas, califica y actualiza SM-2 |
+| `GET`  | `/quizzes/{session_id}/assessment-v2` | Preguntas públicas de la evaluación adaptativa |
+| `GET`  | `/quizzes/{session_id}/assessment-v2/result` | Resultado adaptativo persistido |
+| `POST` | `/quizzes/{quiz_id}/assessment-v2/submit` | Entrega de la revisión adaptativa, calificación y progreso |
 | `GET`  | `/dashboard` | Métricas de progreso |
 | `GET`  | `/llm-settings/catalog` | Metadatos de proveedores LLM soportados |
 | `GET` | `/llm-settings/OLLAMA/models` | Modelos locales instalados en Ollama |

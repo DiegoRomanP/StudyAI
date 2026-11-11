@@ -155,6 +155,28 @@ Completing a session (`POST /sessions/{id}/complete`) publishes `session.complet
 per-flashcard quality ratings (0–5); `ProgressService` applies `calculate_next_review` (SM-2,
 `app/algorithms/sm2.py`) to update `FlashcardReview` rows.
 
+#### Profile-adaptive content v2
+
+`POST /plans/generate` opts in with `content_version=2` and accepts an optional
+`profile_hint`. Topic analysis resolves a profile and learning objectives for each
+topic in the first LLM call. The topic checkpoint stores the snapshot and the
+plan stores the generation goal type. Resuming uses those persisted values. The
+merged content call validates lesson and assessment together before writing a
+session. Quiz flashcards retain integer IDs for SM-2. Other v2 questions and
+their keys live in the versioned adaptive payload.
+
+The client reads `/sessions/{id}/learning-mode` before choosing a lesson or quiz
+endpoint. V2 assessment reads project public DTOs and omit answer keys and
+grounded feedback. Submission claims the session before the quiz, validates the
+revision and persists the result in the same transaction as the completion
+effects. An equivalent replay returns the saved result. Only objective items
+contribute to the v2 score and mastery.
+
+Reinforcement generates a replacement against the stored profile and goal
+strategy. The v2 job checks its run token before publishing. Publishing keeps
+the quiz ID and opens a new assessment revision. Cancellation and completion
+invalidate an active token, so a superseded task cannot replace the quiz.
+
 **Deleting a plan (`DELETE /plans/{id}`, `PlanService.delete_plan`) must clean up `FlashcardReview`
 rows explicitly** — `FlashcardReview.question_id` points *at* a `QuizQuestion` but isn't a child of
 it in the ORM's `cascade="all, delete-orphan"` chain (`Plan` → `Session` → `Quiz` → `QuizQuestion`),
