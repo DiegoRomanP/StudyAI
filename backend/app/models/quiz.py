@@ -7,6 +7,7 @@ import enum
 from sqlalchemy import Enum, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.algorithms.adaptive_route import adaptive_objective_grades, is_adaptive_result
 from app.db.base import Base
 from app.models.mixins import TimestampMixin
 
@@ -71,15 +72,20 @@ class QuizResult(TimestampMixin, Base):
 
     quiz = relationship("Quiz", back_populates="results")
 
-    # Only multiple-choice answers are graded; flashcards are self-rated for SM-2.
     @property
     def total(self) -> int:
-        return sum(1 for entry in (self.detail or {}).values() if entry.get("type") == "multiple_choice")
+        detail = self.detail or {}
+        if is_adaptive_result(detail):
+            return len(adaptive_objective_grades(detail))
+        return sum(1 for entry in detail.values() if entry.get("type") == "multiple_choice")
 
     @property
     def correct(self) -> int:
+        detail = self.detail or {}
+        if is_adaptive_result(detail):
+            return sum(adaptive_objective_grades(detail).values())
         return sum(
             1
-            for entry in (self.detail or {}).values()
+            for entry in detail.values()
             if entry.get("type") == "multiple_choice" and entry.get("correct") is True
         )

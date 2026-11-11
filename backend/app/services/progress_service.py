@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.algorithms.adaptive_route import is_adaptive_result
 from app.algorithms.sm2 import calculate_next_review
 from app.core.logging import get_logger
 from app.events.session_events import (
@@ -125,7 +126,7 @@ class ProgressService:
                 completed_at=result.created_at or session.completed_at,
             )
             for result, session in rows
-            if _has_multiple_choice(result)
+            if _has_objective_score(result)
         ]
 
     def _upcoming_reviews(self, user_id: int) -> list[UpcomingReview]:
@@ -138,9 +139,10 @@ class ProgressService:
         ][:14]
 
 
-def _has_multiple_choice(result: QuizResult) -> bool:
-    """Only multiple-choice answers are graded; flashcard ratings feed SM-2, not the score."""
+def _has_objective_score(result: QuizResult) -> bool:
     detail = result.detail or {}
+    if is_adaptive_result(detail):
+        return result.total > 0
     return any(
         isinstance(entry, dict) and entry.get("type") == "multiple_choice"
         for entry in detail.values()

@@ -41,8 +41,27 @@ def effective_ladder(ladder: Sequence[int]) -> tuple[int, ...]:
     return DEFAULT_LADDER
 
 
-def exam_score(detail: Mapping[str, Mapping]) -> float | None:
+def is_adaptive_result(detail: Mapping[str, object]) -> bool:
+    meta = detail.get("_meta")
+    return isinstance(meta, Mapping) and meta.get("type") == "_meta" and meta.get("schema_version") == 2
+
+
+def adaptive_objective_grades(detail: Mapping[str, object]) -> dict[str, bool]:
+    grades: dict[str, bool] = {}
+    for question_id, entry in detail.items():
+        if isinstance(entry, Mapping) and entry.get("objective") is True:
+            correct = entry.get("correct")
+            if isinstance(correct, bool):
+                grades[question_id] = correct
+    return grades
+
+
+def exam_score(detail: Mapping[str, object]) -> float | None:
     """Exam score in 0..1 from a ``QuizResult.detail``; None when nothing was answered."""
+    if is_adaptive_result(detail):
+        grades = adaptive_objective_grades(detail)
+        return sum(grades.values()) / len(grades) if grades else None
+
     earned = 0.0
     total = 0.0
     for entry in detail.values():
