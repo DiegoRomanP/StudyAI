@@ -1,12 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { adaptiveLearningApi } from "../api/adaptiveLearning";
+import {
+  adaptiveLearningApi,
+  type AssessmentSubmissionV2,
+} from "../api/adaptiveLearning";
 
 export const adaptiveLearningKeys = {
   mode: (sessionId: number | null) => ["adaptive-learning", "mode", sessionId] as const,
   lesson: (sessionId: number | null) => ["adaptive-learning", "lesson", sessionId] as const,
-  assessment: (sessionId: number) => ["adaptive-learning", "assessment", sessionId] as const,
-  result: (sessionId: number) => ["adaptive-learning", "result", sessionId] as const,
+  assessment: (sessionId: number | null) => ["adaptive-learning", "assessment", sessionId] as const,
+  result: (sessionId: number | null) => ["adaptive-learning", "result", sessionId] as const,
 };
 
 /** The session's version is resolved before any version-specific content is requested. */
@@ -28,4 +31,41 @@ export function useAdaptiveLearning(sessionId: number | null) {
   });
 
   return { mode, lesson };
+}
+
+/** Loads the public, key-free assessment after the session mode has selected v2. */
+export function useAdaptiveAssessment(sessionId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: adaptiveLearningKeys.assessment(sessionId),
+    queryFn: () => adaptiveLearningApi.getAssessmentV2(sessionId as number),
+    enabled: sessionId !== null && enabled,
+  });
+}
+
+/** Reads the persisted result only when the route/session state calls for it. */
+export function useAdaptiveAssessmentResult(sessionId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: adaptiveLearningKeys.result(sessionId),
+    queryFn: () => adaptiveLearningApi.getAssessmentResultV2(sessionId as number),
+    enabled: sessionId !== null && enabled,
+  });
+}
+
+/** Saves the result in cache and refreshes the existing progress projections. */
+export function useSubmitAdaptiveAssessment(sessionId: number, planId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ quizId, input }: { quizId: number; input: AssessmentSubmissionV2 }) =>
+      adaptiveLearningApi.submitAssessmentV2(quizId, input),
+    onSuccess: async (result) => {
+      queryClient.setQueryData(adaptiveLearningKeys.result(sessionId), result);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["session", sessionId] }),
+        queryClient.invalidateQueries({ queryKey: ["plan", planId] }),
+        queryClient.invalidateQueries({ queryKey: ["plans"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+  });
 }

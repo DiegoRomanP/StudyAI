@@ -103,7 +103,7 @@ function DiagramDescription({ stimulus }: { stimulus: DiagramStimulus }) {
   );
 }
 
-function StimulusCard({ stimulus }: { stimulus: LessonStimulus }) {
+export function StimulusCard({ stimulus }: { stimulus: LessonStimulus }) {
   return (
     <Card className="space-y-3 bg-surface-subtle" aria-label={`Estímulo: ${stimulus.title}`}>
       <h4 className="font-semibold text-text-primary">{stimulus.title}</h4>

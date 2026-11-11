@@ -7,6 +7,7 @@ import { getApiErrorMessage } from "../api/errors";
 import type { LearningResponseV2 } from "../api/adaptiveLearning";
 import type { PlanTopicDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
+import { AdaptiveAssessment } from "../components/session/AdaptiveAssessment";
 import { AnswerReview } from "../components/session/AnswerReview";
 import { LessonBlocks } from "../components/session/LessonBlocks";
 import { QuizPhase } from "../components/session/QuizPhase";
@@ -15,7 +16,12 @@ import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
-import { useAdaptiveLearning } from "../hooks/useAdaptiveLearning";
+import {
+  useAdaptiveAssessment,
+  useAdaptiveAssessmentResult,
+  useAdaptiveLearning,
+  useSubmitAdaptiveAssessment,
+} from "../hooks/useAdaptiveLearning";
 import { usePlan, useQuiz, useSession, useSessionResult } from "../hooks/queries";
 import { clearQuizDraft } from "../lib/quizDraft";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
@@ -337,8 +343,11 @@ function AdaptiveSessionFlow({
   lesson: LearningResponseV2;
   updateError: ReactNode;
 }) {
-  const [searchParams] = useSearchParams();
-  const [phase, setPhase] = useState<Phase>(() => initialPhase(searchParams.get("fase")));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const completed = session.status === "COMPLETED";
+  const [phase, setPhase] = useState<Phase>(() =>
+    completed && searchParams.get("reintento") === "1" ? "stats" : initialPhase(searchParams.get("fase")),
+  );
   const isReview = session.kind === "REVIEW";
   const reinforced = session.reinforcement_status === "READY";
   const showReviewPanel = isReview && session.status === "PENDING" && !reinforced;
@@ -353,6 +362,14 @@ function AdaptiveSessionFlow({
       <X aria-hidden="true" className="h-5 w-5" />
     </ButtonLink>
   );
+
+  function openResult() {
+    setPhase("stats");
+    const next = new URLSearchParams(searchParams);
+    next.set("fase", "resultado");
+    next.delete("reintento");
+    setSearchParams(next, { replace: true });
+  }
 
   return (
     <div className="space-y-4">
@@ -381,33 +398,108 @@ function AdaptiveSessionFlow({
       )}
 
       {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
-      {(phase === "test" || phase === "done") && (
-        <Card className="space-y-3" aria-labelledby="adaptive-assessment-title">
-          <h2 id="adaptive-assessment-title" className="font-display text-lg font-semibold text-text-primary">
-            Evaluación adaptativa
-          </h2>
-          <p className="text-sm text-text-muted">
-            Esta sesión usa una evaluación vinculada a sus objetivos de aprendizaje.
-          </p>
-          <Button type="button" variant="secondary" onClick={() => setPhase("study")}>
-            Volver al material
-          </Button>
-        </Card>
-      )}
-      {phase === "stats" && (
-        <Card className="space-y-3" aria-labelledby="adaptive-results-title">
-          <h2 id="adaptive-results-title" className="font-display text-lg font-semibold text-text-primary">
-            Resultados adaptativos
-          </h2>
-          <p className="text-sm text-text-muted">
-            El resultado se consulta desde la evaluación vinculada a esta sesión.
-          </p>
-          <Button type="button" onClick={() => setPhase("test")}>
-            Abrir evaluación
-          </Button>
-        </Card>
+      {(phase === "test" || phase === "stats") && (
+        <AdaptiveAssessmentPhase
+          session={session}
+          lesson={lesson}
+          showResult={phase === "stats" || completed}
+          onOpenAssessment={() => setPhase("test")}
+          onResult={openResult}
+        />
       )}
     </div>
+  );
+}
+
+function AdaptiveAssessmentPhase({
+  session,
+  lesson,
+  showResult,
+  onOpenAssessment,
+  onResult,
+}: {
+  session: SessionDetailDTO;
+  lesson: LearningResponseV2;
+  showResult: boolean;
+  onOpenAssessment: () => void;
+  onResult: () => void;
+}) {
+  const assessment = useAdaptiveAssessment(session.id);
+  const result = useAdaptiveAssessmentResult(session.id, showResult);
+  const submit = useSubmitAdaptiveAssessment(session.id, session.plan_id);
+
+  if (showResult && !result.data && axios.isAxiosError(result.error) && result.error.response?.status === 404) {
+    return (
+      <EmptyState
+        icon={BarChart3}
+        title="Esta sesión aún no tiene resultado"
+        description={session.status === "PENDING" ? "Entrega la evaluación para consultar el resultado." : undefined}
+        action={session.status === "PENDING" ? (
+          <Button type="button" onClick={onOpenAssessment}>Abrir evaluación</Button>
+        ) : undefined}
+      />
+    );
+  }
+
+  const waiting = !assessment.data ? assessment : showResult && !result.data ? result : null;
+  if (waiting?.isError) {
+    if (axios.isAxiosError<{ code?: unknown }>(waiting.error) && waiting.error.response?.data?.code === "CONTENT_NOT_READY") {
+      return (
+        <AdaptiveContentNotReady session={session} updateError={null} onRetry={() => void waiting.refetch()} />
+      );
+    }
+    return (
+      <Alert tone="error" title={showResult ? "No se pudo cargar el resultado" : "No se pudo cargar la evaluación"}>
+        <p>{getApiErrorMessage(waiting.error, "No se pudo consultar el contenido adaptativo.")}</p>
+        <Button type="button" variant="secondary" onClick={() => void waiting.refetch()}>Reintentar</Button>
+      </Alert>
+    );
+  }
+  const published = assessment.data;
+  const stored = showResult ? result.data : undefined;
+  if (!published || (showResult && !stored)) {
+    return <Spinner label={showResult ? "Cargando resultado…" : "Cargando evaluación adaptativa…"} />;
+  }
+  if (stored && stored.revision !== published.revision) {
+    if (assessment.isFetching || result.isFetching) return <Spinner label="Cargando la revisión del resultado…" />;
+    return (
+      <Alert tone="warning" title="La evaluación y el resultado tienen revisiones distintas">
+        <p>Vuelve a consultar la evaluación y el resultado guardado.</p>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void Promise.all([assessment.refetch(), result.refetch()])}
+        >
+          Reintentar resultado
+        </Button>
+      </Alert>
+    );
+  }
+
+  return (
+    <AdaptiveAssessment
+      key={stored?.revision}
+      assessment={published}
+      initialResult={stored}
+      objectives={lesson.snapshot.objectives}
+      snapshot={lesson.snapshot}
+      onSubmit={async (input) => {
+        const saved = await submit.mutateAsync({ quizId: published.quiz_id, input });
+        onResult();
+        return saved;
+      }}
+      onReload={async () => {
+        const refreshed = await assessment.refetch({ throwOnError: true });
+        if (!refreshed.data) throw new Error("No se pudo recargar la evaluación.");
+        return refreshed.data;
+      }}
+      onAlreadySubmitted={async () => {
+        const stored = await result.refetch({ throwOnError: true });
+        if (!stored.data) throw new Error("No se pudo cargar el resultado guardado.");
+        onResult();
+        return stored.data;
+      }}
+    />
   );
 }
 

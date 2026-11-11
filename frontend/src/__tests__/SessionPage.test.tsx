@@ -5,8 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
 import { adaptiveLearningApi } from "../api/adaptiveLearning";
-import type { GraphStimulus, LearningResponseV2 } from "../api/adaptiveLearning";
+import type { AssessmentResponseV2, AssessmentResultV2, GraphStimulus, LearningResponseV2 } from "../api/adaptiveLearning";
 import type { PlanDTO, QuizDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
+import { adaptiveLearningKeys } from "../hooks/useAdaptiveLearning";
 import { SessionPage } from "../pages/SessionPage";
 import { makeSessionDetail, makeSessionSummary, makeTopic } from "../test/fixtures";
 
@@ -156,6 +157,54 @@ const adaptiveLesson: LearningResponseV2 = {
   ],
 };
 
+const adaptiveQuiz: AssessmentResponseV2 = {
+  quiz_id: 91,
+  revision: "revision-v2",
+  stimuli: [],
+  questions: [{
+    question_id: "plant",
+    kind: "true_false",
+    prompt: "¿La tabla registra germinación?",
+    objective_ids: [],
+    estimated_minutes_per_question: { min: 3, max: 8 },
+  }],
+};
+
+const adaptiveResult: AssessmentResultV2 = {
+  quiz_id: 91,
+  revision: "revision-v2",
+  score: 100,
+  correct: 1,
+  total: 1,
+  detail: [],
+  formative_feedback: [],
+  objective_results: [],
+};
+
+const reinforcedQuiz: AssessmentResponseV2 = {
+  ...adaptiveQuiz,
+  revision: "reinforced-revision",
+  questions: [{
+    ...adaptiveQuiz.questions[0],
+    question_id: "reinforced-plant",
+    prompt: "¿El segundo lote germinó?",
+  }],
+};
+
+const reinforcedResult: AssessmentResultV2 = {
+  ...adaptiveResult,
+  revision: reinforcedQuiz.revision,
+  detail: [{
+    question_id: "reinforced-plant",
+    kind: "true_false",
+    correct: true,
+    submitted_answer: true,
+    expected_answer: true,
+    feedback: "La tabla confirma la germinación.",
+    grounded_feedback: [],
+  }],
+};
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -171,6 +220,10 @@ function renderSession(
     contentVersion?: 1 | 2;
     lesson?: LearningResponseV2;
     lessonError?: unknown;
+    cachedAdaptiveQuiz?: AssessmentResponseV2;
+    adaptiveQuiz?: Promise<AssessmentResponseV2>;
+    adaptiveResult?: AssessmentResultV2;
+    adaptiveResultError?: unknown;
   } = {},
 ) {
   vi.spyOn(api, "getSession").mockResolvedValue(options.session ?? session);
@@ -188,10 +241,20 @@ function renderSession(
   const getLesson = vi.spyOn(adaptiveLearningApi, "getLearningV2");
   if (options.lessonError) getLesson.mockRejectedValue(options.lessonError);
   else getLesson.mockResolvedValue(options.lesson ?? adaptiveLesson);
+  vi.spyOn(adaptiveLearningApi, "getAssessmentV2").mockImplementation(() =>
+    options.adaptiveQuiz ?? Promise.resolve(adaptiveQuiz),
+  );
+  vi.spyOn(adaptiveLearningApi, "submitAssessmentV2").mockResolvedValue(adaptiveResult);
+  const getAdaptiveResult = vi.spyOn(adaptiveLearningApi, "getAssessmentResultV2");
+  if (options.adaptiveResultError) getAdaptiveResult.mockRejectedValue(options.adaptiveResultError);
+  else getAdaptiveResult.mockResolvedValue(options.adaptiveResult ?? adaptiveResult);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   if (options.cachedSession) queryClient.setQueryData(["session", 5], options.cachedSession);
+  if (options.cachedAdaptiveQuiz) {
+    queryClient.setQueryData(adaptiveLearningKeys.assessment(5), options.cachedAdaptiveQuiz);
+  }
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter
@@ -312,16 +375,87 @@ describe("SessionPage", () => {
   });
 
   it.each([
-    ["/session/5?fase=test", "Evaluación adaptativa"],
-    ["/session/5?fase=resultado", "Resultados adaptativos"],
-  ])("does not mount legacy quiz or result routes for v2 deep link %s", async (path, heading) => {
+    ["/session/5?fase=test", "PENDING", "Evaluación adaptativa"],
+    ["/session/5?fase=resultado", "COMPLETED", "Resultados de evaluación"],
+    ["/session/5?fase=test", "COMPLETED", "Resultados de evaluación"],
+    ["/session/5?reintento=1", "COMPLETED", "Resultados de evaluación"],
+  ] as const)("selects the v2 evaluation or saved result for %s (%s)", async (path, status, heading) => {
     const getQuiz = vi.spyOn(api, "getQuiz");
     const getResult = vi.spyOn(api, "getSessionResult");
-    renderSession({ contentVersion: 2, lesson: adaptiveLesson, path });
+    renderSession({ contentVersion: 2, session: { ...session, status }, path });
 
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+    expect(adaptiveLearningApi.getAssessmentV2).toHaveBeenCalledWith(5);
+    if (status === "COMPLETED") expect(adaptiveLearningApi.getAssessmentResultV2).toHaveBeenCalledWith(5);
+    else expect(adaptiveLearningApi.getAssessmentResultV2).not.toHaveBeenCalled();
     expect(getQuiz).not.toHaveBeenCalled();
     expect(getResult).not.toHaveBeenCalled();
+  });
+
+  it("submits the current v2 revision and displays its saved result", async () => {
+    renderSession({ contentVersion: 2, path: "/session/5?fase=test" });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "Verdadero" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar evaluación" }));
+
+    expect(await screen.findByRole("heading", { name: "Resultados de evaluación" })).toBeInTheDocument();
+    expect(adaptiveLearningApi.submitAssessmentV2).toHaveBeenCalledOnce();
+    expect(adaptiveLearningApi.submitAssessmentV2).toHaveBeenCalledWith(91, {
+      revision: "revision-v2",
+      answers: [{ kind: "true_false", question_id: "plant", answer: true }],
+    });
+    expect(api.getQuiz).not.toHaveBeenCalled();
+  });
+
+  it("lets a pending session open its assessment when no result exists", async () => {
+    const missingResult = Object.assign(new Error("No hay resultado"), {
+      isAxiosError: true,
+      response: { status: 404 },
+    });
+    renderSession({ contentVersion: 2, path: "/session/5?fase=resultado", adaptiveResultError: missingResult });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Abrir evaluación" }));
+    expect(await screen.findByRole("radio", { name: "Verdadero" })).toBeInTheDocument();
+  });
+
+  it("waits for the questions that match the saved adaptive result", async () => {
+    let receiveAssessment!: (response: AssessmentResponseV2) => void;
+    const refreshed = new Promise<AssessmentResponseV2>((resolve) => { receiveAssessment = resolve; });
+    renderSession({
+      contentVersion: 2,
+      session: { ...session, status: "COMPLETED" },
+      path: "/session/5?fase=resultado",
+      cachedAdaptiveQuiz: adaptiveQuiz,
+      adaptiveQuiz: refreshed,
+      adaptiveResult: reinforcedResult,
+    });
+
+    try {
+      expect(await screen.findByText("Cargando la revisión del resultado…")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Resultados de evaluación" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Enviar evaluación" })).not.toBeInTheDocument();
+    } finally {
+      receiveAssessment(reinforcedQuiz);
+    }
+    expect(await screen.findByRole("heading", { name: "¿El segundo lote germinó?" })).toBeInTheDocument();
+  });
+
+  it("offers a retry when the assessment and saved result remain on different revisions", async () => {
+    renderSession({
+      contentVersion: 2,
+      session: { ...session, status: "COMPLETED" },
+      path: "/session/5?fase=resultado",
+      adaptiveResult: reinforcedResult,
+    });
+
+    const retry = await screen.findByRole("button", { name: "Reintentar resultado" });
+    expect(screen.queryByRole("heading", { name: "Resultados de evaluación" })).not.toBeInTheDocument();
+    vi.mocked(adaptiveLearningApi.getAssessmentV2).mockResolvedValue(reinforcedQuiz);
+    fireEvent.click(retry);
+
+    expect(await screen.findByRole("heading", { name: "¿El segundo lote germinó?" })).toBeInTheDocument();
+    expect(adaptiveLearningApi.getAssessmentResultV2).toHaveBeenCalledTimes(2);
+    expect(adaptiveLearningApi.submitAssessmentV2).not.toHaveBeenCalled();
   });
 
   it("shows CONTENT_NOT_READY instead of falling back to legacy material", async () => {

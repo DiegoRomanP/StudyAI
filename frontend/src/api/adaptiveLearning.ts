@@ -113,6 +113,122 @@ export interface LearningResponseV2 {
   stimuli?: LessonStimulus[];
 }
 
+export interface AssessmentMatchingItem {
+  id: string;
+  text: string;
+}
+
+export interface AssessmentMatchingPair {
+  left_id: string;
+  right_id: string;
+}
+
+export interface AssessmentRubricCriterion {
+  criterion_id: string;
+  description: string;
+  descriptors: string[];
+}
+
+export interface AssessmentSequenceItem {
+  id: string;
+  text: string;
+}
+
+interface AssessmentQuestionBase {
+  question_id: string;
+  prompt: string;
+  objective_ids: string[];
+  estimated_minutes_per_question?: MinuteRange | null;
+  stimulus_id?: string | null;
+}
+
+export type AssessmentQuestionV2 =
+  | (AssessmentQuestionBase & { kind: "flashcard"; flashcard_answer: string })
+  | (AssessmentQuestionBase & { kind: "multiple_choice"; mode: "single" | "multiple"; options: string[] })
+  | (AssessmentQuestionBase & { kind: "true_false" })
+  | (AssessmentQuestionBase & { kind: "matching"; matching_left: AssessmentMatchingItem[]; matching_right: AssessmentMatchingItem[] })
+  | (AssessmentQuestionBase & { kind: "numeric"; units?: string | null })
+  | (AssessmentQuestionBase & { kind: "sequence"; sequence_items: AssessmentSequenceItem[] })
+  | (AssessmentQuestionBase & { kind: "rubric"; rubric_criteria: AssessmentRubricCriterion[] })
+  | (AssessmentQuestionBase & { kind: "short_answer"; grading_mode: "exact" | "formative" })
+  | (AssessmentQuestionBase & { kind: "essay" })
+  | (AssessmentQuestionBase & { kind: "step_by_step"; grading_mode: "exact" | "numeric" | "formative" });
+
+export interface AssessmentResponseV2 {
+  quiz_id: number;
+  revision: string;
+  questions: AssessmentQuestionV2[];
+  stimuli: LessonStimulus[];
+}
+
+export type AssessmentAnswerV2 =
+  | { kind: "flashcard"; question_id: string; quality: number }
+  | { kind: "multiple_choice"; question_id: string; selected_option?: string | null; selected_options?: string[] | null }
+  | { kind: "true_false"; question_id: string; answer: boolean }
+  | { kind: "matching"; question_id: string; pairs: AssessmentMatchingPair[] }
+  | { kind: "numeric"; question_id: string; value: string }
+  | { kind: "sequence"; question_id: string; ordered_ids: string[] }
+  | { kind: "rubric"; question_id: string; text: string; criterion_ratings: Record<string, number> }
+  | { kind: "short_answer"; question_id: string; text: string }
+  | { kind: "essay"; question_id: string; text: string }
+  | { kind: "step_by_step"; question_id: string; steps: string; final_answer: string };
+
+export interface AssessmentSubmissionV2 {
+  revision: string;
+  answers: AssessmentAnswerV2[];
+}
+
+export interface GroundedAssessmentFeedback {
+  mode: FeedbackMode;
+  text: string;
+  source_id?: string | null;
+}
+
+export interface AssessmentResultItemV2 {
+  question_id: string;
+  kind: Exclude<AssessmentQuestionV2["kind"], "rubric">;
+  correct?: boolean | null;
+  quality?: number | null;
+  submitted_answer?: boolean | string | string[] | AssessmentMatchingPair[] | null;
+  expected_answer?: boolean | string | string[] | AssessmentMatchingPair[] | null;
+  feedback: string;
+  grounded_feedback: GroundedAssessmentFeedback[];
+}
+
+export interface ProcedureRubricWeights {
+  result: number;
+  procedure: number;
+}
+
+export interface FormativeFeedbackV2 {
+  question_id: string;
+  criterion_ratings?: Record<string, number>;
+  criteria?: AssessmentRubricCriterion[];
+  exemplar?: string | null;
+  message: string;
+  submitted_text?: string | null;
+  submitted_final_answer?: string | null;
+  procedure_rubric_weights?: ProcedureRubricWeights | null;
+  grounded_feedback?: GroundedAssessmentFeedback[];
+}
+
+export interface ObjectiveResultV2 {
+  objective_id: string;
+  correct: number;
+  total: number;
+}
+
+export interface AssessmentResultV2 {
+  quiz_id: number;
+  revision: string;
+  score: number;
+  correct: number;
+  total: number;
+  detail: AssessmentResultItemV2[];
+  formative_feedback: FormativeFeedbackV2[];
+  objective_results: ObjectiveResultV2[];
+}
+
 export const adaptiveLearningApi = {
   getLearningMode: (sessionId: number) =>
     apiClient
@@ -121,5 +237,17 @@ export const adaptiveLearningApi = {
   getLearningV2: (sessionId: number) =>
     apiClient
       .get<LearningResponseV2>(`/sessions/${sessionId}/learning-v2`)
+      .then((response) => response.data),
+  getAssessmentV2: (sessionId: number) =>
+    apiClient
+      .get<AssessmentResponseV2>(`/quizzes/${sessionId}/assessment-v2`)
+      .then((response) => response.data),
+  submitAssessmentV2: (quizId: number, input: AssessmentSubmissionV2) =>
+    apiClient
+      .post<AssessmentResultV2>(`/quizzes/${quizId}/assessment-v2/submit`, input)
+      .then((response) => response.data),
+  getAssessmentResultV2: (sessionId: number) =>
+    apiClient
+      .get<AssessmentResultV2>(`/quizzes/${sessionId}/assessment-v2/result`)
       .then((response) => response.data),
 };
