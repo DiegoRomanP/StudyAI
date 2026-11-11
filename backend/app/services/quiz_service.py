@@ -17,22 +17,24 @@ from app.events.session_events import (
     SessionCompletedEvent,
     event_bus,
 )
-from app.models.plan import Plan
 from app.models.quiz import QuestionType, Quiz, QuizQuestion, QuizResult
 from app.models.session import Session as StudySession
 from app.models.session import SessionStatus
 from app.repositories.quiz_repository import QuizRepository
 from app.schemas.quiz import QuizResultResponse, QuizSubmission
+from app.services.session_service import SessionService, require_content_version
 
 
 class QuizService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = QuizRepository(db)
+        self.sessions = SessionService(db)
 
     def get_quiz_for_session(self, user_id: int, session_id: int) -> Quiz:
+        self._require_legacy_session(user_id, session_id, "Quiz no encontrado para la sesión.")
         quiz = self.repo.find_by_session(session_id)
-        if quiz is None or not self._owns_session(user_id, session_id):
+        if quiz is None:
             raise NotFoundError("Quiz no encontrado para la sesión.")
         return quiz
 
@@ -40,8 +42,9 @@ class QuizService:
         self, user_id: int, quiz_id: int, submission: QuizSubmission
     ) -> QuizResultResponse:
         quiz = self.repo.find_by_id(quiz_id)
-        if quiz is None or not self._owns_session(user_id, quiz.session_id):
+        if quiz is None:
             raise NotFoundError("Quiz no encontrado.")
+        session = self._require_legacy_session(user_id, quiz.session_id, "Quiz no encontrado.")
 
         questions: dict[int, QuizQuestion] = {q.id: q for q in quiz.questions}
         # The quiz may have been replaced (AI reinforcement) while the learner answered.
@@ -90,7 +93,6 @@ class QuizService:
         self.db.add(result)
 
         # Mark the session complete and emit the event (SM-2 runs in the handler).
-        session = self.db.get(StudySession, quiz.session_id)
         first_completion = session.status != SessionStatus.COMPLETED
         session.status = SessionStatus.COMPLETED
         session.completed_at = datetime.now(timezone.utc)
@@ -118,8 +120,7 @@ class QuizService:
         )
 
     def latest_result(self, user_id: int, session_id: int) -> QuizResultResponse:
-        if not self._owns_session(user_id, session_id):
-            raise NotFoundError("Sesión no encontrada.")
+        self._require_legacy_session(user_id, session_id, "Sesión no encontrada.")
         result = self.repo.latest_result_for_session(session_id)
         if result is None:
             raise NotFoundError("Esta sesión aún no tiene resultado.")
@@ -130,9 +131,12 @@ class QuizService:
             detail=result.detail or {},
         )
 
-    def _owns_session(self, user_id: int, session_id: int) -> bool:
-        session = self.db.get(StudySession, session_id)
-        if session is None:
-            return False
-        plan = self.db.get(Plan, session.plan_id)
-        return plan is not None and plan.user_id == user_id
+    def _require_legacy_session(
+        self, user_id: int, session_id: int, not_found: str
+    ) -> StudySession:
+        try:
+            session = self.sessions.get_session(user_id, session_id)
+        except NotFoundError:
+            raise NotFoundError(not_found) from None
+        require_content_version(session, 1)
+        return session

@@ -321,6 +321,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SessionDetail" }
 
+  /sessions/{session_id}/learning-mode:
+    get:
+      summary: Versión de contenido de la sesión
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Versión disponible aunque el contenido siga en preparación
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LearningMode" }
+        "404": { description: Sesión no encontrada }
+
+  /sessions/{session_id}/learning-v2:
+    get:
+      summary: Lección adaptativa con objetivos y perfil efectivos
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Lección publicada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdaptiveLesson" }
+        "404": { description: Sesión no encontrada }
+        "409": { description: CONTENT_VERSION_MISMATCH o CONTENT_NOT_READY }
+
   /sessions/{session_id}/result:
     get:
       summary: Último resultado del test de la sesión (el intento más reciente)
@@ -333,6 +360,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/QuizResult" }
         "404": { description: Sesión no encontrada o todavía sin resultado }
+        "409": { description: CONTENT_VERSION_MISMATCH para contenido v2 }
 
   /sessions/{session_id}/reinforcement:
     post:
@@ -369,6 +397,7 @@ paths:
         - { name: session_id, in: path, required: true, schema: { type: integer } }
       responses:
         "200": { description: OK }
+        "409": { description: CONTENT_VERSION_MISMATCH para contenido v2 }
 
   /quizzes/{session_id}:
     get:
@@ -377,6 +406,7 @@ paths:
         - { name: session_id, in: path, required: true, schema: { type: integer } }
       responses:
         "200": { description: OK }
+        "409": { description: CONTENT_VERSION_MISMATCH para contenido v2 }
 
   /quizzes/{quiz_id}/submit:
     post:
@@ -406,7 +436,7 @@ paths:
               schema: { $ref: "#/components/schemas/QuizResult" }
         "409":
           description: >
-            QUIZ_OUTDATED — alguna respuesta nombra una pregunta que el quiz ya no tiene
+            CONTENT_VERSION_MISMATCH para contenido v2, o QUIZ_OUTDATED si alguna respuesta nombra una pregunta que el quiz ya no tiene
             (p. ej. lo reemplazó un refuerzo con IA). No se guarda resultado.
 
   /dashboard:
@@ -746,13 +776,113 @@ components:
                   items: { type: string }
             review_points:
               type: array
-              description: Preguntas falladas del examen que creó este repaso.
+              description: Preguntas falladas del examen que creó este repaso. Vacío para contenido v2.
               items:
                 type: object
                 properties:
                   prompt: { type: string }
                   answer: { type: string }
             reinforcement_error: { type: string }
+    LearningMode:
+      type: object
+      required: [content_version]
+      properties:
+        content_version: { type: integer, enum: [1, 2] }
+    AdaptiveLesson:
+      type: object
+      required: [session_id, content_version, snapshot, lesson_blocks, content_markdown]
+      properties:
+        session_id: { type: integer }
+        content_version: { type: integer, enum: [2] }
+        snapshot:
+          oneOf:
+            - { $ref: "#/components/schemas/PedagogySnapshot" }
+            - { $ref: "#/components/schemas/LegacyPedagogySnapshot" }
+        lesson_blocks:
+          type: array
+          items:
+            type: object
+            required: [id, kind, objective_ids, content_markdown]
+            properties:
+              id: { type: string }
+              kind: { type: string }
+              objective_ids: { type: array, items: { type: string } }
+              content_markdown: { type: string }
+              source_refs: { type: array, items: { type: string } }
+        content_markdown: { type: string }
+    PedagogySnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        [name, rules, bloom_levels, allowed_question_types, primary_evaluation_criterion,
+         estimated_minutes_per_question, feedback_modes, snapshot_schema_version,
+         profile_id, profile_version, objectives]
+      properties:
+        snapshot_schema_version: { type: integer, enum: [2] }
+        profile_id:
+          type: string
+          enum: [logical_deductive, critical_argumentative, linguistic_interpretive, systemic_empirical, applied_practical, general]
+        profile_version: { type: integer, minimum: 1 }
+        name: { type: string }
+        discipline_examples: { type: array, items: { type: string } }
+        rules: { type: array, items: { type: string } }
+        bloom_levels: { type: array, items: { $ref: "#/components/schemas/BloomLevel" } }
+        allowed_question_types:
+          type: array
+          items: { type: string, enum: [multiple_choice, true_false, short_answer, essay, step_by_step, matching] }
+        primary_evaluation_criterion: { type: string, enum: [accuracy, procedure, argumentation] }
+        estimated_minutes_per_question: { $ref: "#/components/schemas/MinuteRange" }
+        question_time_overrides:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/MinuteRange" }
+        feedback_modes:
+          type: array
+          items: { type: string, enum: [formula, chapter_reference, counterargument] }
+        procedure_rubric_weights:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [result, procedure]
+          properties:
+            result: { type: number }
+            procedure: { type: number }
+        objectives: { type: array, items: { $ref: "#/components/schemas/LearningObjective" } }
+    LegacyPedagogySnapshot:
+      type: object
+      additionalProperties: false
+      required: [profile_id, profile_version, rules, objectives]
+      properties:
+        profile_id: { type: string, enum: [history, mathematics, general] }
+        profile_version: { type: integer, minimum: 1 }
+        rules: { type: array, items: { type: string } }
+        objectives: { type: array, items: { $ref: "#/components/schemas/LegacyLearningObjective" } }
+    LearningObjective:
+      type: object
+      additionalProperties: false
+      required: [id, skill, description, bloom_target]
+      properties:
+        id: { type: string }
+        skill: { type: string }
+        description: { type: string }
+        bloom_target: { $ref: "#/components/schemas/BloomLevel" }
+    LegacyLearningObjective:
+      type: object
+      additionalProperties: false
+      required: [id, skill, description]
+      properties:
+        id: { type: string }
+        skill: { type: string }
+        description: { type: string }
+    BloomLevel:
+      type: string
+      enum: [remember, understand, apply, analyze, evaluate, create]
+    MinuteRange:
+      type: object
+      additionalProperties: false
+      required: [min, max]
+      properties:
+        min: { type: integer, minimum: 1 }
+        max: { type: integer, minimum: 1 }
     ProviderCatalogEntry:
       type: object
       properties:

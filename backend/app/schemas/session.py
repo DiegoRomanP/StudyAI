@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class SessionMaterialResponse(BaseModel):
@@ -40,5 +40,7 @@ class SessionDetailResponse(BaseModel):
 
     @field_validator("review_points", mode="before")
     @classmethod
-    def _none_is_empty(cls, value):
-        return [] if value is None else value
+    def _public_review_points(cls, value, info: ValidationInfo):
+        if value is None or (info.context and info.context.get("hide_review_points")):
+            return []
+        return value

@@ -30,7 +30,7 @@ def get_session(
     user: User = Depends(get_current_user),
 ) -> SessionDetailResponse:
     service = SessionService(db)
-    return SessionDetailResponse.model_validate(service.get_session(user.id, session_id))
+    return service.detail_response(service.get_session(user.id, session_id))
 
 
 @router.get("/{session_id}/result", response_model=QuizResultResponse)
@@ -53,7 +53,7 @@ def complete_session(
     service = SessionService(db)
     qualities = payload.flashcard_qualities if payload else {}
     session = service.complete_session(user.id, session_id, qualities)
-    return SessionDetailResponse.model_validate(session)
+    return service.detail_response(session)
 
 
 @router.post(
@@ -70,7 +70,7 @@ def start_reinforcement(
     session, start_task, spent = ReinforcementService(db).start(user.id, session_id)
     if start_task:
         background_tasks.add_task(generate_reinforcement_task, session.id, user.id, spent)
-    return SessionDetailResponse.model_validate(session)
+    return SessionService.detail_response(session)
 
 
 @router.post("/{session_id}/reinforcement/cancel", response_model=SessionDetailResponse)
@@ -79,4 +79,4 @@ def cancel_reinforcement(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SessionDetailResponse:
-    return SessionDetailResponse.model_validate(ReinforcementService(db).cancel(user.id, session_id))
+    return SessionService.detail_response(ReinforcementService(db).cancel(user.id, session_id))
