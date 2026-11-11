@@ -10,6 +10,7 @@ from app.pedagogy.contracts import (
     AssessmentRubricCriterion,
     AssessmentSequenceItem,
     LessonBlock,
+    LegacyPedagogySnapshot,
     PedagogySnapshot,
 )
 
@@ -25,7 +26,7 @@ class LearningModeResponse(_StrictDTO):
 class LearningResponseV2(_StrictDTO):
     session_id: int
     content_version: Literal[2] = 2
-    snapshot: PedagogySnapshot
+    snapshot: PedagogySnapshot | LegacyPedagogySnapshot
     lesson_blocks: list[LessonBlock]
     content_markdown: str
 

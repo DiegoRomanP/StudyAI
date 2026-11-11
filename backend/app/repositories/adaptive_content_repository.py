@@ -61,7 +61,7 @@ class AdaptiveContentRepository:
         ):
             return None
 
-        return AdaptiveSessionDraft.model_validate(
+        return AdaptiveSessionDraft.from_storage(
             {
                 "pedagogy_snapshot": material.pedagogy_snapshot,
                 "lesson_blocks": material.lesson_blocks,

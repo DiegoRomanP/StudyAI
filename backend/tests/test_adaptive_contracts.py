@@ -18,10 +18,11 @@ def client():
         yield test_client
 
 
-def test_auto_fallback_and_explicit_hint():
+def test_profile_aliases_and_automatic_fallback():
     from app.pedagogy.registry import resolve_profile
 
-    assert resolve_profile("history", "mathematics").id == "history"
+    assert resolve_profile("history", "mathematics").id == "critical_argumentative"
+    assert resolve_profile("mathematics", "critical_argumentative").id == "logical_deductive"
     assert resolve_profile("auto", "mixed").id == "general"
     assert resolve_profile("auto", None).id == "general"
     assert resolve_profile("auto", "unknown-subject").id == "general"
@@ -35,10 +36,11 @@ def test_profile_snapshot_captures_version_rules_and_objectives():
         id="objective-1",
         skill="causal reasoning",
         description="Explain a cause-and-effect relationship.",
+        bloom_target="analyze",
     )
     snapshot = snapshot_profile(resolve_profile("history", None), [objective])
 
-    assert snapshot.profile_id == "history"
+    assert snapshot.profile_id == "critical_argumentative"
     assert snapshot.profile_version == 1
     assert snapshot.rules
     assert snapshot.objectives == [objective]
@@ -137,7 +139,14 @@ def test_response_dtos_are_typed_and_do_not_accept_private_solution_fields():
 
     snapshot = snapshot_profile(
         resolve_profile("general", None),
-        [LearningObjective(id="objective-1", skill="recall", description="Recall a key idea.")],
+        [
+            LearningObjective(
+                id="objective-1",
+                skill="recall",
+                description="Recall a key idea.",
+                bloom_target="remember",
+            )
+        ],
     )
     learning = LearningResponseV2(
         session_id=3,
@@ -252,7 +261,172 @@ def test_assessment_response_rejects_private_answers_for_all_question_types(ques
         )
 
 
-def test_adaptive_content_repository_round_trips_validated_payload():
+@pytest.mark.parametrize(
+    "expected_order",
+    [["first", "second"], ["second", "first"]],
+)
+def test_two_item_sequence_presentation_does_not_depend_on_answer_order(
+    monkeypatch, expected_order
+):
+    from app.pedagogy.contracts import StoredAssessmentQuestion
+    from app.schemas.adaptive_learning import AssessmentResponseV2
+
+    class ReverseOrder:
+        def shuffle(self, items):
+            items.reverse()
+
+    monkeypatch.setattr("app.pedagogy.contracts.SystemRandom", ReverseOrder)
+    stored_question = StoredAssessmentQuestion.model_validate(
+        {
+            "question_id": "adaptive:sequence",
+            "kind": "sequence",
+            "prompt": "Order these events.",
+            "objective_ids": ["objective-1"],
+            "sequence_items": [
+                {"id": "first", "text": "First event"},
+                {"id": "second", "text": "Second event"},
+            ],
+            "expected_answer": expected_order,
+        }
+    )
+    response = AssessmentResponseV2.model_validate(
+        {
+            "quiz_id": 8,
+            "revision": "revision-1",
+            "questions": [
+                {
+                    "question_id": stored_question.question_id,
+                    "kind": stored_question.kind,
+                    "prompt": stored_question.prompt,
+                    "objective_ids": stored_question.objective_ids,
+                    "sequence_items": [
+                        item.model_dump() for item in stored_question.sequence_items
+                    ],
+                }
+            ],
+        }
+    )
+
+    public_question = response.model_dump()["questions"][0]
+    assert [item["id"] for item in public_question["sequence_items"]] == [
+        "second",
+        "first",
+    ]
+    assert "expected_answer" not in public_question
+
+
+@pytest.mark.parametrize(
+    ("items", "answer"),
+    [
+        ([], []),
+        (
+            [
+                {"id": "first", "text": "First"},
+                {"id": "first", "text": "Duplicate"},
+            ],
+            ["first", "first"],
+        ),
+        (
+            [
+                {"id": "first", "text": "First"},
+                {"id": "second", "text": "Second"},
+            ],
+            ["first", "missing"],
+        ),
+        ([{"id": "first", "text": "First"}], ["first"]),
+    ],
+)
+def test_malformed_duplicate_and_undersized_sequences_fail_closed(items, answer):
+    from app.pedagogy.contracts import StoredAssessmentQuestion
+
+    with pytest.raises(ValidationError):
+        StoredAssessmentQuestion.model_validate(
+            {
+                "question_id": "adaptive:sequence",
+                "kind": "sequence",
+                "prompt": "Order these.",
+                "objective_ids": ["objective-1"],
+                "sequence_items": items,
+                "expected_answer": answer,
+            }
+        )
+
+
+@pytest.mark.parametrize("initialized", [False, True])
+def test_sequence_presentation_marker_is_rejected_in_raw_input(initialized):
+    from app.pedagogy.contracts import StoredAssessmentQuestion
+
+    with pytest.raises(ValidationError, match="presentation marker is storage-only"):
+        StoredAssessmentQuestion.model_validate(
+            {
+                "question_id": "adaptive:sequence",
+                "kind": "sequence",
+                "prompt": "Order these events.",
+                "objective_ids": ["objective-1"],
+                "sequence_items": [
+                    {"id": "first", "text": "First event"},
+                    {"id": "second", "text": "Second event"},
+                ],
+                "expected_answer": ["first", "second"],
+                "sequence_presentation_initialized": initialized,
+            }
+        )
+
+
+def test_pre_submit_sequence_order_is_stable_on_reload():
+    from app.pedagogy.contracts import StoredAssessmentQuestion
+    from app.schemas.adaptive_learning import AssessmentResponseV2
+
+    expected_order = ["first", "second", "third"]
+    stored_question = StoredAssessmentQuestion.model_validate(
+        {
+            "question_id": "adaptive:sequence",
+            "kind": "sequence",
+            "prompt": "Put these events in order.",
+            "objective_ids": ["objective-1"],
+            "sequence_items": [
+                {"id": item_id, "text": text}
+                for item_id, text in zip(
+                    expected_order,
+                    ["First event", "Second event", "Third event"],
+                )
+            ],
+            "expected_answer": expected_order,
+        }
+    )
+    response = AssessmentResponseV2.model_validate(
+        {
+            "quiz_id": 8,
+            "revision": "revision-1",
+            "questions": [
+                {
+                    "question_id": stored_question.question_id,
+                    "kind": stored_question.kind,
+                    "prompt": stored_question.prompt,
+                    "objective_ids": stored_question.objective_ids,
+                    "sequence_items": [
+                        item.model_dump() for item in stored_question.sequence_items
+                    ],
+                }
+            ],
+        }
+    )
+
+    public_question = response.model_dump()["questions"][0]
+    displayed_order = [item["id"] for item in public_question["sequence_items"]]
+    reloaded_question = StoredAssessmentQuestion.model_validate(stored_question)
+
+    assert set(displayed_order) == set(expected_order)
+    assert [item.id for item in reloaded_question.sequence_items] == displayed_order
+    assert stored_question.model_dump()["sequence_presentation_initialized"] is True
+    assert (
+        "sequence_presentation_initialized"
+        not in StoredAssessmentQuestion.model_json_schema()["properties"]
+    )
+    assert "expected_answer" not in public_question
+
+
+def test_adaptive_content_repository_round_trips_validated_payload(monkeypatch):
     from app.db.base import Base
     from app.models.goal import Goal
     from app.models.plan import Plan
@@ -269,6 +443,15 @@ def test_adaptive_content_repository_round_trips_validated_payload():
     from app.pedagogy.registry import resolve_profile, snapshot_profile
     from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 
+    shuffle_calls = 0
+
+    class ReverseOrder:
+        def shuffle(self, items):
+            nonlocal shuffle_calls
+            shuffle_calls += 1
+            items.reverse()
+
+    monkeypatch.setattr("app.pedagogy.contracts.SystemRandom", ReverseOrder)
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -303,6 +486,7 @@ def test_adaptive_content_repository_round_trips_validated_payload():
                 id="objective-1",
                 skill="causal reasoning",
                 description="Explain a cause-and-effect relationship.",
+                bloom_target="analyze",
             )
             draft = AdaptiveSessionDraft(
                 pedagogy_snapshot=snapshot_profile(resolve_profile("history", None), [objective]),
@@ -325,19 +509,42 @@ def test_adaptive_content_repository_round_trips_validated_payload():
                             prompt="Express one half as a decimal.",
                             objective_ids=[objective.id],
                             expected_answer="0.5",
-                        )
+                        ),
+                        StoredAssessmentQuestion(
+                            question_id="adaptive:sequence",
+                            kind="sequence",
+                            prompt="Order these events.",
+                            objective_ids=[objective.id],
+                            sequence_items=[
+                                {"id": "first", "text": "First event"},
+                                {"id": "second", "text": "Second event"},
+                            ],
+                            expected_answer=["first", "second"],
+                        ),
                     ],
                 ),
                 assessment_revision="revision-1",
                 assessment_state="open",
             )
             repository = AdaptiveContentRepository(db)
-            repository.save(study_session.id, draft)
-            db.flush()
+            session_id = study_session.id
+            sequence_order_before_save = [
+                item.id
+                for item in draft.adaptive_assessment.questions[1].sequence_items
+            ]
+            repository.save(session_id, draft)
+            db.commit()
 
-            stored = repository.get(study_session.id)
+        with Session(engine) as reloaded_db:
+            repository = AdaptiveContentRepository(reloaded_db)
+            stored = repository.get(session_id)
             assert stored == draft
-            assert repository.get(study_session.id + 100) is None
+            assert [
+                item.id
+                for item in stored.adaptive_assessment.questions[1].sequence_items
+            ] == sequence_order_before_save
+            assert repository.get(session_id + 100) is None
+        assert shuffle_calls == 1
     finally:
         engine.dispose()
 
@@ -501,14 +708,14 @@ def test_repository_revalidates_mutated_draft_before_persisting():
     from app.pedagogy.contracts import (
         AdaptiveAssessmentPayload,
         AdaptiveSessionDraft,
-        PedagogySnapshot,
     )
     from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 
+    from app.pedagogy.registry import resolve_profile, snapshot_profile
+
+    snapshot = snapshot_profile(resolve_profile("general", None), [])
     draft = AdaptiveSessionDraft(
-        pedagogy_snapshot=PedagogySnapshot(
-            profile_id="general", profile_version=1, rules=[], objectives=[]
-        ),
+        pedagogy_snapshot=snapshot,
         lesson_blocks=[],
         adaptive_assessment=AdaptiveAssessmentPayload(
             schema_version=2, question_objectives={}, questions=[]
