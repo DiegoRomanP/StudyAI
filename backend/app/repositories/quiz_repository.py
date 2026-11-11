@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import case, select, update
 
 from app.models.flashcard import FlashcardReview
 from app.models.quiz import Quiz, QuizResult
+from app.models.session import ReinforcementStatus, Session as StudySession
+from app.models.session import SessionStatus
 from app.repositories.base import BaseRepository
 
 
@@ -25,6 +27,39 @@ class QuizRepository(BaseRepository[Quiz]):
             .order_by(QuizResult.created_at.desc(), QuizResult.id.desc())
         )
         return self.db.execute(stmt).scalars().first()
+
+
+    def claim_adaptive_submission(
+        self, quiz: Quiz, revision: str, completed_at: datetime
+    ) -> bool:
+        """Acquire the session before the quiz, matching reinforcement's lock order."""
+        claimed_session = self.db.execute(
+            update(StudySession)
+            .where(StudySession.id == quiz.session_id, StudySession.status == SessionStatus.PENDING)
+            .values(
+                status=SessionStatus.COMPLETED,
+                completed_at=completed_at,
+                reinforcement_status=case(
+                    (
+                        StudySession.reinforcement_status == ReinforcementStatus.PROCESSING,
+                        ReinforcementStatus.NONE.value,
+                    ),
+                    else_=StudySession.reinforcement_status,
+                ),
+            )
+        )
+        if claimed_session.rowcount != 1:
+            return False
+        claimed_quiz = self.db.execute(
+            update(Quiz)
+            .where(
+                Quiz.id == quiz.id,
+                Quiz.assessment_revision == revision,
+                Quiz.assessment_state == "open",
+            )
+            .values(assessment_state="submitted")
+        )
+        return claimed_quiz.rowcount == 1
 
 
 class FlashcardReviewRepository(BaseRepository[FlashcardReview]):

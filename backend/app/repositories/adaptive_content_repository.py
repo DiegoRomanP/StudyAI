@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, lazyload, load_only
 
 from app.models.quiz import Quiz
 from app.models.session import Session as StudySession, SessionMaterial
@@ -44,14 +44,25 @@ class AdaptiveContentRepository:
 
     def get(self, session_id: int) -> AdaptiveSessionDraft | None:
         """Return a fully validated v2 draft, or ``None`` for v1/incomplete data."""
-        study_session = self.db.get(StudySession, session_id)
+        # A single statement captures the revision, material and card rows even
+        # if reinforcement publishes while this request is reading.
+        statement = (
+            select(StudySession)
+            .where(StudySession.id == session_id)
+            .options(
+                load_only(StudySession.id),
+                joinedload(StudySession.material),
+                joinedload(StudySession.quiz).joinedload(Quiz.questions),
+                lazyload(StudySession.quiz_results),
+            )
+            .execution_options(populate_existing=True)
+        )
+        study_session = self.db.execute(statement).unique().scalars().first()
         if study_session is None:
             return None
 
-        material = self.db.execute(
-            select(SessionMaterial).where(SessionMaterial.session_id == session_id)
-        ).scalars().first()
-        quiz = self.db.execute(select(Quiz).where(Quiz.session_id == session_id)).scalars().first()
+        material = study_session.material
+        quiz = study_session.quiz
         if (
             material is None
             or quiz is None

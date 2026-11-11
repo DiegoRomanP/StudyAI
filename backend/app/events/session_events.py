@@ -46,15 +46,17 @@ class EventBus:
         if handler not in handlers:
             handlers.append(handler)
 
-    def publish(self, event_type: str, event: SessionCompletedEvent) -> None:
+    def publish(self, event_type: str, event: SessionCompletedEvent, *, strict: bool = False) -> None:
         for handler in list(self._handlers.get(event_type, [])):
             try:
                 # A SAVEPOINT per handler: a failure rolls back only its own writes and
                 # leaves the caller's transaction usable for the final commit.
                 with event.db.begin_nested():
                     handler(event)
-            except Exception:  # noqa: BLE001 - one handler must not break others
+            except Exception:
                 logger.exception("Handler for '%s' failed", event_type)
+                if strict:
+                    raise
 
 
 # Application-wide singleton.
