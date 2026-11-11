@@ -180,6 +180,7 @@ def _ensure_adaptive_route_columns() -> None:
             "review_points": "JSON",
             "reinforcement_status": "VARCHAR(16) NOT NULL DEFAULT 'NONE'",
             "reinforcement_error": "VARCHAR(1024) NOT NULL DEFAULT ''",
+            "reinforcement_run_token": "VARCHAR(32)",
         },
     )
     _add_missing_columns("plan_topics", {"mastery": "FLOAT", "review_box": "INTEGER NOT NULL DEFAULT 0"})

@@ -67,9 +67,12 @@ def start_reinforcement(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SessionDetailResponse:
-    session, start_task, spent = ReinforcementService(db).start(user.id, session_id)
+    session, start_task, spent, run_token = ReinforcementService(db).start(user.id, session_id)
     if start_task:
-        background_tasks.add_task(generate_reinforcement_task, session.id, user.id, spent)
+        arguments = (session.id, user.id, spent)
+        if run_token is not None:
+            arguments = (*arguments, run_token)
+        background_tasks.add_task(generate_reinforcement_task, *arguments)
     return SessionService.detail_response(session)
 
 

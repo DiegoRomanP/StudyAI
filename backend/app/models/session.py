@@ -56,6 +56,7 @@ class Session(TimestampMixin, Base):
         default=ReinforcementStatus.NONE,
     )
     reinforcement_error: Mapped[str] = mapped_column(String(1024), default="")
+    reinforcement_run_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     plan = relationship("Plan", back_populates="sessions")
     material = relationship(

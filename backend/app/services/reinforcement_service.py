@@ -14,8 +14,10 @@ background task, or a double POST can never apply two writes or spend two uses.
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
-from sqlalchemy import update
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, LLMError
@@ -24,18 +26,28 @@ from app.db.session import SessionLocal
 from app.llm.factory import get_llm_provider
 from app.llm.output_budget import complete_within_budget
 from app.llm.output_parsers import parse_llm_json
-from app.llm.prompts import session_content
+from app.llm.prompts import adaptive_session_content, session_content
 from app.llm.prompts.reinforcement import build_reinforcement_prompt
-from app.models.goal import Goal
+from app.models.flashcard import FlashcardReview
+from app.models.goal import Goal, GoalType
 from app.models.plan import Plan
-from app.models.quiz import QuizQuestion
+from app.models.quiz import QuestionType, QuizQuestion
 from app.models.session import ReinforcementStatus as Status
 from app.models.session import Session as StudySession
 from app.models.session import SessionKind, SessionStatus
+from app.pedagogy.contracts import PedagogySnapshot
+from app.rag.retriever import Retriever
+from app.repositories.adaptive_content_repository import AdaptiveContentRepository
+from app.services.adaptive_content_builder import AdaptiveBuiltContent, build_adaptive_session_content
+from app.services.adaptive_learning_service import AdaptiveLearningService
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
 from app.services.session_content_builder import build_session_content
 from app.services.session_service import SessionService
+from app.strategies.base import SessionConfig
 from app.strategies.goal_strategies import GoalStrategyFactory
+
+if TYPE_CHECKING:
+    from app.llm.base import LLMProvider
 
 logger = get_logger(__name__)
 
@@ -51,6 +63,7 @@ def recover_interrupted_reinforcements(db: Session) -> None:
         .values(
             reinforcement_status=Status.FAILED,
             reinforcement_error="El refuerzo se interrumpió porque el servidor se reinició. Inténtalo de nuevo.",
+            reinforcement_run_token=None,
         )
     )
     db.commit()
@@ -58,11 +71,23 @@ def recover_interrupted_reinforcements(db: Session) -> None:
         logger.warning("Marked %d interrupted reinforcement(s) as failed", result.rowcount)
 
 
-def _set_status(db: Session, session_id: int, new: Status, *, only_if: list[Status], error: str = "") -> int:
+def _set_status(
+    db: Session,
+    session_id: int,
+    new: Status,
+    *,
+    only_if: list[Status],
+    error: str = "",
+    run_token: str | None = None,
+) -> int:
     result = db.execute(
         update(StudySession)
-        .where(StudySession.id == session_id, StudySession.reinforcement_status.in_(only_if))
-        .values(reinforcement_status=new, reinforcement_error=error)
+        .where(
+            StudySession.id == session_id,
+            StudySession.reinforcement_status.in_(only_if),
+            StudySession.reinforcement_run_token == run_token,
+        )
+        .values(reinforcement_status=new, reinforcement_error=error, reinforcement_run_token=None)
     )
     db.commit()
     return result.rowcount
@@ -72,8 +97,8 @@ class ReinforcementService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, date | None]:
-        """Returns ``(session, start_task, spent_day)``: the UTC day a free-AI use was spent, if any."""
+    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, date | None, str | None]:
+        """Return the session and the scheduling details of this specific claim."""
         session = SessionService(self.db).get_session(user_id, session_id)
         if (
             session.kind != SessionKind.REVIEW
@@ -82,8 +107,14 @@ class ReinforcementService:
         ):
             raise _NOT_AVAILABLE
 
+        if session.plan.content_version == 2:
+            draft = AdaptiveLearningService(self.db).require_published_content(session)
+            if not isinstance(draft.pedagogy_snapshot, PedagogySnapshot):
+                raise _NOT_AVAILABLE
+
         # Reserve the state before touching the quota (FreeAiQuota commits on its own),
         # so a double POST starts one task and spends one use.
+        run_token = uuid4().hex if session.plan.content_version == 2 else None
         claimed = self.db.execute(
             update(StudySession)
             .where(
@@ -92,13 +123,17 @@ class ReinforcementService:
                 StudySession.status == SessionStatus.PENDING,
                 StudySession.reinforcement_status.in_([Status.NONE, Status.FAILED]),
             )
-            .values(reinforcement_status=Status.PROCESSING, reinforcement_error="")
+            .values(
+                reinforcement_status=Status.PROCESSING,
+                reinforcement_error="",
+                reinforcement_run_token=run_token,
+            )
         )
         self.db.commit()
         if claimed.rowcount == 0:
             self.db.refresh(session)
             if session.reinforcement_status == Status.PROCESSING:
-                return session, False, None  # idempotent replay
+                return session, False, None, None  # idempotent replay
             raise _NOT_AVAILABLE
 
         try:
@@ -107,18 +142,23 @@ class ReinforcementService:
             # No task will run (over the limit, or an unexpected error): release the claim.
             self.db.rollback()
             try:
-                _set_status(self.db, session_id, Status.NONE, only_if=[Status.PROCESSING])
+                _set_status(
+                    self.db, session_id, Status.NONE, only_if=[Status.PROCESSING], run_token=run_token
+                )
             except Exception:  # noqa: BLE001 - startup recovery fails it if even this cannot be written
                 self.db.rollback()
                 logger.warning("Could not release the reinforcement claim of session %s", session_id)
             raise
         self.db.refresh(session)
-        return session, True, spent_day
+        return session, True, spent_day, run_token
 
     def cancel(self, user_id: int, session_id: int) -> StudySession:
         """PROCESSING → NONE. The use is not refunded here: only the task does that."""
         session = SessionService(self.db).get_session(user_id, session_id)
-        _set_status(self.db, session_id, Status.NONE, only_if=[Status.PROCESSING])
+        _set_status(
+            self.db, session_id, Status.NONE, only_if=[Status.PROCESSING],
+            run_token=session.reinforcement_run_token,
+        )
         self.db.refresh(session)
         return session
 
@@ -133,7 +173,96 @@ def _refund(db: Session, user_id: int, spent_day: date | None) -> None:
         logger.warning("Could not refund the free AI use for user %s", user_id)
 
 
-def generate_reinforcement_task(session_id: int, user_id: int, spent_day: date | None) -> None:
+def _claim_publication(db: Session, session_id: int, run_token: str | None) -> bool:
+    result = db.execute(
+        update(StudySession)
+        .where(
+            StudySession.id == session_id,
+            StudySession.reinforcement_status == Status.PROCESSING,
+            StudySession.status == SessionStatus.PENDING,
+            StudySession.reinforcement_run_token == run_token,
+        )
+        .values(reinforcement_status=Status.READY, reinforcement_error="", reinforcement_run_token=None)
+    )
+    return result.rowcount == 1
+
+
+def _publish_adaptive_content(
+    db: Session, session: StudySession, content: AdaptiveBuiltContent
+) -> None:
+    quiz = session.quiz
+    card_ids = [question.id for question in quiz.questions if question.question_type == QuestionType.FLASHCARD]
+    if card_ids:
+        # Copied cards point to the original schedule. The discarded IDs are
+        # the only rows this replacement owns.
+        db.execute(delete(FlashcardReview).where(FlashcardReview.question_id.in_(card_ids)))
+    quiz.questions.clear()
+    db.flush()
+    for index, card in enumerate(content.flashcards):
+        quiz.questions.append(QuizQuestion(
+            question_type=QuestionType.FLASHCARD, order_index=index,
+            prompt=card["prompt"], answer=card["answer"],
+        ))
+    db.flush()
+
+    draft = content.draft
+    objectives = {
+        f"legacy:{question.id}": card["objective_ids"]
+        for question, card in zip(quiz.questions, content.flashcards, strict=True)
+    }
+    session.review_points = []
+    session.material.content_markdown = content.content_markdown
+    session.material.youtube_keywords = content.keywords
+    AdaptiveContentRepository(db).save(session.id, draft.model_copy(update={
+        "adaptive_assessment": draft.adaptive_assessment.model_copy(update={
+            "question_objectives": objectives,
+        }),
+    }))
+
+
+def _generate_adaptive_content(
+    db: Session,
+    llm: LLMProvider,
+    session: StudySession,
+    plan: Plan,
+    goal_text: str,
+    config: SessionConfig,
+) -> AdaptiveBuiltContent:
+    draft = AdaptiveLearningService(db).require_published_content(session)
+    snapshot = draft.pedagogy_snapshot
+    if not isinstance(snapshot, PedagogySnapshot):
+        raise _NOT_AVAILABLE
+    points = session.review_points or []
+    chunks = Retriever().retrieve_texts(
+        session.topic_name, top_k=4, document_ids=plan.document_ids
+    ) if plan.document_ids else []
+    sources = adaptive_session_content.index_source_chunks(chunks)
+    raw = complete_within_budget(
+        llm,
+        kind="session_content",
+        system=adaptive_session_content.SYSTEM,
+        prompt=adaptive_session_content.build_adaptive_session_prompt(
+            session.topic_name, goal_text, sources, config, snapshot,
+            failed_points=points, previous_lesson=session.material.content_markdown[:4000],
+        ),
+        context={
+            "content_version": 2,
+            "pedagogy_snapshot": snapshot.model_dump(mode="json"),
+            "sources": sources,
+            "topic": session.topic_name,
+            "goal_title": goal_text,
+            "flashcards": config.flashcards,
+            "multiple_choice": config.multiple_choice,
+            "reinforcement": True,
+            "failed_points": points,
+        },
+    )
+    return build_adaptive_session_content(parse_llm_json(raw), config, snapshot, sources)
+
+
+def generate_reinforcement_task(
+    session_id: int, user_id: int, spent_day: date | None, run_token: str | None = None
+) -> None:
     """Background worker: builds the reinforcement content for one review session."""
     db = SessionLocal()
     llm = None
@@ -143,13 +272,39 @@ def generate_reinforcement_task(session_id: int, user_id: int, spent_day: date |
             _refund(db, user_id, spent_day)
             return
         plan = db.get(Plan, session.plan_id)
+        if plan is None:
+            _refund(db, user_id, spent_day)
+            return
+        if plan.content_version == 2 and (
+            run_token is None
+            or session.reinforcement_run_token != run_token
+            or session.reinforcement_status != Status.PROCESSING
+            or session.status != SessionStatus.PENDING
+        ):
+            _refund(db, user_id, spent_day)
+            return
         goal = db.get(Goal, plan.goal_id)
+        if goal is None:
+            _refund(db, user_id, spent_day)
+            return
         goal_text = f"{goal.title}. {goal.description}".strip()
-        config = GoalStrategyFactory.create(goal.goal_type).get_session_config()
-        points = list(session.review_points or [])
-        excerpt = (session.material.content_markdown if session.material else "")[:4000]
         try:
+            goal_type = goal.goal_type
+            if plan.content_version == 2 and plan.generation_goal_type is not None:
+                goal_type = GoalType(plan.generation_goal_type)
+            config = GoalStrategyFactory.create(goal_type).get_session_config()
             llm = get_llm_provider(db, user_id)
+            if plan.content_version == 2:
+                adaptive = _generate_adaptive_content(db, llm, session, plan, goal_text, config)
+                if not _claim_publication(db, session_id, run_token):
+                    db.rollback()
+                    _refund(db, user_id, spent_day)
+                    return
+                _publish_adaptive_content(db, session, adaptive)
+                db.commit()
+                return
+            points = list(session.review_points or [])
+            excerpt = (session.material.content_markdown if session.material else "")[:4000]
             raw = complete_within_budget(
                 llm,
                 kind="session_content",
@@ -169,16 +324,7 @@ def generate_reinforcement_task(session_id: int, user_id: int, spent_day: date |
             content = build_session_content(parse_llm_json(raw), config)
             if not content.material_markdown.strip() or not content.questions:
                 raise LLMError("La IA no devolvió material de refuerzo válido.", code="LLM_INVALID_RESPONSE")
-            claimed = db.execute(
-                update(StudySession)
-                .where(
-                    StudySession.id == session_id,
-                    StudySession.reinforcement_status == Status.PROCESSING,
-                    StudySession.status == SessionStatus.PENDING,
-                )
-                .values(reinforcement_status=Status.READY, reinforcement_error="")
-            )
-            if claimed.rowcount == 0:  # cancelled or completed while the model was answering
+            if not _claim_publication(db, session_id, run_token):
                 db.rollback()
                 _refund(db, user_id, spent_day)
                 return
@@ -193,7 +339,10 @@ def generate_reinforcement_task(session_id: int, user_id: int, spent_day: date |
         except Exception as exc:  # noqa: BLE001 - record a safe failure for the learner
             db.rollback()
             message = str(exc)[:1000] if isinstance(exc, LLMError) else _GENERIC_FAILURE
-            _set_status(db, session_id, Status.FAILED, only_if=[Status.PROCESSING], error=message)
+            _set_status(
+                db, session_id, Status.FAILED, only_if=[Status.PROCESSING],
+                error=message, run_token=run_token,
+            )
             _refund(db, user_id, spent_day)
             logger.error(
                 "Reinforcement failed for session %s (code=%s)", session_id, getattr(exc, "code", "UNKNOWN")

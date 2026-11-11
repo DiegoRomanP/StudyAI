@@ -46,6 +46,7 @@ class QuizRepository(BaseRepository[Quiz]):
                     ),
                     else_=StudySession.reinforcement_status,
                 ),
+                reinforcement_run_token=None,
             )
         )
         if claimed_session.rowcount != 1:
