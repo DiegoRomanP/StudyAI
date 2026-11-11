@@ -6,7 +6,14 @@ from app.models.goal import Goal
 from app.models.plan import Plan, PlanStatus
 from app.models.quiz import QuestionType, Quiz, QuizQuestion
 from app.models.session import Session, SessionKind, SessionMaterial
-from app.pedagogy.contracts import AdaptiveSessionDraft, LearningObjective, LessonBlock
+from app.pedagogy.contracts import (
+    AdaptiveSessionDraft,
+    LearningObjective,
+    LegacyLearningObjective,
+    LegacyPedagogySnapshot,
+    LessonBlock,
+    MinuteRange,
+)
 from app.pedagogy.registry import resolve_profile, snapshot_profile
 from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 from tests.test_adaptive_learning_routes import NOT_READY, VERSION_MISMATCH, seed_session
@@ -106,6 +113,85 @@ def test_assessment_only_projects_public_question_fields(client, assessment):
     assert questions[2]["objective_ids"] == ["b"]
     for field in ("expected_answer", "correct", "exemplar", "matching_pairs", "3/4", "Pista privada"):
         assert field not in response.text
+
+
+@pytest.mark.parametrize(
+    "profile_id,expected_minutes",
+    [
+        ("history", {"min": 8, "max": 12}),
+        ("mathematics", {"min": 3, "max": 5}),
+        ("general", {"min": 5, "max": 10}),
+    ],
+)
+def test_legacy_snapshot_assessment_get_derives_timing_without_mutation(
+    client, assessment, profile_id, expected_minutes
+):
+    from copy import deepcopy
+
+    session_id, quiz_id, _, _ = assessment
+    with main.SessionLocal() as db:
+        repository = AdaptiveContentRepository(db)
+        draft = repository.get(session_id)
+        assert draft is not None
+        draft.pedagogy_snapshot = LegacyPedagogySnapshot(
+            profile_id=profile_id,
+            profile_version=1,
+            rules=["Conserva las reglas históricas."],
+            objectives=[
+                LegacyLearningObjective(
+                    id=objective_id,
+                    skill=f"Habilidad {objective_id}",
+                    description=f"Descripción {objective_id}.",
+                )
+                for objective_id in ("a", "b")
+            ],
+        )
+        draft.assessment_revision = f"legacy-{profile_id}-revision"
+        repository.save(session_id, draft)
+        db.commit()
+        session = db.get(Session, session_id)
+        quiz = db.get(Quiz, quiz_id)
+        snapshot_before = deepcopy(session.material.pedagogy_snapshot)
+        revision_before = quiz.assessment_revision
+
+    response = client.get(f"/quizzes/{session_id}/assessment-v2")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["revision"] == revision_before == f"legacy-{profile_id}-revision"
+    assert payload["questions"]
+    assert all(
+        question["estimated_minutes_per_question"] == expected_minutes
+        for question in payload["questions"]
+    )
+    with main.SessionLocal() as db:
+        session = db.get(Session, session_id)
+        quiz = db.get(Quiz, quiz_id)
+        assert session.material.pedagogy_snapshot == snapshot_before
+        assert quiz.assessment_revision == revision_before
+
+
+def test_full_snapshot_assessment_get_keeps_question_time_override(client, assessment):
+    session_id, _, _, legacy_id = assessment
+    with main.SessionLocal() as db:
+        repository = AdaptiveContentRepository(db)
+        draft = repository.get(session_id)
+        assert draft is not None
+        draft.pedagogy_snapshot.question_time_overrides["multiple_choice"] = MinuteRange(
+            min=4, max=6
+        )
+        repository.save(session_id, draft)
+        db.commit()
+
+    response = client.get(f"/quizzes/{session_id}/assessment-v2")
+
+    assert response.status_code == 200, response.text
+    questions = {question["question_id"]: question for question in response.json()["questions"]}
+    assert questions[f"legacy:{legacy_id}"]["estimated_minutes_per_question"] == {
+        "min": 4,
+        "max": 6,
+    }
+    assert questions["number"]["estimated_minutes_per_question"] == {"min": 3, "max": 5}
 
 
 def test_assessment_get_requires_a_published_v2_session(client):

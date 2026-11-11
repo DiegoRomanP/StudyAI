@@ -19,6 +19,7 @@ from app.pedagogy.contracts import (
     ProcedureRubricWeights,
     StoredAssessmentQuestion,
 )
+from app.pedagogy.registry import resolve_profile
 from app.repositories.quiz_repository import QuizRepository
 from app.schemas.adaptive_learning import (
     AssessmentAnswerV2,
@@ -100,12 +101,15 @@ class AdaptiveQuizService:
         ]
         snapshot = draft.pedagogy_snapshot
         if isinstance(snapshot, PedagogySnapshot):
-            historical_formats = {"numeric": "short_answer", "sequence": "matching", "rubric": "essay"}
-            for question in questions:
-                format_ = historical_formats.get(question["kind"], question["kind"])
-                question["estimated_minutes_per_question"] = snapshot.question_time_overrides.get(
-                    format_, snapshot.estimated_minutes_per_question
-                )
+            timing_profile = snapshot
+        else:
+            timing_profile = resolve_profile(snapshot.profile_id, None)
+        historical_formats = {"numeric": "short_answer", "sequence": "matching", "rubric": "essay"}
+        for question in questions:
+            format_ = historical_formats.get(question["kind"], question["kind"])
+            question["estimated_minutes_per_question"] = timing_profile.question_time_overrides.get(
+                format_, timing_profile.estimated_minutes_per_question
+            )
 
         if session.kind == SessionKind.REVIEW:
             missed = {item.get("question_id") for item in session.review_points or []}
