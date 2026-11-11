@@ -28,6 +28,7 @@ class AdaptiveLearningService:
             snapshot=draft.pedagogy_snapshot,
             lesson_blocks=draft.lesson_blocks,
             content_markdown=session.material.content_markdown,
+            stimuli=draft.adaptive_assessment.stimuli,
         )
 
     def require_published_content(self, session: StudySession) -> AdaptiveSessionDraft:

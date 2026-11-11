@@ -11,12 +11,14 @@ from app.pedagogy.contracts import (
     AssessmentMatchingPair,
     AssessmentRubricCriterion,
     AssessmentSequenceItem,
+    GroundedAssessmentFeedback,
     LessonBlock,
     LegacyPedagogySnapshot,
     MinuteRange,
     PedagogySnapshot,
     ProcedureRubricWeights,
 )
+from app.pedagogy.stimuli import Stimulus
 
 
 class _StrictDTO(BaseModel):
@@ -33,6 +35,7 @@ class LearningResponseV2(_StrictDTO):
     snapshot: PedagogySnapshot | LegacyPedagogySnapshot
     lesson_blocks: list[LessonBlock]
     content_markdown: str
+    stimuli: list[Stimulus] = Field(default_factory=list)
 
 
 class _AssessmentQuestionBase(_StrictDTO):
@@ -40,6 +43,7 @@ class _AssessmentQuestionBase(_StrictDTO):
     prompt: str
     objective_ids: list[str]
     estimated_minutes_per_question: MinuteRange | None = None
+    stimulus_id: str | None = None
 
 
 class FlashcardQuestionResponseV2(_AssessmentQuestionBase):
@@ -114,6 +118,7 @@ class AssessmentResponseV2(_StrictDTO):
     quiz_id: int
     revision: str
     questions: list[AssessmentQuestionV2]
+    stimuli: list[Stimulus] = Field(default_factory=list)
 
 
 class FlashcardAnswerV2(_StrictDTO):
@@ -261,6 +266,7 @@ class AssessmentResultItemV2(_StrictDTO):
         StrictBool | StrictStr | list[StrictStr] | list[AssessmentMatchingPair] | None
     ) = None
     feedback: str = ""
+    grounded_feedback: list[GroundedAssessmentFeedback] = Field(default_factory=list)
 
 
 class FormativeFeedbackV2(_StrictDTO):
@@ -272,6 +278,7 @@ class FormativeFeedbackV2(_StrictDTO):
     submitted_text: StrictStr | None = Field(default=None, max_length=2000)
     submitted_final_answer: StrictStr | None = Field(default=None, max_length=2000)
     procedure_rubric_weights: ProcedureRubricWeights | None = None
+    grounded_feedback: list[GroundedAssessmentFeedback] = Field(default_factory=list)
 
 
 class ObjectiveResultV2(_StrictDTO):

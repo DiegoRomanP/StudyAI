@@ -18,6 +18,7 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from app.pedagogy.answer_normalization import normalize_exact_answer, parse_numeric_answer
+from app.pedagogy.stimuli import Stimulus
 
 _STORED_CONTENT_CONTEXT = object()
 
@@ -152,6 +153,13 @@ class LessonBlock(ContractModel):
     objective_ids: list[str]
     content_markdown: str
     source_refs: list[str] = Field(default_factory=list)
+    stimulus_id: str | None = None
+
+
+class GroundedAssessmentFeedback(ContractModel):
+    mode: FeedbackMode
+    text: str = Field(min_length=1, max_length=1400)
+    source_id: str | None = None
 
 
 class AssessmentSequenceItem(ContractModel):
@@ -175,6 +183,20 @@ class AssessmentRubricCriterion(ContractModel):
     descriptors: list[str] = Field(default_factory=list)
 
 
+def validate_formative_rubric(criteria: list[AssessmentRubricCriterion]) -> None:
+    criterion_ids = [criterion.criterion_id for criterion in criteria]
+    if not criteria or len(criterion_ids) != len(set(criterion_ids)):
+        raise ValueError("Formative text questions require unique rubric criteria.")
+    if any(
+        not criterion.criterion_id.strip()
+        or not criterion.description.strip()
+        or not criterion.descriptors
+        or any(not descriptor.strip() for descriptor in criterion.descriptors)
+        for criterion in criteria
+    ):
+        raise ValueError("Rubric criteria require non-empty descriptions and descriptors.")
+
+
 class StoredAssessmentQuestion(ContractModel):
     """Private v2 question data stored in ``Quiz.adaptive_assessment``."""
 
@@ -192,6 +214,8 @@ class StoredAssessmentQuestion(ContractModel):
     ]
     prompt: str = Field(min_length=1)
     objective_ids: list[str]
+    stimulus_id: str | None = None
+    feedback: list[GroundedAssessmentFeedback] = Field(default_factory=list, max_length=3)
     mode: Literal["single", "multiple"] = "single"
     options: list[str] = Field(default_factory=list)
     matching_left: list[AssessmentMatchingItem] = Field(default_factory=list)
@@ -256,20 +280,6 @@ class StoredAssessmentQuestion(ContractModel):
         if len(normalized) != len(set(normalized)):
             raise ValueError("Exact answer keys must be unique after normalization.")
 
-    def _validate_formative_rubric(self) -> None:
-        criteria = self.rubric_criteria
-        criterion_ids = [criterion.criterion_id for criterion in criteria]
-        if not criteria or len(criterion_ids) != len(set(criterion_ids)):
-            raise ValueError("Formative text questions require unique rubric criteria.")
-        if any(
-            not criterion.criterion_id.strip()
-            or not criterion.description.strip()
-            or not criterion.descriptors
-            or any(not descriptor.strip() for descriptor in criterion.descriptors)
-            for criterion in criteria
-        ):
-            raise ValueError("Rubric criteria require non-empty descriptions and descriptors.")
-
     def _validate_text_grading(self) -> None:
         if self.grading_mode == "exact":
             self._validate_exact_text_answer_keys()
@@ -278,7 +288,7 @@ class StoredAssessmentQuestion(ContractModel):
         elif self.grading_mode == "formative":
             if self.expected_answer is not None:
                 raise ValueError("Formative short answers cannot include objective answer keys.")
-            self._validate_formative_rubric()
+            validate_formative_rubric(self.rubric_criteria)
         else:
             raise ValueError("Short answers require exact or formative grading mode.")
 
@@ -287,10 +297,10 @@ class StoredAssessmentQuestion(ContractModel):
             raise ValueError("Essay questions are formative and do not accept a grading mode.")
         if self.expected_answer is not None:
             raise ValueError("Essay questions cannot include objective answer keys.")
-        self._validate_formative_rubric()
+        validate_formative_rubric(self.rubric_criteria)
 
     def _validate_step_by_step(self) -> None:
-        self._validate_formative_rubric()
+        validate_formative_rubric(self.rubric_criteria)
         if self.grading_mode == "exact":
             self._validate_exact_text_answer_keys()
         elif self.grading_mode == "numeric":
@@ -380,6 +390,14 @@ class AdaptiveAssessmentPayload(ContractModel):
     schema_version: Literal[2]
     question_objectives: dict[str, list[str]]
     questions: list[StoredAssessmentQuestion]
+    stimuli: list[Stimulus] = Field(default_factory=list, max_length=12)
+
+    @model_validator(mode="after")
+    def unique_adaptive_question_ids(self) -> AdaptiveAssessmentPayload:
+        ids = [question.question_id for question in self.questions]
+        if len(set(ids)) != len(ids) or any(id_ == "_meta" or id_.startswith("legacy:") for id_ in ids):
+            raise ValueError("Adaptive questions require distinct IDs outside reserved namespaces.")
+        return self
 
 
 class AdaptiveSessionDraft(ContractModel):
@@ -388,6 +406,18 @@ class AdaptiveSessionDraft(ContractModel):
     adaptive_assessment: AdaptiveAssessmentPayload
     assessment_revision: str | None = None
     assessment_state: Literal["open", "submitted"] | None = None
+
+    @model_validator(mode="after")
+    def aligned_stimulus_references(self) -> AdaptiveSessionDraft:
+        stimuli = {stimulus.id: set(stimulus.objective_ids) for stimulus in self.adaptive_assessment.stimuli}
+        if len(stimuli) != len(self.adaptive_assessment.stimuli):
+            raise ValueError("Stimulus IDs must be unique.")
+        for item in [*self.lesson_blocks, *self.adaptive_assessment.questions]:
+            if item.stimulus_id is not None and not stimuli.get(item.stimulus_id, set()).intersection(
+                item.objective_ids
+            ):
+                raise ValueError("A stimulus reference must share an objective with the block or question.")
+        return self
 
     @classmethod
     def from_storage(cls, raw: dict[str, object]) -> AdaptiveSessionDraft:
