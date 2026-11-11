@@ -49,6 +49,7 @@ class Plan(TimestampMixin, Base):
     content_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     subject_hint: Mapped[str | None] = mapped_column(String(16), nullable=True)
     profile_hint: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    generation_goal_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     error_message: Mapped[str] = mapped_column(String(1024), default="")
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -87,5 +88,6 @@ class PlanTopic(Base):
     selected: Mapped[bool] = mapped_column(default=False)         # survived Pareto filter
     mastery: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1, None = no data
     review_box: Mapped[int] = mapped_column(Integer, default=0)   # step of the review ladder
+    pedagogy_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     plan = relationship("Plan", back_populates="topics")

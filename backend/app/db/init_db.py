@@ -197,8 +197,10 @@ def _ensure_adaptive_content_columns() -> None:
             "content_version": "INTEGER NOT NULL DEFAULT 1",
             "subject_hint": "VARCHAR(16)",
             "profile_hint": "VARCHAR(32)",
+            "generation_goal_type": "VARCHAR(16)",
         },
     )
+    _add_missing_columns("plan_topics", {"pedagogy_snapshot": "JSON"})
     _add_missing_columns(
         "session_materials",
         {
