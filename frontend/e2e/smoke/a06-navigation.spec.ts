@@ -655,23 +655,25 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
 
   await page.goto("/plan/27");
   await expect(page.getByRole("heading", { name: "Plan de navegación A06" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Sesión 8:/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sesión 8:/ })).toHaveAttribute("aria-haspopup", "dialog");
   await expect(page).toHaveTitle("Detalle del plan | StudyAI");
   mobileLayoutEvidence.push(
     await assertMobileLayout(
       page,
       "Detalle del plan",
       true,
-      [{ tag: "a", href: "/session/61" }],
-      [`eighth-session fixture link: /session/61 (${plan.sessions[7].topic_name})`],
+      [{ tag: "button", label: "Calendario" }],
+      [`eighth-session calendar control: ${plan.sessions[7].topic_name}`],
     ),
   );
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("a06-plan-direct-link-320.png") });
 
-  const planSessionLink = page.getByRole("link", { name: /Sesión de navegación A06/ });
-  await expect(planSessionLink).toHaveAttribute("href", "/session/54");
-  await planSessionLink.click();
+  const planSessionButton = page.getByRole("button", { name: /Sesión de navegación A06/ });
+  await planSessionButton.press("Enter");
+  const sessionDialog = page.getByRole("dialog", { name: "¿Qué quieres hacer?" });
+  await expect(sessionDialog).toBeVisible();
+  await sessionDialog.getByRole("button", { name: "Ver sesión", exact: true }).press("Enter");
   await expect(page).toHaveURL(/\/session\/54$/);
   await expect(page.getByRole("heading", { name: session.topic_name })).toBeVisible();
   await page.goBack();
