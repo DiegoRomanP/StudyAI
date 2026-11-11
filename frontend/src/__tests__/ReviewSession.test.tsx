@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { adaptiveLearningApi } from "../api/adaptiveLearning";
 import { api } from "../api/endpoints";
 import type { LLMRuntimeDTO, PlanDTO, QuizDTO, SessionDetailDTO } from "../api/types";
 import { SessionPage } from "../pages/SessionPage";
@@ -57,6 +58,7 @@ const quiz: QuizDTO = {
 function renderReview(
   options: { session?: SessionDetailDTO; runtime?: LLMRuntimeDTO; path?: string; strict?: boolean; quiz?: QuizDTO } = {},
 ) {
+  vi.spyOn(adaptiveLearningApi, "getLearningMode").mockResolvedValue({ content_version: 1 });
   vi.spyOn(api, "getSession").mockResolvedValue(options.session ?? review);
   vi.spyOn(api, "getQuiz").mockResolvedValue(options.quiz ?? quiz);
   vi.spyOn(api, "getPlan").mockResolvedValue(plan);

@@ -3,15 +3,19 @@ import axios from "axios";
 import { BarChart3, X } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 
+import { getApiErrorMessage } from "../api/errors";
+import type { LearningResponseV2 } from "../api/adaptiveLearning";
 import type { PlanTopicDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
 import { AnswerReview } from "../components/session/AnswerReview";
+import { LessonBlocks } from "../components/session/LessonBlocks";
 import { QuizPhase } from "../components/session/QuizPhase";
 import { ReviewPanel, ReviewPoints } from "../components/session/ReviewPanel";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
 import { SessionResult } from "../components/session/SessionResult";
 import { BreakPhase, StudyPhase } from "../components/session/StudyPhase";
 import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
+import { useAdaptiveLearning } from "../hooks/useAdaptiveLearning";
 import { usePlan, useQuiz, useSession, useSessionResult } from "../hooks/queries";
 import { clearQuizDraft } from "../lib/quizDraft";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
@@ -77,7 +81,106 @@ export function SessionPage() {
   return <SessionFlow key={session.id} session={session} updateError={updateError} />;
 }
 
-function SessionFlow({
+function SessionFlow({ session, updateError }: { session: SessionDetailDTO; updateError: ReactNode }) {
+  const adaptive = useAdaptiveLearning(session.id);
+
+  if (!adaptive.mode.data) {
+    if (adaptive.mode.isError) {
+      return (
+        <section className="space-y-4" aria-labelledby="session-mode-title">
+          <h1 id="session-mode-title" className="text-2xl font-bold">{session.topic_name}</h1>
+          <Alert tone="error" title="No se pudo confirmar el tipo de sesión">
+            <p>{getApiErrorMessage(adaptive.mode.error, "La versión de la sesión no está disponible.")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => void adaptive.mode.refetch()}>
+                Reintentar
+              </Button>
+              <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost">Volver al plan</ButtonLink>
+            </div>
+          </Alert>
+        </section>
+      );
+    }
+    return <Spinner label="Comprobando el tipo de sesión…" />;
+  }
+
+  if (adaptive.mode.data.content_version === 1) {
+    return <LegacySessionFlow session={session} updateError={updateError} />;
+  }
+
+  if (!adaptive.lesson.data) {
+    if (adaptive.lesson.isError) {
+      const contentNotReady =
+        axios.isAxiosError<{ code?: unknown }>(adaptive.lesson.error) &&
+        adaptive.lesson.error.response?.data?.code === "CONTENT_NOT_READY";
+      if (contentNotReady) {
+        return (
+          <AdaptiveContentNotReady
+            session={session}
+            updateError={updateError}
+            onRetry={() => void adaptive.lesson.refetch()}
+          />
+        );
+      }
+      return (
+        <section className="space-y-4" aria-labelledby="adaptive-content-title">
+          <h1 id="adaptive-content-title" className="text-2xl font-bold">{session.topic_name}</h1>
+          {updateError}
+          <Alert tone="error" title="No se pudo cargar la lección adaptativa">
+            <p>{getApiErrorMessage(adaptive.lesson.error, "No se pudo cargar la lección adaptativa.")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={() => void adaptive.lesson.refetch()}>
+                Reintentar
+              </Button>
+              <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost">Volver al plan</ButtonLink>
+            </div>
+          </Alert>
+        </section>
+      );
+    }
+    return <Spinner label="Cargando lección adaptativa…" />;
+  }
+
+  return <AdaptiveSessionFlow session={session} lesson={adaptive.lesson.data} updateError={updateError} />;
+}
+
+function AdaptiveContentNotReady({
+  session,
+  updateError,
+  onRetry,
+}: {
+  session: SessionDetailDTO;
+  updateError: ReactNode;
+  onRetry: () => void;
+}) {
+  const planQuery = usePlan(session.plan_id);
+  const planReady = planQuery.data?.status === "READY";
+
+  return (
+    <section className="space-y-4" aria-labelledby="adaptive-content-title">
+      <h1 id="adaptive-content-title" className="text-2xl font-bold">{session.topic_name}</h1>
+      {updateError}
+      <Alert tone="warning" title="Contenido adaptativo en preparación">
+        <p>El contenido de la sesión todavía no está disponible.</p>
+        {planReady ? (
+          <p>Este plan ya figura listo. Crea un plan nuevo para generar contenido adaptativo para sus sesiones.</p>
+        ) : (
+          <p>Si el plan sigue generándose, vuelve al plan para consultar su progreso.</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={onRetry}>Reintentar</Button>
+          {planReady ? (
+            <ButtonLink to="/plan" variant="ghost">Crear un plan nuevo</ButtonLink>
+          ) : (
+            <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost">Volver al plan</ButtonLink>
+          )}
+        </div>
+      </Alert>
+    </section>
+  );
+}
+
+function LegacySessionFlow({
   session,
   updateError,
 }: {
@@ -221,6 +324,89 @@ function SessionFlow({
             </div>
           </Card>
         ))}
+    </div>
+  );
+}
+
+function AdaptiveSessionFlow({
+  session,
+  lesson,
+  updateError,
+}: {
+  session: SessionDetailDTO;
+  lesson: LearningResponseV2;
+  updateError: ReactNode;
+}) {
+  const [searchParams] = useSearchParams();
+  const [phase, setPhase] = useState<Phase>(() => initialPhase(searchParams.get("fase")));
+  const isReview = session.kind === "REVIEW";
+  const reinforced = session.reinforcement_status === "READY";
+  const showReviewPanel = isReview && session.status === "PENDING" && !reinforced;
+  const badge = isReview ? (
+    <>
+      <Badge color="brand">Repaso</Badge>
+      {reinforced && <Badge color="green">Con IA</Badge>}
+    </>
+  ) : undefined;
+  const exit = (
+    <ButtonLink to={`/plan/${session.plan_id}`} variant="ghost" aria-label="Salir de la sesión">
+      <X aria-hidden="true" className="h-5 w-5" />
+    </ButtonLink>
+  );
+
+  return (
+    <div className="space-y-4">
+      {updateError}
+      {phase === "study" ? (
+        <StudyPhase
+          topic={session.topic_name}
+          durationMinutes={session.duration_minutes}
+          exit={exit}
+          badge={badge}
+          aside={showReviewPanel ? <ReviewPanel session={session} /> : undefined}
+          startDisabledReason={
+            session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
+          }
+          onDone={() => setPhase("break")}
+        >
+          <LessonBlocks lesson={lesson} />
+        </StudyPhase>
+      ) : (
+        <div className="flex items-center gap-2 pt-2">
+          {exit}
+          <Button type="button" variant="ghost" onClick={() => setPhase("study")}>
+            Volver al material
+          </Button>
+        </div>
+      )}
+
+      {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
+      {(phase === "test" || phase === "done") && (
+        <Card className="space-y-3" aria-labelledby="adaptive-assessment-title">
+          <h2 id="adaptive-assessment-title" className="font-display text-lg font-semibold text-text-primary">
+            Evaluación adaptativa
+          </h2>
+          <p className="text-sm text-text-muted">
+            Esta sesión usa una evaluación vinculada a sus objetivos de aprendizaje.
+          </p>
+          <Button type="button" variant="secondary" onClick={() => setPhase("study")}>
+            Volver al material
+          </Button>
+        </Card>
+      )}
+      {phase === "stats" && (
+        <Card className="space-y-3" aria-labelledby="adaptive-results-title">
+          <h2 id="adaptive-results-title" className="font-display text-lg font-semibold text-text-primary">
+            Resultados adaptativos
+          </h2>
+          <p className="text-sm text-text-muted">
+            El resultado se consulta desde la evaluación vinculada a esta sesión.
+          </p>
+          <Button type="button" onClick={() => setPhase("test")}>
+            Abrir evaluación
+          </Button>
+        </Card>
+      )}
     </div>
   );
 }

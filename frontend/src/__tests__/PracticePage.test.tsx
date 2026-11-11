@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../api/client";
+import { adaptiveLearningApi, type LearningModeResponse } from "../api/adaptiveLearning";
 import { api } from "../api/endpoints";
 import type { PlanDTO, QuizDTO } from "../api/types";
 import { PracticePage } from "../pages/PracticePage";
@@ -51,7 +52,13 @@ const quizzes: Record<number, QuizDTO> = {
   },
 };
 
-function renderPractice(path = "/practica") {
+function renderPractice(
+  path = "/practica",
+  modeForSession: (sessionId: number) => Promise<LearningModeResponse> = async () => ({
+    content_version: 1,
+  }),
+) {
+  vi.spyOn(adaptiveLearningApi, "getLearningMode").mockImplementation(modeForSession);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -69,6 +76,50 @@ afterEach(() => {
 });
 
 describe("PracticePage", () => {
+  it("waits for v1 mode before requesting local practice questions", async () => {
+    vi.spyOn(api, "listPlans").mockResolvedValue([plan]);
+    let resolveMode: (mode: LearningModeResponse) => void = () => undefined;
+    const getQuiz = vi.spyOn(api, "getQuiz").mockImplementation(async (sessionId) => quizzes[sessionId]);
+    renderPractice("/practica", () => new Promise((resolve) => (resolveMode = resolve)));
+
+    expect(await screen.findByText("Comprobando la versión de la primera sesión…")).toBeInTheDocument();
+    expect(getQuiz).not.toHaveBeenCalled();
+    resolveMode({ content_version: 1 });
+
+    expect(await screen.findByText("Pregunta 1 de 2")).toBeInTheDocument();
+    expect(getQuiz).toHaveBeenCalled();
+  });
+
+  it("shows v2 assessment links from the selected plan's first session without fetching legacy quizzes", async () => {
+    const selectedPlan: PlanDTO = {
+      ...plan,
+      id: 10,
+      title: "Plan de química",
+      sessions: [
+        makeSessionSummary({ id: 80, order_index: 0, topic_name: "Enlaces químicos" }),
+        makeSessionSummary({ id: 81, order_index: 1, topic_name: "Reacciones" }),
+      ],
+    };
+    vi.spyOn(api, "listPlans").mockResolvedValue([plan, selectedPlan]);
+    const getQuiz = vi.spyOn(api, "getQuiz");
+    const modeSessions: number[] = [];
+    renderPractice("/practica?plan=10", async (sessionId) => {
+      modeSessions.push(sessionId);
+      return { content_version: 2 };
+    });
+
+    expect(await screen.findByRole("link", { name: "Abrir evaluación de Enlaces químicos" })).toHaveAttribute(
+      "href",
+      "/session/80?fase=test",
+    );
+    expect(screen.getByRole("link", { name: "Abrir evaluación de Reacciones" })).toHaveAttribute(
+      "href",
+      "/session/81?fase=test",
+    );
+    expect(modeSessions).toEqual([80]);
+    expect(getQuiz).not.toHaveBeenCalled();
+  });
+
   it("gives immediate feedback without ever submitting a result", async () => {
     vi.spyOn(api, "listPlans").mockResolvedValue([plan]);
     vi.spyOn(api, "getQuiz").mockImplementation(async (sessionId: number) => quizzes[sessionId]);

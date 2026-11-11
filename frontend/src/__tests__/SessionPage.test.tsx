@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "../api/endpoints";
+import { adaptiveLearningApi } from "../api/adaptiveLearning";
+import type { GraphStimulus, LearningResponseV2 } from "../api/adaptiveLearning";
 import type { PlanDTO, QuizDTO, QuizResultDTO, SessionDetailDTO } from "../api/types";
 import { SessionPage } from "../pages/SessionPage";
 import { makeSessionDetail, makeSessionSummary, makeTopic } from "../test/fixtures";
@@ -74,17 +76,118 @@ const result: QuizResultDTO = {
   },
 };
 
+const adaptiveLesson: LearningResponseV2 = {
+  session_id: 5,
+  content_version: 2,
+  snapshot: {
+    snapshot_schema_version: 2,
+    profile_id: "systemic_empirical",
+    profile_version: 1,
+    name: "Sistémico-Empírico",
+    discipline_examples: ["Biología"],
+    rules: ["Relaciona datos y conclusiones."],
+    bloom_levels: ["remember", "analyze"],
+    allowed_question_types: ["multiple_choice"],
+    primary_evaluation_criterion: "accuracy",
+    estimated_minutes_per_question: { min: 3, max: 8 },
+    question_time_overrides: {},
+    feedback_modes: ["formula"],
+    procedure_rubric_weights: null,
+    objectives: [
+      {
+        id: "objective-1",
+        skill: "Interpretar datos de germinación",
+        description: "Compara las mediciones y relaciona el patrón con el resultado.",
+        bloom_target: "analyze",
+      },
+    ],
+  },
+  lesson_blocks: [
+    {
+      id: "lesson-1",
+      kind: "explanation",
+      objective_ids: ["objective-1"],
+      content_markdown:
+        "**Compara** las series antes de explicar la tendencia. [Fuente externa](https://evil.example) ![diagrama](https://evil.example/image.png)",
+      source_refs: ["source-1"],
+      stimulus_id: "graph-1",
+    },
+    {
+      id: "lesson-2",
+      kind: "example",
+      objective_ids: ["objective-1"],
+      content_markdown: "Aplica la comparación a un ejemplo.",
+      source_refs: [],
+      stimulus_id: "case-1",
+    },
+  ],
+  content_markdown: "Lección adaptativa de respaldo.",
+  stimuli: [
+    {
+      id: "graph-1",
+      kind: "graph",
+      title: "Germinación por día",
+      objective_ids: ["objective-1"],
+      origin: "derived",
+      source_id: "source-1",
+      x_label: "Día",
+      y_label: "Plantas",
+      x_unit: "días",
+      y_unit: "plantas",
+      series: [
+        {
+          name: "Lote A",
+          points: [
+            { x: 1, y: 2 },
+            { x: 2, y: 4 },
+          ],
+        },
+      ],
+      text_alternative: "El lote A crece de dos plantas el día 1 a cuatro el día 2.",
+    },
+    {
+      id: "case-1",
+      kind: "case",
+      title: "Ejemplo de observación",
+      objective_ids: ["objective-1"],
+      origin: "generated_example",
+      body_markdown: "Una estudiante compara dos bandejas de semillas.",
+    },
+  ],
+};
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 function renderSession(
-  options: { session?: SessionDetailDTO; quiz?: QuizDTO; plan?: PlanDTO; cachedSession?: SessionDetailDTO; path?: string } = {},
+  options: {
+    session?: SessionDetailDTO;
+    quiz?: QuizDTO;
+    plan?: PlanDTO;
+    cachedSession?: SessionDetailDTO;
+    path?: string;
+    contentVersion?: 1 | 2;
+    lesson?: LearningResponseV2;
+    lessonError?: unknown;
+  } = {},
 ) {
   vi.spyOn(api, "getSession").mockResolvedValue(options.session ?? session);
   vi.spyOn(api, "getQuiz").mockResolvedValue(options.quiz ?? quiz);
   vi.spyOn(api, "getPlan").mockResolvedValue(options.plan ?? plan);
+  vi.spyOn(api, "getLlmRuntime").mockResolvedValue({
+    source: "MOCK",
+    provider: null,
+    models: { topic_analysis: "mock", session_plan: "mock", session_content: "mock" },
+    fallback_reason: null,
+  });
+  vi.spyOn(adaptiveLearningApi, "getLearningMode").mockResolvedValue({
+    content_version: options.contentVersion ?? 1,
+  });
+  const getLesson = vi.spyOn(adaptiveLearningApi, "getLearningV2");
+  if (options.lessonError) getLesson.mockRejectedValue(options.lessonError);
+  else getLesson.mockResolvedValue(options.lesson ?? adaptiveLesson);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -120,6 +223,128 @@ async function answerFlashcard(prompt: string, quality: number) {
 }
 
 describe("SessionPage", () => {
+  it("renders v2 profile, objective, safe lesson blocks and accessible stimuli", async () => {
+    const getQuiz = vi.spyOn(api, "getQuiz");
+    renderSession({ contentVersion: 2, lesson: adaptiveLesson });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+
+    expect(await screen.findByText("Perfil efectivo: Sistémico-Empírico")).toBeInTheDocument();
+    expect(screen.getAllByText("Interpretar datos de germinación").length).toBeGreaterThan(1);
+    expect(screen.getByRole("region", { name: "Objetivos de aprendizaje" }).textContent).toContain("Bloom: Analizar");
+    expect(
+      screen.getAllByText("Fragmento del material de estudio; sin procedencia trazable"),
+    ).toHaveLength(2);
+    expect(screen.getByRole("table", { name: "Datos de Germinación por día" })).toBeInTheDocument();
+    expect(screen.getByText("Alternativa textual")).toBeInTheDocument();
+    expect(screen.getByText("Ejemplo generado; no es evidencia del material fuente.")).toBeInTheDocument();
+    expect(screen.getByText("Una estudiante compara dos bandejas de semillas.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Fuente externa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(getQuiz).not.toHaveBeenCalled();
+  });
+
+  it("keeps every graph observation when x values repeat within or across series", async () => {
+    const graph = adaptiveLesson.stimuli?.find((stimulus): stimulus is GraphStimulus => stimulus.kind === "graph");
+    if (!graph) throw new Error("Test fixture must include a graph stimulus");
+    const repeatedXLesson: LearningResponseV2 = {
+      ...adaptiveLesson,
+      lesson_blocks: [adaptiveLesson.lesson_blocks[0]],
+      stimuli: [
+        {
+          ...graph,
+          series: [
+            { name: "Lote A", points: [{ x: 1, y: 2 }, { x: 1, y: 3 }] },
+            { name: "Lote B", points: [{ x: 1, y: 4 }] },
+          ],
+        },
+      ],
+    };
+    renderSession({ contentVersion: 2, lesson: repeatedXLesson });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+    const table = await screen.findByRole("table", { name: "Datos de Germinación por día" });
+
+    expect(within(table).getAllByRole("row")).toHaveLength(4);
+    expect(within(table).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "Lote A",
+      "2",
+      "Lote A",
+      "3",
+      "Lote B",
+      "4",
+    ]);
+  });
+
+  it.each([
+    { label: "missing stimulus ID", sourceRefs: ["synthetic-source-1"], sourceId: null },
+    { label: "present synthetic IDs", sourceRefs: ["synthetic-source-1"], sourceId: "synthetic-source-1" },
+  ])("labels block and stimulus provenance when $label are not traceable", async ({ sourceRefs, sourceId }) => {
+    const graph = adaptiveLesson.stimuli?.find((stimulus): stimulus is GraphStimulus => stimulus.kind === "graph");
+    if (!graph) throw new Error("Test fixture must include a graph stimulus");
+    const untraceableLesson: LearningResponseV2 = {
+      ...adaptiveLesson,
+      lesson_blocks: [{ ...adaptiveLesson.lesson_blocks[0], source_refs: sourceRefs }],
+      stimuli: [{ ...graph, source_id: sourceId }],
+    };
+    renderSession({ contentVersion: 2, lesson: untraceableLesson });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Empezar" }));
+
+    expect(
+      screen.getAllByText("Fragmento del material de estudio; sin procedencia trazable"),
+    ).toHaveLength(2);
+    expect(screen.queryByText("synthetic-source-1")).not.toBeInTheDocument();
+  });
+
+  it("keeps reinforcement controls for a pending adaptive review without exposing review points", async () => {
+    const adaptiveReview: SessionDetailDTO = {
+      ...session,
+      kind: "REVIEW",
+      status: "PENDING",
+      reinforcement_status: "NONE",
+      review_points: [],
+    };
+    renderSession({ contentVersion: 2, session: adaptiveReview, lesson: adaptiveLesson });
+
+    expect(await screen.findByRole("heading", { name: "Refuerza con IA" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Puntos a reforzar" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["/session/5?fase=test", "Evaluación adaptativa"],
+    ["/session/5?fase=resultado", "Resultados adaptativos"],
+  ])("does not mount legacy quiz or result routes for v2 deep link %s", async (path, heading) => {
+    const getQuiz = vi.spyOn(api, "getQuiz");
+    const getResult = vi.spyOn(api, "getSessionResult");
+    renderSession({ contentVersion: 2, lesson: adaptiveLesson, path });
+
+    expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+    expect(getQuiz).not.toHaveBeenCalled();
+    expect(getResult).not.toHaveBeenCalled();
+  });
+
+  it("shows CONTENT_NOT_READY instead of falling back to legacy material", async () => {
+    const notReady = Object.assign(new Error("Contenido pendiente"), {
+      isAxiosError: true,
+      response: {
+        status: 409,
+        data: {
+          code: "CONTENT_NOT_READY",
+          detail: "El contenido de la sesión todavía no está disponible.",
+        },
+      },
+    });
+    const getQuiz = vi.spyOn(api, "getQuiz");
+    renderSession({ contentVersion: 2, lessonError: notReady });
+
+    expect(await screen.findByText("El contenido de la sesión todavía no está disponible.")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Crear un plan nuevo" })).toHaveAttribute("href", "/plan");
+    expect(screen.getByText(/Este plan ya figura listo/)).toBeInTheDocument();
+    expect(screen.queryByText("_Sin material._")).not.toBeInTheDocument();
+    expect(getQuiz).not.toHaveBeenCalled();
+  });
+
   it("material headings never add a second h1", async () => {
     renderSession();
 

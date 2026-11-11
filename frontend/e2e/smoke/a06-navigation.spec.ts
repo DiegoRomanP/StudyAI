@@ -64,6 +64,10 @@ const plan: PlanDTO = {
       difficulty: 2,
       relevance: 0.9,
       selected: true,
+      mastery: null,
+      review_box: 0,
+      mastery_state: "SIN_DATOS",
+      priority: 0,
     },
   ],
   sessions: Array.from({ length: 8 }, (_, index) => ({
@@ -76,6 +80,10 @@ const plan: PlanDTO = {
     duration_minutes: 25,
     review_offset_days: 1 + index,
     status: index === 6 ? "COMPLETED" : "PENDING",
+    kind: "NEW",
+    topic_id: 31,
+    scheduled_date: null,
+    reinforcement_status: "NONE",
   })),
 };
 
@@ -88,6 +96,12 @@ const session: SessionDetailDTO = {
   review_offset_days: 1,
   status: "PENDING",
   completed_at: null,
+  kind: "NEW",
+  topic_id: 31,
+  scheduled_date: null,
+  review_points: [],
+  reinforcement_status: "NONE",
+  reinforcement_error: "",
   material: {
     content_markdown: [
       "## Material de estudio A06",
@@ -447,6 +461,10 @@ test("responsive navigation, deep links, keyboard flow and recovery work at 320p
         return fulfillJson(route, { ...plan, id: 404, title: "Plan recuperado tras 404" });
       }
       if (url.pathname === "/sessions/54") return fulfillJson(route, session);
+      const learningModePath = /^\/sessions\/(\d+)\/learning-mode$/.exec(url.pathname);
+      if (learningModePath && plan.sessions.some(({ id }) => id === Number(learningModePath[1]))) {
+        return fulfillJson(route, { content_version: 1 });
+      }
       if (url.pathname === "/quizzes/54") return fulfillJson(route, quiz);
       const quizPath = /^\/quizzes\/(\d+)$/.exec(url.pathname);
       if (quizPath) {

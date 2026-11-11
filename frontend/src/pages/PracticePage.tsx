@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowRight, ClipboardCheck, Eye, Info, ListChecks, RotateCcw, Timer } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
+import { getApiErrorMessage } from "../api/errors";
+import { useLearningMode } from "../hooks/useAdaptiveLearning";
 import type { PlanDTO, QuizQuestionDTO, SessionSummaryDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
@@ -178,6 +180,49 @@ export function PracticePage() {
 }
 
 function QuestionPractice({ plan }: { plan: PlanDTO }) {
+  const sessions = [...plan.sessions].sort((a, b) => a.order_index - b.order_index || a.id - b.id);
+  const firstSession = sessions[0];
+  const modeQuery = useLearningMode(firstSession?.id ?? null);
+
+  if (!firstSession) {
+    return (
+      <EmptyState
+        icon={ListChecks}
+        title="Este plan todavía no tiene preguntas"
+        description="Revisa las sesiones del plan."
+        action={
+          <ButtonLink to={`/plan/${plan.id}`} variant="secondary">
+            Ver mi plan
+          </ButtonLink>
+        }
+      />
+    );
+  }
+
+  if (!modeQuery.data) {
+    if (modeQuery.isError) {
+      return (
+        <Alert tone="error" title="No se pudo determinar el modo de práctica">
+          <p>{getApiErrorMessage(modeQuery.error, "No se pudo comprobar la versión de la primera sesión.")}</p>
+          <div>
+            <Button type="button" variant="secondary" onClick={() => void modeQuery.refetch()}>
+              Reintentar
+            </Button>
+          </div>
+        </Alert>
+      );
+    }
+    return <ActivityIndicator label="Comprobando la versión de la primera sesión…" />;
+  }
+
+  if (modeQuery.data.content_version === 2) {
+    return <AdaptiveAssessmentList sessions={sessions} />;
+  }
+
+  return <LegacyQuestionPractice plan={plan} />;
+}
+
+function LegacyQuestionPractice({ plan }: { plan: PlanDTO }) {
   const quizQueries = useSessionQuizzes(plan.sessions.map((session) => session.id));
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -248,6 +293,37 @@ function QuestionPractice({ plan }: { plan: PlanDTO }) {
       ) : (
         <PracticeRound key={filter} planId={plan.id} questions={filtered} />
       )}
+    </div>
+  );
+}
+
+function AdaptiveAssessmentList({ sessions }: { sessions: SessionSummaryDTO[] }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-text-muted">
+        Las sesiones de este plan usan evaluaciones adaptativas. Abre una sesión para responderla.
+      </p>
+      <ul className="grid grid-cols-1 gap-3">
+        {sessions.map((session) => (
+          <li key={session.id}>
+            <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="break-words font-medium text-text-primary">{session.topic_name}</p>
+                <p className="text-sm text-text-muted">
+                  {session.status === "COMPLETED" ? "Completada · resultado disponible en la sesión" : "Pendiente"}
+                </p>
+              </div>
+              <ButtonLink
+                to={`/session/${session.id}?fase=test`}
+                variant={session.status === "COMPLETED" ? "secondary" : "primary"}
+                aria-label={`Abrir evaluación de ${session.topic_name}`}
+              >
+                Abrir evaluación
+              </ButtonLink>
+            </Card>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

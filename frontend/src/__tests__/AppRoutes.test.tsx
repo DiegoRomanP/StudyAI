@@ -16,6 +16,12 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/endpoints", () => ({ api }));
+vi.mock("../api/adaptiveLearning", () => ({
+  adaptiveLearningApi: {
+    getLearningMode: vi.fn().mockResolvedValue({ content_version: 1 }),
+    getLearningV2: vi.fn(),
+  },
+}));
 
 import App from "../App";
 

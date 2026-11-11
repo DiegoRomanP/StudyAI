@@ -22,6 +22,7 @@ import type {
   PlanDTO,
   QuizAnswer,
 } from "../api/types";
+import { adaptiveLearningKeys } from "./useAdaptiveLearning";
 
 function replaceCachedLlmCredential(
   qc: ReturnType<typeof useQueryClient>,
@@ -286,6 +287,11 @@ export function useSession(sessionId: number | null) {
     if (previous.current === "PROCESSING" && status === "READY") {
       qc.invalidateQueries({ queryKey: ["quiz", sessionId] });
       qc.invalidateQueries({ queryKey: ["plan"] });
+      if (sessionId !== null) {
+        qc.invalidateQueries({ queryKey: adaptiveLearningKeys.lesson(sessionId) });
+        qc.invalidateQueries({ queryKey: adaptiveLearningKeys.assessment(sessionId) });
+        qc.invalidateQueries({ queryKey: adaptiveLearningKeys.result(sessionId) });
+      }
     }
     previous.current = status;
   }, [status, sessionId, qc]);
