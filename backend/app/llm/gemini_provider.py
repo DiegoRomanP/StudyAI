@@ -24,6 +24,7 @@ from app.llm.error_mapping import (
     timeout_error,
 )
 from app.llm.request_profiles import RequestProfile
+from app.llm.usage import LLMUsage, as_count
 
 logger = get_logger(__name__)
 
@@ -140,6 +141,7 @@ class GeminiProvider(LLMProvider):
                             # redirect is not a completed model response to replay.
                             raise invalid_response_error(self._provider)
                         data = await asyncio.to_thread(response.json)
+                        self._record_response_usage(data)
                         text = await asyncio.to_thread(self._extract_text, data)
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error(self._provider)
@@ -284,6 +286,22 @@ class GeminiProvider(LLMProvider):
             and detail.get("@type") == _GOOGLE_ERROR_INFO_TYPE
             and detail.get("reason") == "API_KEY_INVALID"
             for detail in details
+        )
+
+    def _record_response_usage(self, data: object) -> None:
+        meta = data.get("usageMetadata") if isinstance(data, Mapping) else None
+        if not isinstance(meta, Mapping):
+            return
+        # Thinking tokens are billed as output but reported separately.
+        output = as_count(meta.get("candidatesTokenCount")) + as_count(meta.get("thoughtsTokenCount"))
+        self._record_usage(
+            LLMUsage(
+                self._provider,
+                self._model,
+                as_count(meta.get("promptTokenCount")),
+                output,
+                as_count(meta.get("cachedContentTokenCount")),
+            )
         )
 
     def _extract_text(self, data: object) -> str:

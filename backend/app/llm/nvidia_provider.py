@@ -88,6 +88,9 @@ class NvidiaNimProvider(LLMProvider):
             kind=kind, system=system, prompt=prompt, context=context, max_tokens=max_tokens
         )
 
+    def drain_usage(self):
+        return self._delegate.drain_usage()
+
     def close(self) -> None:
         self._delegate.close()
 

@@ -26,6 +26,7 @@ from app.llm.error_mapping import (
     timeout_error,
 )
 from app.llm.request_profiles import STANDARD_CHAT_PROFILE
+from app.llm.usage import LLMUsage, as_count, field
 
 logger = get_logger(__name__)
 
@@ -105,6 +106,17 @@ class AnthropicProvider(LLMProvider):
                             system=system,
                             messages=[{"role": "user", "content": prompt}],
                             timeout=self._request_timeout(policy, remaining),
+                        )
+                        # Before _extract_text: it raises on max_tokens, and that call is billed too.
+                        usage = getattr(response, "usage", None)
+                        self._record_usage(
+                            LLMUsage(
+                                "ANTHROPIC",
+                                model,
+                                as_count(field(usage, "input_tokens")),
+                                as_count(field(usage, "output_tokens")),
+                                as_count(field(usage, "cache_read_input_tokens")),
+                            )
                         )
                         if self._remaining_seconds(deadline) <= 0:
                             raise timeout_error("ANTHROPIC")

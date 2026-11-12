@@ -64,6 +64,9 @@ class OpenRouterProvider(LLMProvider):
     def test_connection(self) -> None:
         self._delegate.test_connection()
 
+    def drain_usage(self):
+        return self._delegate.drain_usage()
+
     def close(self) -> None:
         self._delegate.close()
 

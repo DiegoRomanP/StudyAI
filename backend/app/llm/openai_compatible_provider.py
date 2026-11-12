@@ -32,6 +32,7 @@ from app.llm.error_mapping import (
     timeout_error,
 )
 from app.llm.request_profiles import RequestProfile
+from app.llm.usage import LLMUsage, as_count
 
 logger = get_logger(__name__)
 
@@ -153,6 +154,7 @@ class OpenAICompatibleProvider(LLMProvider):
                             )
                         response.raise_for_status()
                         data = await asyncio.to_thread(response.json)
+                        self._record_response_usage(data)
                         response_parser = self._response_parser or self._extract_text
                         text = await asyncio.to_thread(response_parser, data)
                         if self._remaining_seconds(deadline) <= 0:
@@ -344,6 +346,24 @@ class OpenAICompatibleProvider(LLMProvider):
         if not text.strip():
             raise empty_response_error(self._provider)
         return text
+
+    def _record_response_usage(self, data: object) -> None:
+        usage = data.get("usage") if isinstance(data, Mapping) else None
+        if not isinstance(usage, Mapping):
+            return
+        details = usage.get("prompt_tokens_details")
+        cached = usage.get("prompt_cache_hit_tokens")  # DeepSeek
+        if cached is None and isinstance(details, Mapping):
+            cached = details.get("cached_tokens")  # OpenAI
+        self._record_usage(
+            LLMUsage(
+                self._provider,
+                self._model,
+                as_count(usage.get("prompt_tokens")),
+                as_count(usage.get("completion_tokens")),
+                as_count(cached),
+            )
+        )
 
     def _validate_usage(self, data: Mapping[object, object]) -> None:
         usage = data.get("usage")
