@@ -18,6 +18,20 @@ paths:
         "200":
           description: OK
 
+  /config:
+    get:
+      summary: Modo de despliegue (la UI oculta lo que no aplica; el backend siempre valida)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deployment_mode: { type: string, enum: [self_hosted, saas] }
+                  auth_mode: { type: string, enum: [demo, supabase] }
+
   /documents/upload:
     post:
       summary: Sube un documento (.pdf o .md) e inicia su indexación

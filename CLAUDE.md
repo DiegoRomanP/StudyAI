@@ -355,6 +355,17 @@ The UI then tests the saved draft and only enables activation after the server r
 evidence. Catalog entries remain suggestions for generic providers; NVIDIA's curated registry is an
 enforced authorization boundary.
 
+### Deployment mode (`self_hosted` | `saas`)
+
+`Settings.DEPLOYMENT_MODE` (default `self_hosted` = everything above, unchanged). In `saas`,
+`resolve_llm_provider` skips the learner's credential and the free tier and uses **only** the server's
+Anthropic key; without it, `UnavailableLLMProvider` raises `LLM_UNAVAILABLE` and the runtime reports
+`source="UNAVAILABLE"` — never the mock, so a paying user never gets fake content. `require_self_hosted`
+(`app/api/deps.py`) makes every `/llm-settings/*` route except `catalog` and `runtime` answer 404.
+`GET /config` tells the frontend the mode (`useAppConfig`): in `saas` it hides «Conectar IA», answers
+not-found at `/settings` and drops the «Elige tu IA» step and checklist item. Hiding is courtesy; the
+backend enforces. While `/config` loads, the UI behaves as self-hosted.
+
 ### Adaptive route (focus mode + reinforcement)
 
 An exam adjusts the plan. `session.completed` carries `quiz_result_id` and `first_completion`;
