@@ -44,6 +44,7 @@ htmlcov/
 # Agents
 .claude/
 .agents/
+/.codex/
 .alt/
 .opencode/
 .pi/
