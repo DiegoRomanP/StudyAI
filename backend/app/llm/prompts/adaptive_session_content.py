@@ -22,25 +22,28 @@ Devuelve un objeto JSON con las claves lesson_blocks, flashcards, questions,
 youtube_keywords y, opcionalmente, stimuli. Usa estos campos:
 
 - lesson_blocks: objetos con id único, kind, objective_ids y content_markdown.
-  Para atribuir contenido, agrega source_citations con source_id y quote literal.
+  Para atribuir contenido, source_citations es una lista de objetos con source_id
+  y quote literal. Omite el campo si no tienes una cita exacta.
   Un bloque puede usar stimulus_id si comparte al menos un objetivo con el estímulo.
 - flashcards: objetos con prompt, answer y objective_ids.
 - questions: objetos con kind, prompt de 1 a 4000 caracteres y objective_ids.
   Opcionalmente stimulus_id.
   multiple_choice usa mode single o multiple, options y expected_answer. Single
   exige 4 opciones y una clave; multiple exige 4–8 opciones y una lista de 2 o
-  más claves, siempre menos que el total. true_false usa expected_answer booleano.
+  más claves, siempre menos que el total. En true_false, usa un booleano JSON,
+  como en {"kind":"true_false","expected_answer":false}. No uses texto ni listas.
   short_answer usa grading_mode exact con lista de claves de texto o formative
   con rúbrica. essay usa rúbrica. step_by_step usa rúbrica y grading_mode exact
   con lista de claves, numeric con entero/decimal/fracción como texto, o formative.
   matching usa matching_left y matching_right con 2–8 objetos {id,text}, y
   matching_pairs con un {left_id,right_id} por elemento. Rúbrica: rubric_criteria
-  con uno o más objetos {criterion_id,description,descriptors}. Incluye al
-  menos un descriptor por criterio. Exemplar privado opcional.
-  Para feedback respaldado por los fragmentos, usa feedback con mode, source_id,
-  quote literal y heading opcional para chapter_reference. Omite el feedback
-  cuando el fragmento no lo respalde. Mantén soluciones, rúbricas y ejemplares
-  evaluativos exclusivamente en los campos privados de questions.
+  con uno o más objetos {criterion_id,description,descriptors}. descriptors es
+  una lista de textos, como en {"descriptors":["Cita una frase del material."]}.
+  Incluye al menos un descriptor por criterio. Exemplar privado opcional.
+  feedback es una lista de hasta 3 objetos con mode, source_id, quote literal y
+  heading opcional para chapter_reference. Usa una lista aun con una sola cita.
+  Omite feedback cuando el fragmento no lo respalde. Mantén soluciones, rúbricas
+  y ejemplares evaluativos exclusivamente en los campos privados de questions.
 - youtube_keywords: hasta 4 frases de búsqueda breves. Usa palabras, sin URLs.
 - stimuli: objetos con id, kind, title, objective_ids y origin. Usa derived con
   source_id y evidence_quote literal, o generated_example solo para un caso
@@ -67,7 +70,7 @@ def build_adaptive_session_prompt(
     failed_points: Sequence[Mapping[str, object]] = (),
     previous_lesson: str = "",
 ) -> str:
-    kinds = ", ".join(PROFILE_LESSON_KINDS[snapshot.profile_id])
+    kinds = json.dumps(PROFILE_LESSON_KINDS[snapshot.profile_id])
     objectives = json.dumps([item.model_dump(mode="json") for item in snapshot.objectives], ensure_ascii=False)
     reference = "\n\n".join(f"[{key}]\n{text}" for key, text in sources.items())
     reinforcement = ""
@@ -84,7 +87,8 @@ def build_adaptive_session_prompt(
         f"OBJETIVOS: {objectives}\n"
         f"FRAGMENTOS DE REFERENCIA:\n{reference or '(sin fragmentos)'}\n\n"
         f"{reinforcement}"
-        f"Enseña los objetivos con los bloques {kinds}. Cada objetivo debe aparecer "
+        f"Incluye en lesson_blocks un bloque por cada uno de estos valores exactos de kind: {kinds}. "
+        f"Copia cada valor sin traducirlo ni sustituirlo. Cada objetivo debe aparecer "
         f"en al menos un bloque y una pregunta. Énfasis: {config.emphasis}.\n"
         f"Crea exactamente {config.flashcards} tarjetas y {config.multiple_choice} preguntas. "
         f"Incluye al menos una pregunta con clave objetiva. Formatos permitidos: "

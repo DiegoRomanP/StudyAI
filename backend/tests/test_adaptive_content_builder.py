@@ -6,6 +6,7 @@ from app.llm.prompts.adaptive_session_content import (
     build_adaptive_session_prompt,
     index_source_chunks,
 )
+from app.llm.prompts.topic_analysis import build_topic_analysis_prompt
 from app.pedagogy.contracts import LearningObjective
 from app.pedagogy.registry import resolve_profile, snapshot_profile
 from app.services.adaptive_content_builder import build_adaptive_session_content
@@ -96,6 +97,22 @@ def test_chapter_reference_uses_verified_fragment_if_heading_is_missing(content)
     assert "Capítulo 98" not in feedback.text
     assert "fragmento" in feedback.text
     assert "La segunda hipótesis contradice el relato inicial." in feedback.text
+
+
+def test_single_feedback_object_uses_the_same_evidence_validation_as_a_list(content):
+    data, snapshot = content
+    question = data["questions"][0]
+    expected = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+    question["feedback"] = question["feedback"][0]
+
+    built = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+
+    assert built.draft.adaptive_assessment.questions[0].feedback == (
+        expected.draft.adaptive_assessment.questions[0].feedback
+    )
+    question["feedback"]["quote"] = "Cita ausente del material."
+    with pytest.raises(LLMError, match="adaptativas válidas"):
+        build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
 
 
 @pytest.mark.parametrize("invalid", [
@@ -201,6 +218,30 @@ def test_prompt_uses_indexed_sources_and_keeps_previous_lesson_outside_evidence(
         "fragment-1", "# Capítulo", "Pregunta fallada", "Lección anterior", "source_comparison",
     ])
     assert "no es una fuente" in prompt.lower()
+
+
+def test_prompt_specifies_exact_lesson_kinds_and_list_shaped_citations(content):
+    _, snapshot = content
+    prompt = build_adaptive_session_prompt("Relatos", "Contrastar", SOURCES, CONFIG, snapshot)
+
+    assert 'valores exactos de kind: ["context", "source_comparison"]' in prompt
+    assert "source_citations es una lista" in prompt
+    assert "feedback es una lista" in prompt
+
+
+def test_prompt_gives_literal_json_examples_for_boolean_keys_and_rubric_descriptors(content):
+    _, snapshot = content
+    prompt = build_adaptive_session_prompt("Relatos", "Contrastar", SOURCES, CONFIG, snapshot)
+
+    assert '"kind":"true_false","expected_answer":false' in prompt
+    assert '"descriptors":["Cita una frase del material."]' in prompt
+
+
+def test_auto_topic_prompt_requires_allowed_bloom_ids_and_grounds_the_profile_in_the_topic():
+    prompt = build_topic_analysis_prompt(["Un relato breve"], "Interpretar", adaptive=True)
+
+    assert "Elige topic_profile según el razonamiento que exige el tema" in prompt
+    assert "Usa understand si dudas del nivel" in prompt
 
 
 def test_formula_feedback_requires_a_formula_in_the_verified_quote(content):

@@ -113,7 +113,7 @@ def _lesson_blocks(
 def _grounded_feedback(
     raw: object, snapshot: PedagogySnapshot, sources: Mapping[str, str]
 ) -> list[GroundedAssessmentFeedback]:
-    entries = _FeedbackCitations.validate_python(raw)
+    entries = _FeedbackCitations.validate_python([raw] if isinstance(raw, dict) else raw)
     modes = {entry.mode for entry in entries}
     if len(modes) != len(entries) or not modes.issubset(snapshot.feedback_modes):
         raise ValueError("Feedback modes must be unique and permitted by the profile.")
