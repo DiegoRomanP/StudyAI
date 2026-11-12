@@ -71,6 +71,7 @@ venderlo como SaaS faltan cuatro bloques de producto y una capa transversal:
 | Lanzamiento | Beta con al menos **15 estudiantes**; el lanzamiento oficial al superar **40**. |
 | Entrada a la sesión (§8 del plan de frontend) | Al llegar a `READY`: botón «Empezar la primera sesión pendiente» + «Ver todas». Sin redirección automática. |
 | Idempotencia | Se cubre con la clave idempotente del `credit_ledger` (un cobro por pedido); no hay tarea backend aparte. |
+| Stack de la beta (2026-10-30) | Frontend en **Cloudflare Pages**; backend en **AWS Lightsail** (1 GB, São Paulo, Docker); **Supabase** (Postgres + pgvector + Auth con Google); **Cloudflare R2** para los PDF; **Resend** como SMTP. Descartados: Vercel (su plan Hobby prohíbe el uso comercial y corta las tareas largas) y Clerk (Supabase Auth ya hace el login). Detalle en §9.5. |
 | Hosting final | **AWS** (control de gastos y todo en una sola cuenta). Región São Paulo (`sa-east-1`). Crear desde el inicio un presupuesto con alerta (AWS Budgets) y guardar secretos en Secrets Manager / SSM, nunca en el repo. |
 | Comprobantes | Boletas por **SUNAT SOL** (manual) durante la beta; **Nubefact** antes del lanzamiento oficial (>40 usuarios). |
 | Legal en la beta | Política de privacidad y términos publicados desde la beta; el registro del banco de datos personales, antes del lanzamiento oficial. |
@@ -609,8 +610,9 @@ No enviar contenido de documentos ni nombres de temas a PostHog (privacidad).
 
 ### 9.3 Archivos
 
-**Supabase Storage** (o Cloudflare R2, compatible S3) con rutas `users/{user_id}/documents/{uuid}.pdf`,
-bucket privado y URLs firmadas si alguna vez se descargan desde el navegador.
+**Cloudflare R2** (compatible con S3: al pasar a AWS solo cambia el endpoint) con rutas
+`users/{user_id}/documents/{uuid}.pdf`, bucket privado y URLs firmadas si alguna vez se descargan desde
+el navegador. Gratis hasta 10 GB y sin costo de descarga.
 
 ### 9.4 Trabajos en segundo plano
 
@@ -624,15 +626,33 @@ bucket privado y URLs firmadas si alguna vez se descargan desde el navegador.
 - Mantener `LLM_REQUEST_PACING_SECONDS` y el límite de concurrencia del worker acorde al rate limit
   del proveedor.
 
-### 9.5 Hosting sugerido
+### 9.5 Hosting de la beta (decidido 2026-10-30)
 
-| Pieza | Servicio | Nota |
-|---|---|---|
-| Frontend | Vercel o Cloudflare Pages | Estático, CDN, previews por PR |
-| Backend API + worker | Railway, Render o Fly.io | Región São Paulo (la más cercana a Lima) |
-| Postgres + Auth + Storage | Supabase | Región São Paulo |
-| Redis | Upstash o el del hosting | Para la cola |
-| Dominio + DNS | Cloudflare | HTTPS, protección básica |
+| Pieza | Servicio | Costo en la beta | Nota |
+|---|---|---|---|
+| Frontend | Cloudflare Pages | US$ 0 | Estático (Vite), CDN, previews por PR, uso comercial permitido |
+| Backend API + worker | AWS Lightsail, Linux de 1 GB, `sa-east-1` | ~US$ 7/mes, cubierto por los créditos del AWS Free Plan (6 meses) | Siempre encendido; Docker + Caddy (HTTPS automático); IP estática |
+| Postgres + pgvector + Auth | Supabase (plan gratis), región São Paulo | US$ 0 | Se pausa tras ~7 días sin actividad; conexión por el *session pooler* |
+| Archivos | Cloudflare R2 | US$ 0 hasta 10 GB | Ver §9.3 |
+| Correo | Resend como SMTP de Supabase | US$ 0 (100/día, 3.000/mes) | El correo de fábrica de Supabase solo sirve para pruebas |
+| Redis (cola) | Después de la beta | US$ 0 | En la beta, un solo proceso `uvicorn --workers 1`, sin cola (D6 de `plans/SaaS_SinCredenciales.md`) |
+| Dominio + DNS | Cloudflare Registrar | ~US$ 10/año | Resend exige un dominio propio verificado |
+| Presupuesto | AWS Budgets | US$ 0 | Alertas desde el día 1 |
+
+**Por qué Lightsail y no otro** (evaluado 2026-10-30): la API pasa casi todo el tiempo esperando al LLM,
+así que necesita poca CPU pero **un proceso siempre encendido**, porque la generación sigue en segundo
+plano después de responder. Por eso se descartaron:
+- Vercel, Lambda y Cloud Run: cortan la CPU después de responder.
+- Render gratis y Koyeb: se apagan cuando no reciben tráfico.
+- App Runner: cerrado a clientes nuevos desde el 30-04-2026.
+- Fly.io y Railway: cobran por consumo y no tienen plan gratis útil.
+- Oracle Always Free: recortado en 2026 y recupera las instancias inactivas.
+- Hetzner: subió precios tres veces en 2026 y no tiene región en Latinoamérica.
+
+Plan B sin servidor propio: Render Starter (US$ 7/mes), con la misma imagen Docker.
+
+Al terminar los créditos o al pasar a producción: se queda en Lightsail o se migra a ECS dentro de la
+misma cuenta. R2 pasa a S3 cambiando el endpoint.
 
 ### 9.6 Entrega
 
