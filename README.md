@@ -1,549 +1,351 @@
+<div align="center">
+
+<img src="images/icono.svg" alt="StudyAI" width="88" height="88" />
+
 # StudyAI
 
-Backend de planificación de estudio asistida por IA + frontend web. Subes tus
-documentos (`.pdf` / `.md`), defines una **meta** (examen, aprendizaje o
-memorización) y StudyAI genera un **plan de estudio** con sesiones, material y
-quizzes, aplicando repetición espaciada (**SM-2 / Ebbinghaus**) y priorización
-de temas débiles (**Pareto**) para el repaso.
+**Sube tu material, define tu meta y deja que la IA arme un plan de estudio que se adapta a cómo aprendes.**
 
-Funciona **de fábrica sin claves ni dependencias pesadas**: usa un proveedor LLM
-*mock* determinista, un *embedder* por hashing y un *vector store* en memoria.
-Al instalar las dependencias opcionales y configurar Anthropic, otro proveedor
-compatible o una instancia local de Ollama, se puede usar inferencia real y RAG
-semántico sin tocar el código.
+Repetición espaciada · Priorización Pareto · Enseñanza por perfil académico · Ruta adaptativa
 
----
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-38BDF8?logo=tailwindcss&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
+![Modo demo](https://img.shields.io/badge/modo%20demo-sin%20API%20keys-success)
 
-## Arquitectura
+[Inicio rápido](#-inicio-rápido) ·
+[Características](#-características) ·
+[Arquitectura](#-arquitectura) ·
+[Conectar tu IA](#-conectar-tu-ia) ·
+[API](#-api) ·
+[Documentación](#-documentación)
 
-Monorepo con dos aplicaciones. La estructura respeta separación por capas
-(Controllers → Services → Repositories → Models/DTOs) y varios patrones de
-diseño: **Repository**, **Factory** (procesadores, LLM, estrategias),
-**Strategy** (tipo de meta), **Pipeline** (ingesta RAG) y **Observer**
-(bus de eventos de sesión).
+<br />
 
-```
-studyai/
-├── backend/                 # FastAPI + SQLAlchemy
-│   ├── main.py              # App factory + entrypoint (uvicorn main:app)
-│   └── app/
-│       ├── api/v1/routes/   # Endpoints (documents, goals, plans, sessions, quizzes, dashboard, llm-settings)
-│       ├── services/        # Lógica de negocio (orquestación)
-│       ├── repositories/    # Acceso a datos (patrón Repository)
-│       ├── models/          # Entidades SQLAlchemy
-│       ├── schemas/         # DTOs Pydantic (entrada/salida de la API)
-│       ├── processors/      # Parseo de documentos (PDF / Markdown) + Factory
-│       ├── rag/             # Chunker, Embedder, VectorStore, Retriever, Pipeline
-│       ├── llm/             # Contratos y adaptadores LLM por proveedor, prompts y parsers
-│       ├── strategies/      # Estrategias por tipo de meta
-│       ├── algorithms/      # SM-2 (repaso) y Pareto (priorización)
-│       ├── events/          # Bus de eventos de sesión (Observer)
-│       └── core/            # Config, logging, excepciones
-├── frontend/                # Vite + React + TypeScript + Tailwind + TanStack Query
-│   └── src/{pages,components,api,hooks,lib,demo,styles}
-└── docs/
-    ├── api_contract.yaml    # Contrato OpenAPI mínimo
-    └── AGENTS_STATUS.md     # Estado de avance por fases
-```
+<img src="images/Estudio%20inteligente%20con%20StudyAI.png" alt="Interfaz de StudyAI" width="860" />
 
-**Stack**
-
-- **Backend:** FastAPI, SQLAlchemy 2 (SQLite por defecto), Pydantic v2, Alembic,
-  Anthropic SDK, httpx. Opcional: PyMuPDF, sentence-transformers, ChromaDB,
-  LangChain text-splitters.
-- **Frontend:** React 18, TypeScript, Vite, TailwindCSS, TanStack Query, React
-  Router, Axios, Recharts, react-markdown, Lucide, Motion, Vitest, Testing
-  Library, Playwright y Bruno.
-
-### Interfaz web
-
-La interfaz sigue el mockup `images/Estudio inteligente con StudyAI.png`: tema
-oscuro «flow» con tokens semánticos (`frontend/src/styles/tokens.css` expuestos
-en Tailwind), iconos Lucide y transiciones que respetan `prefers-reduced-motion`.
-
-| Ruta | Pantalla | Qué hace |
-|---|---|---|
-| `/` | Landing | Presentación pública, «Comenzar gratis» y «Ver demo». |
-| `/demo` | Demostración simulada | Recorrido del mockup con datos de ejemplo y un aviso fijo; no llama a la API ni pide claves. |
-| `/inicio` | Inicio | Checklist «Primeros pasos» con el progreso real, sesión de hoy, progreso, repaso espaciado y temas clave. Para empezar: material → meta (5 plantillas) → IA → **Estudiar**, todo en la misma pantalla. |
-| `/plan`, `/plan/:id` | Plan de estudio | Planes y su detalle con vista Calendario/Lista por fecha sugerida. |
-| `/session/:id` | Sesión | Estudio → receso → test → resultado confirmado, con «Paso X de 3». `?fase=test` abre directamente el test. |
-| `/practica` | Práctica | «Preguntas»: práctica local con corrección inmediata que **no guarda nada**. «Simulacro»: abre el test real de una sesión. |
-| `/temas` | Temas clave | Relevancia y dificultad estimadas por la IA, y la selección Pareto. |
-| `/documents` | Recursos | Subida (PDF/Markdown) e indexación. |
-| `/goals` | Metas | Crear, editar y borrar metas. |
-| `/dashboard` | Estadísticas | Precisión por test con filtro 7 días/30 días/Todo, racha, temas débiles y próximas revisiones. Sin datos, explica qué aparecerá y lleva a tu siguiente sesión. |
-| `/settings` | Conectar IA | Proveedor de IA propio (ver abajo). |
-
-En móvil, la barra inferior muestra Inicio, Plan, Práctica y Estadísticas; el
-resto está en «Más». Cada página de preparación y estudio incluye una guía
-«¿Cómo funciona esta página?» que se puede cerrar (se recuerda en el navegador)
-y la jerga (temas clave, repaso espaciado, simulacro…) lleva una definición al
-pulsarla. Las rutas pesadas (Estadísticas, Sesión, Práctica y la demo)
-se cargan bajo demanda.
-
-Criterios que la interfaz mantiene:
-
-- **Solo datos reales.** Cada métrica se deriva de la API. Los widgets del mockup
-  sin contrato todavía (explicaciones, historial de incorrectas, tiempo de
-  estudio…) aparecen solo en `/demo` y están listados en
-  [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) (§3).
-- **Sin duplicados.** «Estudiar» reutiliza la meta ya creada y envía
-  `Idempotency-Key` al generar el plan, así que reintentar no duplica nada.
-- **Errores distintos de vacío.** Un fallo de carga muestra un aviso con
-  reintento, nunca una lista vacía falsa.
-- **Fechas.** El backend envía fechas UTC sin zona; el cliente las interpreta
-  con `parseApiDate`.
-- **Seguridad del contenido.** El Markdown generado por el LLM se renderiza sin
-  enlaces ni imágenes externas.
-
-El historial de integración (A05–A07 y el plan ODD) está en
-[`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) y
-`odd/tasks/studyai-fluid-learning.md`.
+</div>
 
 ---
 
-## Requisitos
+## ✨ ¿Qué es StudyAI?
 
-- **Python** ≥ 3.11 (probado en 3.14)
-- **Node.js** ≥ 22 y npm (lockfile frontend verificado con 24.19.0)
+StudyAI convierte tus apuntes (`.pdf` / `.md`) en un **plan de estudio completo**: sesiones con material,
+tarjetas, cuestionarios y un calendario de repasos. Eliges una meta —**examen**, **aprendizaje** o
+**memorización**— y un pipeline de varios pasos con LLM decide *qué* estudiar, *en qué orden* y *cuándo repasarlo*.
 
----
+> **Funciona de fábrica sin claves ni dependencias pesadas.** Usa un proveedor LLM *mock* determinista, un
+> *embedder* por hashing y un vector store en memoria. Cuando instalas los extras opcionales y conectas una IA,
+> pasa a inferencia real y RAG semántico **sin tocar el código**.
 
-## Puesta en marcha
+## 🚀 Características
 
-### 1. Backend
+| | |
+|---|---|
+| 🧠 **Plan generado por IA** | Análisis de temas → selección **Pareto** de los temas que más rinden → reparto en sesiones con intervalos de **Ebbinghaus** → material, tarjetas y preguntas por sesión. |
+| 🎓 **Enseñanza por perfil académico** | Cada tema se clasifica en un perfil de razonamiento (lógico-deductivo, crítico-argumentativo, lingüístico-interpretativo, sistémico-empírico, aplicado-práctico) con objetivos y niveles de Bloom propios. |
+| 📝 **Evaluación variada** | Tarjetas, selección única/múltiple, verdadero/falso, emparejamiento, respuesta numérica o corta, ensayo, paso a paso y rúbricas, con retroalimentación fundamentada en tu material. |
+| 🔁 **Repetición espaciada** | **SM-2** actualiza la programación de cada tarjeta según tu calificación (0–5). |
+| 🧭 **Ruta adaptativa** | Un examen ajusta el plan: el dominio por tema se actualiza y se crean repasos de lo que fallaste. Sin llamadas al LLM; el refuerzo con IA es opcional y bajo demanda. |
+| ♻️ **Generación reanudable** | Si la generación falla o el servidor se reinicia, el plan queda **Incompleto** y conserva lo hecho. «Continuar generación» pide solo lo que falta. |
+| 🆓 **IA gratuita incluida** | Quien no conecta su propia IA usa la del servidor, con un cupo diario por estudiante. |
+| 🔑 **Trae tu propia IA** | Anthropic, OpenAI, DeepSeek, Gemini, OpenRouter, NVIDIA NIM u **Ollama local**, con claves cifradas y verificación antes de activar. |
+| 📊 **Estadísticas reales** | Precisión por periodo, racha, temas débiles y próximas revisiones, derivadas de la API. |
+| 🛡️ **Seguro por diseño** | Claves cifradas (Fernet), protección SSRF, validación de documentos en servidor y enlaces de YouTube construidos solo como búsquedas. |
+
+## ⚡ Inicio rápido
+
+**Requisitos:** Python ≥ 3.11 y Node.js ≥ 22.
 
 ```bash
+# 1 · Backend  → http://localhost:8001  (Swagger en /docs)
 cd backend
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn main:app --reload --port 8001
 
-pip install -r requirements.txt        # núcleo, suficiente para el MVP
-pip install -r requirements-dev.txt    # tests (pytest, httpx, respx)
-# Opcional — RAG semántico real + parseo de PDF (paquetes grandes, incluye torch):
-# pip install -r requirements-rag.txt
-
-cp .env.example .env                   # ajusta valores si lo necesitas
-uvicorn main:app --reload --port 8001  # http://localhost:8001
-```
-
-- Swagger UI: <http://localhost:8001/docs>
-- OpenAPI JSON: <http://localhost:8001/openapi.json>
-- Health check: <http://localhost:8001/health>
-
-La base de datos SQLite y el esquema se crean automáticamente al arrancar
-(`init_db` en el *lifespan* de FastAPI).
-
-### 2. Frontend
-
-```bash
+# 2 · Frontend → http://localhost:5173
 cd frontend
 npm install
-cp .env.example .env                   # VITE_API_URL apunta al backend
-npm run dev                            # http://localhost:5173
+cp .env.example .env
+npm run dev
 ```
 
-Para validar el cliente ejecuta `npm run lint`, `npm test` y `npm run build`.
+Abre <http://localhost:5173>, entra a **Inicio** y sigue el asistente: **Material → Meta → IA → Estudiar**.
+Sin ninguna clave verás el **modo demo** (contenido simulado) para recorrer todo el flujo.
 
-### QA aislado
+<details>
+<summary><b>Extras opcionales</b> — RAG semántico real y parseo de PDF</summary>
 
-Las pruebas de API y navegador con Playwright/Bruno usan dependencias npm
-fijadas, Chromium instalado por `npm --prefix frontend exec -- playwright install chromium`
-y un entorno Python dedicado (`backend/.venv-qa`) con solo las dependencias core. Sigue
-[`docs/qa-aislado.md`](docs/qa-aislado.md) para
-prepararlo y ejecutar `npm --prefix frontend run test:qa`. `test:api` ejecuta
-readiness Playwright y el flujo HTTP A04 completo de Bruno; `test:qa` añade el
-smoke de la UI de producción, incluido foco A05 y navegación A06 a 320 px (no es
-el recorrido completo de estudio A15–A17). La colección versionada
-`frontend/bruno/smoke/` comparte el Markdown canónico
-`frontend/qa/fixtures/studyai-a04-smoke.md` con el consumidor de solo-lectura
-`frontend/e2e/api/a04-shared-fixture.spec.ts`; este no escribe en la base QA
-nueva y vacía. El runner conserva reportes JSON/HTML/JUnit sin cabeceras ni
-cuerpos y valida el reporte Bruno 4.2.0: salida `0` sola no cuenta como
-cobertura; exige requests y aserciones ejecutadas y rechaza fallos, saltos u
-omisiones. `test:qa:runner` también ejecuta casos Bruno negativos contra
-respuestas HTTP locales controladas; son distintos del smoke positivo FastAPI
-real que corre `test:api`. El runner Node ejecuta las pruebas en serie y acota el
-polling con contadores de GET/deadlines configurados, no con un umbral frágil de
-tiempo total del host; no cambia los límites reales ni el gate de Bruno.
+```bash
+pip install -r requirements-rag.txt   # PyMuPDF, sentence-transformers, ChromaDB (incluye torch)
+pip install -r requirements-dev.txt   # pytest, httpx, respx
+```
 
----
+Se detectan en tiempo de ejecución; si faltan, StudyAI degrada en silencio al respaldo en Python puro.
+</details>
 
-## Configuración (`backend/.env`)
+## 🧩 Cómo funciona
 
-| Variable | Por defecto | Descripción |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | *(vacío)* | Alternativa del servidor: con clave usa Claude cuando no hay una credencial de usuario activa; sin clave, la alternativa es el LLM mock. |
-| `DEEPSEEK_API_KEY` | *(vacío)* | IA gratuita incluida: con clave, quien no conectó su propia IA genera con DeepSeek (sin razonamiento) hasta `FREE_AI_DAILY_LIMIT` usos al día. Se puede poner en el `.env` de la raíz del repo o en `backend/.env` (gana este; una variable exportada en la shell gana a ambos). |
-| `DEFAULT_DEEPSEEK_MODEL` | `deepseek-flash` | Modelo de la IA gratuita incluida. |
-| `FREE_AI_DAILY_LIMIT` | `3` | Usos diarios (UTC) por estudiante de la IA gratuita: generar un plan o reforzar un repaso con IA. |
-| `LLM_MODEL_PLAN` | `claude-opus-4-8` | Modelo para análisis de temas y distribución de sesiones. |
-| `LLM_MODEL_QUIZ` | `claude-haiku-4-5` | Modelo para el contenido y cuestionario fusionados de cada sesión. |
-| `LLM_MAX_RETRIES` | `3` | Intentos máximos de generación para errores transitorios (5xx/timeout). |
-| `LLM_MAX_RATE_LIMIT_RETRIES` | `6` | Reintentos máximos de un 429 temporal durante una generación; no aplica a cuota/saldo agotado. |
-| `LLM_TIMEOUT_SECONDS` | `180` | Timeout de conexión, lectura, escritura y pool de cada intento de generación. |
-| `LLM_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada externa de generación, incluidos intentos y esperas; no es una garantía del tiempo de respuesta del proveedor. |
-| `LLM_TEST_CONNECT_TIMEOUT_SECONDS` | `5` | Timeout de conexión de una prueba de credencial externa. |
-| `LLM_TEST_READ_TIMEOUT_SECONDS` | `30` | Timeout de lectura de una prueba de credencial externa. |
-| `LLM_TEST_TOTAL_BUDGET_SECONDS` | `45` | Presupuesto total de una prueba, incluidos intentos y esperas. |
-| `LLM_TEST_MAX_RETRIES` | `1` | Reintentos transitorios después del primer intento de prueba. |
-| `LLM_TEST_MAX_RATE_LIMIT_RETRIES` | `1` | Reintentos de 429 temporal durante una prueba. |
-| `LLM_REQUEST_PACING_SECONDS` | `2.0` | Pausa proactiva entre llamadas sucesivas al LLM dentro de una misma generación de plan, para no agotar límites de tasa por minuto de proveedores gratuitos. Se ignora con el LLM mock. Súbela si tu proveedor tiene un límite muy ajustado. |
-| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Endpoint de Ollama visto por el proceso backend. No se configura desde la interfaz. |
-| `OLLAMA_TIMEOUT_SECONDS` | `600` | Timeout para inferencia local, que puede incluir la carga inicial del modelo. |
-| `OLLAMA_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada local; Ollama no reintenta 429. |
-| `OLLAMA_MAX_RETRIES` | `1` | Intentos por llamada local; evita repetir cargas costosas de CPU/GPU. |
-| `DATABASE_URL` | `sqlite:///./studyai.db` | Cadena de conexión SQLAlchemy. SQLite se abre en modo WAL: verás `studyai.db-wal` y `studyai.db-shm` junto a la base (ignorados por git). |
-| `CHROMA_PERSIST_DIR` | `./storage/chroma` | Directorio de persistencia del vector store. |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Modelo de embeddings (si instalas RAG). |
-| `UPLOAD_DIR` | `./storage/uploads` | Carpeta de archivos subidos. |
-| `MAX_UPLOAD_MB` | `25` | Tamaño máximo de subida (MB). |
-| `CORS_ORIGINS` | `http://localhost:5173` | Orígenes permitidos (separados por coma). |
-| `REVIEW_INTERVALS_DAYS` | `1,3,7,14,30` | Offsets de repaso espaciado (Ebbinghaus). |
-| `SESSION_DURATION_MINUTES` | `25` | Duración de una sesión de estudio. |
+```mermaid
+flowchart LR
+    A[📄 Documentos<br/>PDF / MD] --> B[Indexación<br/>chunk + embeddings]
+    B --> C{{Meta<br/>examen · aprendizaje · memorización}}
+    C --> D[1 · Análisis de temas<br/>perfil + objetivos]
+    D --> E[Pareto<br/>temas de mayor valor]
+    E --> F[2 · Reparto en sesiones<br/>Ebbinghaus]
+    F --> G[3 · Material + tarjetas<br/>+ preguntas por sesión]
+    G --> H[📚 Estudiar]
+    H --> I[📝 Test]
+    I --> J[SM-2 + ruta adaptativa]
+    J -->|repasos y refuerzo| H
+```
 
-Frontend (`frontend/.env`): `VITE_API_URL` (por defecto `http://localhost:8001`).
+Generar un plan cuesta **`2 + N` llamadas** al LLM (N = número de sesiones). Cada llamada pide solo los tokens que
+necesita, hay una pausa configurable entre llamadas para no agotar los límites de planes gratuitos y todo se
+confirma paso a paso, así que un fallo nunca deja un plan atascado.
 
-> **Modo demo vs. producción:** el proyecto arranca y corre el flujo completo
-> sin API key y sin `requirements-rag.txt`. Instalar esas dependencias y definir
-> `ANTHROPIC_API_KEY` activa Claude, parseo real de PDF y RAG semántico de forma
-> transparente (detección automática en tiempo de ejecución).
+### Flujo de uso
 
-### Configurar tu propia clave de API (sección "Conectar IA" en la UI)
-
-En vez de (o además de) editar `backend/.env`, la sección **Conectar IA** del
-frontend (`/settings`; también en versión compacta desde Inicio) permite guardar
-tu propia clave para **Anthropic (Claude), OpenAI (ChatGPT), DeepSeek, Google
-Gemini, OpenRouter o NVIDIA NIM**. También permite
-usar **Ollama local**, sin clave: la tarjeta descubre los modelos ya instalados
-en el daemon que ve el backend y excluye las entradas `:cloud`.
-
-Para Ollama, inicia el daemon (`ollama serve` si no se inicia como servicio),
-elige un modelo instalado y verifica la conexión antes de activarlo. En este
-entorno, `qwen3.5:9b` está disponible y es una opción inicial generalista. Si
-FastAPI se ejecuta dentro de Docker, `OLLAMA_BASE_URL` debe resolver desde el
-contenedor hacia el host o servicio que ejecuta Ollama; `localhost` no apunta al
-navegador.
-
-**Ollama necesita al menos 16384 tokens de contexto.** El análisis de temas envía
-unos 5k tokens de material y puede pedir hasta 4k de salida (8k en el reintento);
-con el contexto por defecto, el modelo recorta la entrada o se queda sin espacio y
-la generación falla. Arranca el servidor con `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`
-o, si Ollama corre como servicio, añade `Environment="OLLAMA_CONTEXT_LENGTH=16384"`
-con `sudo systemctl edit ollama`, reinícialo y compruébalo con `ollama ps` (columna
-`CONTEXT`). StudyAI apaga el razonamiento de Ollama (`reasoning_effort: "none"`).
-
-Para DeepSeek, crea la clave en `https://platform.deepseek.com/api_keys`
-(formato `sk-...`, de pago). StudyAI usa su API OpenAI-compatible en
-`https://api.deepseek.com` con `deepseek-flash` (predeterminado, más barato) o
-`deepseek-v4-pro`. DeepSeek razona ("thinking") por defecto; StudyAI lo desactiva
-en cada solicitud (`thinking: {"type": "disabled"}`) porque el razonamiento
-consumiría el presupuesto de `max_tokens` de cada llamada y la haría mucho más
-lenta. No admite URL base personalizada.
-
-Para NVIDIA NIM, StudyAI usa siempre `https://integrate.api.nvidia.com/v1` y
-solo admite modelos generativos cuyo contrato está validado en el servidor. El
-catálogo actual ofrece `nvidia/nemotron-3-super-120b-a12b`; en la evaluación
-live del 2026-09-29, NVIDIA respondió `410 Gone` indicando fin de vida para los
-dos modelos Llama y `deepseek-ai/deepseek-v4-flash` que antes aparecían aquí, por
-lo que se retiraron de la lista admitida. Nemotron se invoca con `stream: false`
-y `reasoning_effort: "none"`, para que todos los tokens de salida queden para las
-respuestas JSON de StudyAI. NVIDIA no ofrece campos de URL ni de
-modelo personalizado: su catálogo general también incluye clasificadores,
-guardas y extractores que no sirven para generar planes.
-
-La verificación corta y una solicitud directa de contenido de sesión pasaron,
-pero una generación completa observada falló con HTTP `503` en la etapa de
-contenido de sesión, después de analizar temas y crear la primera sesión. La
-misma solicitud de contenido respondió `200` en una repetición directa; esto
-apunta a disponibilidad/capacidad intermitente de NVIDIA, no a un contrato de
-payload incompatible. StudyAI registra el estado HTTP upstream en el log seguro
-de generación y no repite automáticamente el POST de NIM ante fallos transitorios.
-
-Internamente, cada proveedor posee su contrato en `backend/app/llm/providers/`:
-metadatos de la UI, validación de clave/modelo/URL, perfil de solicitud,
-construcción del adaptador y versión de verificación. `provider_registry.py` los
-ensambla; el transporte HTTP, presupuestos y errores seguros se comparten para
-evitar duplicar lógica de reintentos. OpenAI y DeepSeek usan el transporte
-de chat común; Anthropic, OpenRouter, NVIDIA y Ollama conservan sus adaptadores o
-contratos específicos. Para incorporar un proveedor nuevo, agrega su definición,
-regístrala y cúbrela con pruebas de contrato en lugar de añadir condicionales a la
-factoría o al servicio de configuración.
-
-El flujo de configuración se realiza en cuatro pasos:
-
-1. **Guardar clave.** La API key se cifra y se guarda sin probar un modelo
-   predeterminado. El selector queda disponible de inmediato.
-2. **Guardar borrador.** Seleccionas o escribes el ID del modelo y, si aplica,
-   su URL base. El cambio crea una revisión nueva y desactiva cualquier prueba
-   anterior.
-3. **Verificar el borrador.** StudyAI prueba exactamente el modelo y URL
-   guardados. Si falla por permisos, retirada del modelo o cuota, conserva el
-   borrador para que puedas elegir otro modelo sin volver a escribir la clave.
-4. **Activar.** Solo una revisión cuya evidencia sigue vigente puede pasar a
-   ser el proveedor activo. Una edición o una pestaña desactualizada recibe un
-   conflicto y no activa una configuración diferente de la probada.
-
-Los modelos sugeridos se ordenan con los **gratuitos primero** (marcados
-"— gratis") y los de pago después. Los proveedores que lo permiten ofrecen
-"Personalizado…" para cualquier ID; NVIDIA queda limitado a su lista validada.
-En "Configuración avanzada", OpenAI y OpenRouter permiten un override opcional
-de URL base (útil, por ejemplo, para un gateway propio). Anthropic, DeepSeek,
-NVIDIA y Ollama no lo admiten: Anthropic usa solo su API nativa, DeepSeek y
-NVIDIA su endpoint hospedado oficial y Ollama se configura mediante
-`OLLAMA_BASE_URL` en el servidor.
-
-Para OpenAI, los modelos o-series conocidos (`o1`, `o3` y `o4`, incluido
-`o4-mini`) reciben `max_completion_tokens`, que abarca razonamiento y salida
-visible. Los adaptadores de NVIDIA y Ollama mantienen `max_tokens`; NVIDIA
-además fija `stream: false`, limita cada modelo a su máximo validado y no repite
-un POST tras una respuesta `202`. Un ID personalizado usa el perfil conservador
-hasta que se confirme su contrato. El perfil también define las capacidades de
-formato de respuesta: Ollama usa JSON estructurado solo para las operaciones
-que lo requieren y recibe `reasoning_effort: "none"` para no gastar el presupuesto
-en razonamiento.
-
-**La generación corre con el razonamiento apagado o mínimo**: Ollama y NVIDIA con
-`reasoning_effort: "none"`, DeepSeek con `thinking` desactivado y Gemini 3.x con
-`thinkingLevel` `"minimal"` (`"low"` en los modelos Pro). Cada llamada tiene un
-presupuesto de salida (2048 para el análisis de temas, 1024 para repartir sesiones
-y 4096 por sesión); si el modelo se queda sin espacio, se reintenta **una vez** con
-el doble (tope 8192). **Tras actualizar, vuelve a «Probar» las credenciales propias
-de Gemini 3**: usan un perfil de solicitud nuevo y su verificación anterior deja de
-valer.
-
-Las pruebas de conectividad usan un presupuesto explícito de 32 tokens para
-chat convencional y Ollama, y 256 para los modelos OpenAI o-series. Una
-respuesta que alcanza ese límite se informa como presupuesto de salida
-insuficiente; no se interpreta como una clave inválida ni se aumenta el límite
-indefinidamente. Las respuestas HTTP 200 también se validan: contenido vacío o
-con estructura inválida, una salida truncada y un rechazo del modelo devuelven
-errores diferenciados y no se entregan al generador de planes. Solo se acepta
-una finalización terminal con uso de tokens válido cuando el contrato del
-proveedor lo exige; las pausas, llamadas de herramientas y estados desconocidos
-no se confunden con una respuesta completa.
-
-Cambiar la clave, el modelo o la URL de un proveedor vuelve a exigir la
-verificación; una configuración anterior no se hereda a ciegas.
-
-Solo una clave puede estar **activa** a la vez — esa es la que usa el
-generador de planes para todas las llamadas (no hay ya distinción de modelo
-"barato" vs "caro" por tarea cuando usas tu propia clave; se usa el modelo que
-elijas para todo). Sin ninguna clave activa, se conserva el orden de
-prioridad existente: `.env` → mock. La pantalla consulta `GET /llm-settings/runtime`
-para mostrar la fuente que se resolvería en ese momento: configuración de usuario,
-Anthropic del servidor o modo demo. Es información de selección, no una prueba de
-conectividad; si no puede obtenerla, muestra un estado desconocido en vez de asumir
-modo demo.
-
-Cuando se usa Anthropic desde `.env`, `LLM_MODEL_PLAN` atiende `topic_analysis`
-y `session_plan`; `LLM_MODEL_QUIZ` atiende la llamada fusionada `session_content`
-de material y cuestionario. La generación conserva sus `2 + N` llamadas.
-
-**Seguridad de las claves**: se cifran en reposo (Fernet, derivado de
-`SECRET_KEY`) antes de guardarse en la base de datos y **nunca** se devuelven
-completas por la API — solo un fragmento enmascarado (`sk-a••••••9f2k`) que se
-calcula una sola vez, al guardar. Cambia `SECRET_KEY` a un valor real y
-aleatorio antes de usar esto en producción: si `SECRET_KEY` cambia después de
-guardar claves, esas claves quedan indescifrables (StudyAI lo detecta y
-degrada al siguiente nivel — `.env` o mock — en vez de fallar).
-
-**Cuidando los límites de tasa de proveedores gratuitos**: generar un plan
-hace `2 + N` llamadas al LLM (N = número de sesiones) — antes eran `2 + 2N`
-(una llamada separada para el material de estudio y otra para el quiz de cada
-sesión; ahora es una sola). Cada llamada además pide solo el `max_tokens` que
-realmente necesita (mucho menos que el límite genérico anterior) y la
-recuperación de contexto (RAG) usa menos fragmentos. Entre llamadas hay una
-pausa configurable (`LLM_REQUEST_PACING_SECONDS`) para no agotar el límite de
-peticiones por minuto de un plan gratuito (p. ej. los modelos `:free` de
-OpenRouter, limitados a ~8 req/min). Si el proveedor indica un límite temporal
-(`LLM_RATE_LIMITED`), la llamada puede reintentarse respetando `Retry-After`,
-numérico o fecha HTTP. Si la espera indicada no cabe en el presupuesto restante,
-StudyAI devuelve el límite temporal y su espera sugerida sin adelantar otro
-intento. Una cuota o saldo agotado (`LLM_QUOTA_EXHAUSTED`) no se reintenta.
-
-Los fallos de proveedores se exponen como respuestas `502` con un `detail`
-seguro y los campos `code`, `provider`, `upstream_status`, `retryable` y
-`retry_after_seconds`. Los códigos distinguen autenticación, permisos, cuota,
-modelo/endpoint, límite temporal, red y disponibilidad; no incluyen cuerpos de
-respuesta del proveedor, prompts ni claves. Un rechazo inequívoco de
-autenticación invalida la evidencia de la configuración guardada y la desactiva.
-
----
-
-## Flujo de uso
-
-Todo el recorrido se puede hacer desde **Inicio** (`/inicio`); las páginas
-dedicadas siguen disponibles para tener más control.
-
-1. **Subir documentos** (`.pdf` / `.md`) → se indexan de forma asíncrona
-   (`PENDING → INDEXED`).
-2. **Elegir una meta**: una plantilla (Universidad, Certificaciones,
-   Entrevistas técnicas, Aprender desde cero, Otro) o una meta guardada; el
-   tipo es `EXAM`, `LEARNING` o `MEMORIZATION`.
-3. **Estudiar** guarda la meta y genera el plan de forma asíncrona
-   (`PROCESSING → READY`), con *polling* de estado. Mientras genera se ve la etapa
-   real (analizar el material, repartir las sesiones y «Preparando la sesión N de
-   M»). Inicio muestra la siguiente sesión sin redirigir.
-   - Si la generación falla (o el servidor se reinicia a mitad), el plan queda
-     **Incompleto** y conserva lo ya generado. **Continuar generación** pide solo lo
-     que falta; con la IA gratuita gasta un uso, que se devuelve si vuelve a fallar.
-4. **Estudiar una sesión**: material → receso → quiz. Las flashcards se puntúan
-   0–5 y las preguntas de opción múltiple se autocalifican.
-5. **Completar la sesión** dispara el evento `session.completed`, que actualiza
-   la programación de repaso (SM-2).
-6. **Practicar** en `/practica` sin registrar resultados, o hacer el simulacro
-   (el test real de la sesión).
-7. **Estadísticas**: precisión por periodo, racha, temas débiles y próximas
-   revisiones.
+1. **Sube documentos** (`.pdf` / `.md`); se indexan en segundo plano (`PENDING → INDEXED`). Un plan solo
+   acepta documentos tuyos ya indexados.
+2. **Elige una meta**: una plantilla (Universidad, Certificaciones, Entrevistas técnicas, Aprender desde
+   cero, Otro) o una guardada.
+3. **Estudiar** genera el plan (`PROCESSING → READY`) mostrando la etapa real: «Preparando la sesión N de M».
+4. **Estudia una sesión**: material → receso → test. Las respuestas de opción múltiple se corrigen al instante.
+5. **Repasa**: las tarjetas reprograman su próximo repaso y un examen puede añadir repasos de refuerzo.
+6. **Practica** en `/practica` sin registrar resultados, o haz el **simulacro** (el test real de la sesión).
 
 ### Enseñanza por perfil académico
 
-En **Inicio** y **Planes**, activa «Adaptar la enseñanza y evaluación al perfil
-académico» antes de generar. «Automático por tema» puede elegir un perfil
-distinto para cada tema del mismo documento. También puedes elegir un perfil
-lógico-deductivo, crítico-argumentativo, lingüístico-interpretativo,
-sistémico-empírico o aplicado-práctico. StudyAI conserva el perfil general como
-respaldo y admite las solicitudes antiguas con `subject_hint` `history`,
-`mathematics` o `general`.
+Activa «Adaptar la enseñanza y evaluación al perfil académico» al generar. **Automático por tema** puede elegir un
+perfil distinto para cada tema del mismo documento, o puedes fijar uno. Cada sesión guarda sus objetivos, niveles
+de Bloom, formatos y la configuración con la que se generó; los diagramas incluyen descripción o tabla, los casos
+inventados se marcan como *ejemplos generados* y las citas se limitan a los fragmentos recuperados.
+La nota y el desglose por objetivo cuentan solo las preguntas con clave exacta; las respuestas escritas se
+contrastan después con una rúbrica.
 
-Cada sesión adaptativa guarda sus objetivos, los niveles de Bloom disponibles,
-los formatos y la configuración del perfil que usó al generar. Los rangos de
-tiempo se muestran como guía de estudio. Son valores iniciales configurados
-por perfil. Las sesiones v2 históricas con una configuración anterior reciben
-la guía de referencia del perfil equivalente. Los diagramas y gráficas
-incluyen una descripción o una tabla. Los casos inventados se identifican como
-ejemplos generados y las referencias al material se limitan a los fragmentos
-recuperados.
+### Ruta adaptativa y refuerzo con IA
 
-Según el perfil, la evaluación puede combinar tarjetas, selección única o
-múltiple, verdadero/falso, emparejamiento, ordenamiento, respuesta numérica o
-corta, ensayo, desarrollo paso a paso y ejercicios con rúbrica. La nota y el
-desglose por objetivo cuentan preguntas con clave exacta. Las tarjetas
-actualizan SM-2. Después de entregar puedes consultar las soluciones y
-contrastar tus respuestas escritas con una rúbrica. La reflexión personal dura
-la visita y el resultado guardado se recupera al volver.
+Al entregar el **primer** test de una sesión, el dominio por tema se actualiza (media móvil + cajas de Leitner) y
+se crea, como máximo, un repaso pendiente por tema, con las preguntas falladas primero. Si lo pides, **Reforzar
+con IA** genera un reemplazo con exactamente una llamada y abre una nueva revisión de la evaluación conservando
+perfil y objetivos.
 
-Desde **Práctica → Preguntas**, un plan adaptativo ofrece enlaces a las
-evaluaciones de sus sesiones. Un repaso con refuerzo puede publicar una nueva
-revisión conservando el perfil y los objetivos. Si la evaluación cambia
-mientras la respondes, vuelve a cargar las preguntas antes de entregar.
-Si un plan histórico figura listo y su contenido v2 está incompleto, crea un
-plan nuevo para generar la lección y la evaluación.
+## 🏗️ Arquitectura
 
----
+Monorepo con separación estricta por capas: **Controllers → Services → Repositories → Models/DTOs**.
 
-## API (resumen)
+```
+studyai/
+├── backend/                  # FastAPI + SQLAlchemy 2 + Pydantic v2
+│   ├── main.py               # App factory (uvicorn main:app)
+│   └── app/
+│       ├── api/v1/routes/    # documents, goals, plans, sessions, quizzes, dashboard, llm-settings, adaptive
+│       ├── services/         # Orquestación y lógica de negocio
+│       ├── repositories/     # Acceso a datos (Repository)
+│       ├── models/ schemas/  # Entidades ORM y DTOs
+│       ├── processors/       # Parseo PDF / Markdown (Factory) + pipeline de ingesta
+│       ├── rag/              # Chunker, Embedder, VectorStore, Retriever
+│       ├── llm/              # Proveedores, registro, prompts y parsers
+│       ├── strategies/       # Estrategia por tipo de meta (Strategy)
+│       ├── algorithms/       # SM-2, Pareto, ruta adaptativa
+│       ├── events/           # Bus de eventos de sesión (Observer)
+│       └── core/             # Config, logging, seguridad, excepciones
+├── frontend/                 # Vite + React 18 + TypeScript + Tailwind + TanStack Query
+│   └── src/{pages,components,api,hooks,lib,demo,styles}
+├── docs/                     # Contrato OpenAPI, historiales, QA y hoja de ruta SaaS
+└── odd/                      # Planes y registros de verificación
+```
 
-Contrato completo en [`docs/api_contract.yaml`](docs/api_contract.yaml) y en vivo
-en `/docs`.
+**Patrones en uso:** Repository · Factory (procesadores, LLM, estrategias) · Strategy (tipo de meta) ·
+Pipeline (ingesta RAG) · Observer (`session.completed`).
+
+**Dual-implementation con respaldo.** Cada pieza pesada tiene una versión real y otra en Python puro con la
+misma interfaz, elegida en tiempo de ejecución:
+
+| Componente | Real | Respaldo |
+|---|---|---|
+| Embeddings | sentence-transformers (384-d) | *Hashing embedder* determinista |
+| Vector store | ChromaDB persistente | Almacén en memoria con persistencia JSON |
+| Chunker | LangChain splitter | Splitter en Python puro |
+| PDF | PyMuPDF | Carga diferida (no rompe el arranque) |
+| LLM | Anthropic, OpenAI, DeepSeek, Gemini, OpenRouter, NVIDIA, Ollama | `MockLLMProvider` |
+
+### Interfaz web
+
+Tema oscuro «flow» con tokens semánticos, iconos Lucide y transiciones que respetan `prefers-reduced-motion`.
+
+| Ruta | Pantalla |
+|---|---|
+| `/` · `/demo` | Landing y demostración simulada (no llama a la API ni pide claves) |
+| `/inicio` | Asistente Material → Meta → IA → Estudiar, «Primeros pasos», sesión de hoy y repaso |
+| `/plan`, `/plan/:id` | Planes con vista Calendario / Lista y progreso de generación |
+| `/session/:id` | Estudio → receso → test → resultado (`?fase=test` abre el test) |
+| `/practica` | «Preguntas» locales sin guardar y «Simulacro» |
+| `/temas` | Relevancia, dificultad y selección Pareto |
+| `/documents` · `/goals` | Recursos y metas |
+| `/dashboard` | Estadísticas |
+| `/settings` | Conectar IA |
+
+Criterios que mantiene: **solo datos reales** (los widgets sin contrato viven únicamente en `/demo`), **sin
+duplicados** («Estudiar» envía `Idempotency-Key`), **errores distintos de vacío**, fechas UTC interpretadas con
+`parseApiDate` y Markdown del LLM renderizado sin enlaces ni imágenes externas. En móvil, la barra inferior
+muestra Inicio, Plan, Práctica y Estadísticas, y cada página trae una guía «¿Cómo funciona?» que se puede cerrar.
+
+## 🔑 Conectar tu IA
+
+Hay tres formas de generar, en este orden de prioridad:
+
+1. **Tu propia IA** (sección **Conectar IA**, `/settings`): Anthropic, OpenAI, DeepSeek, Gemini, OpenRouter,
+   NVIDIA NIM u Ollama local.
+2. **Clave del servidor** (`ANTHROPIC_API_KEY` en `.env`).
+3. **IA gratuita incluida** (DeepSeek del servidor, `FREE_AI_DAILY_LIMIT` usos al día por estudiante).
+   Si nada de lo anterior está disponible, se usa el **modo demo** (mock).
+
+El flujo de configuración es revisionado y lo exige el backend:
+
+| Paso | Qué ocurre |
+|---|---|
+| **1 · Guardar clave** | Se cifra y se guarda sin probar ningún modelo. |
+| **2 · Guardar borrador** | Eliges modelo y, si aplica, URL base. Crea una revisión nueva e invalida pruebas previas. |
+| **3 · Verificar** | Prueba exactamente el borrador guardado. Si falla, conserva el borrador. |
+| **4 · Activar** | Solo una revisión con evidencia vigente puede activarse. |
+
+<details>
+<summary><b>Notas por proveedor</b></summary>
+
+- **Generación con razonamiento apagado o mínimo** (Ollama y NVIDIA `reasoning_effort: "none"`, DeepSeek
+  `thinking` desactivado, Gemini 3.x `thinkingLevel` mínimo) para que los tokens de salida alcancen para el JSON.
+  Si el modelo se queda sin espacio, se reintenta **una vez** con el doble (tope 8192). Tras actualizar, vuelve
+  a **Probar** las credenciales propias de Gemini 3.
+- **Ollama** necesita al menos **16 384 tokens de contexto**:
+  `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`. La tarjeta descubre los modelos instalados y excluye `:cloud`.
+  Dentro de Docker, `OLLAMA_BASE_URL` debe resolver hacia el host.
+- **DeepSeek**: clave en <https://platform.deepseek.com/api_keys>; modelos `deepseek-flash` (por defecto) y
+  `deepseek-v4-pro`. No admite URL base personalizada.
+- **NVIDIA NIM** usa siempre `https://integrate.api.nvidia.com/v1` y solo modelos con contrato validado en el
+  servidor (hoy `nvidia/nemotron-3-super-120b-a12b`). No repite un POST tras un `202`.
+- **OpenAI y OpenRouter** permiten una URL base personalizada (validada contra SSRF); los modelos o-series
+  reciben `max_completion_tokens`.
+- Los modelos sugeridos se ordenan con los **gratuitos primero**.
+- Los fallos de proveedor se exponen como `502` con `code`, `provider`, `upstream_status`, `retryable` y
+  `retry_after_seconds`, sin cuerpos de respuesta, prompts ni claves. Un 429 temporal respeta `Retry-After`.
+</details>
+
+## ⚙️ Configuración (`backend/.env`)
+
+<details>
+<summary><b>Variables principales</b></summary>
+
+| Variable | Por defecto | Descripción |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | *(vacío)* | Alternativa del servidor cuando no hay credencial de usuario activa. |
+| `DEEPSEEK_API_KEY` | *(vacío)* | Activa la IA gratuita incluida. Se lee del `.env` de la raíz o de `backend/.env` (gana este); una variable exportada en la shell gana a ambos. |
+| `DEFAULT_DEEPSEEK_MODEL` | `deepseek-flash` | Modelo de la IA gratuita incluida. |
+| `FREE_AI_DAILY_LIMIT` | `3` | Usos diarios (UTC) por estudiante: generar un plan o reforzar un repaso con IA. |
+| `LLM_MODEL_PLAN` / `LLM_MODEL_QUIZ` | `claude-opus-4-8` / `claude-haiku-4-5` | Modelos del `.env` de Anthropic para el plan y para el contenido de cada sesión. |
+| `LLM_TIMEOUT_SECONDS` | `180` | Timeout por intento de generación. |
+| `LLM_TOTAL_BUDGET_SECONDS` | `600` | Presupuesto total por llamada, con intentos y esperas. |
+| `LLM_MAX_RETRIES` / `LLM_MAX_RATE_LIMIT_RETRIES` | `3` / `6` | Reintentos por errores transitorios y por 429 temporales. |
+| `LLM_REQUEST_PACING_SECONDS` | `2.0` | Pausa entre llamadas de una generación (se ignora con mock y Ollama). |
+| `LLM_TEST_*` | ver `.env.example` | Timeouts, presupuesto y reintentos de la prueba de credenciales. |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Endpoint de Ollama visto por el backend. |
+| `OLLAMA_TIMEOUT_SECONDS` / `OLLAMA_TOTAL_BUDGET_SECONDS` / `OLLAMA_MAX_RETRIES` | `600` / `600` / `1` | Límites de la inferencia local. |
+| `DATABASE_URL` | `sqlite:///./studyai.db` | SQLite en modo WAL (`-wal` y `-shm` ignorados por git). |
+| `CHROMA_PERSIST_DIR` / `UPLOAD_DIR` | `./storage/chroma` / `./storage/uploads` | Persistencia del vector store y de los archivos. |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Modelo de embeddings (si instalas RAG). |
+| `MAX_UPLOAD_MB` | `25` | Tamaño máximo de subida. |
+| `CORS_ORIGINS` | `http://localhost:5173` | Orígenes permitidos, separados por coma. |
+| `REVIEW_INTERVALS_DAYS` | `1,3,7,14,30` | Offsets de repaso espaciado. |
+| `SESSION_DURATION_MINUTES` | `25` | Duración de una sesión de estudio. |
+| `SECRET_KEY` | *(placeholder)* | Deriva la clave Fernet. **Cámbiala antes de producción.** |
+
+Frontend (`frontend/.env`): `VITE_API_URL` (por defecto `http://localhost:8001`).
+</details>
+
+## 🔌 API
+
+Contrato completo en [`docs/api_contract.yaml`](docs/api_contract.yaml) y en vivo en `/docs`.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET`  | `/health` | Health check |
+| `GET` | `/health` | Health check |
 | `POST` | `/documents/upload` | Sube e indexa un documento |
-| `GET`  | `/documents` · `/documents/{id}` | Lista / detalle (polling de status) |
-| `DELETE` | `/documents/{id}` | Elimina el documento (archivo, vectores indexados y registro) |
-| `POST` | `/goals` | Crea una meta |
-| `GET`/`PUT` | `/goals` · `/goals/{id}` | Lista / detalle / actualiza (parcial) |
-| `DELETE` | `/goals/{id}` | Elimina la meta y, en cascada, sus planes generados |
-| `POST` | `/plans/generate` | Inicia la generación asíncrona del plan |
-| `GET`  | `/plans/{id}/status` · `/plans/{id}` | Estado y progreso / plan completo |
-| `POST` | `/plans/{id}/resume` | Continúa un plan incompleto (`FAILED`); genera solo lo que falta (409 si no es reanudable, 429 sin usos gratis) |
-| `DELETE` | `/plans/{id}` | Elimina el plan (sesiones, quizzes y repasos incluidos) |
-| `GET`  | `/sessions/{id}` | Detalle de sesión (con material) |
-| `GET`  | `/sessions/{id}/learning-mode` | Versión del contenido de la sesión |
-| `GET`  | `/sessions/{id}/learning-v2` | Lección adaptativa publicada |
-| `POST` | `/sessions/{id}/complete` | Marca la sesión como completada |
-| `GET`  | `/quizzes/{session_id}` | Quiz de una sesión |
-| `POST` | `/quizzes/{quiz_id}/submit` | Envía respuestas, califica y actualiza SM-2 |
-| `GET`  | `/quizzes/{session_id}/assessment-v2` | Preguntas públicas de la evaluación adaptativa |
-| `GET`  | `/quizzes/{session_id}/assessment-v2/result` | Resultado adaptativo persistido |
-| `POST` | `/quizzes/{quiz_id}/assessment-v2/submit` | Entrega de la revisión adaptativa, calificación y progreso |
-| `GET`  | `/dashboard` | Métricas de progreso |
-| `GET`  | `/llm-settings/catalog` | Metadatos de proveedores LLM soportados |
-| `GET` | `/llm-settings/OLLAMA/models` | Modelos locales instalados en Ollama |
-| `GET`/`PUT`/`DELETE` | `/llm-settings/{provider}` | Lista / guarda-o-reemplaza (solo la clave) / elimina |
-| `PATCH` | `/llm-settings/{provider}/model` | Guarda un borrador de modelo/URL para una revisión |
-| `POST` | `/llm-settings/{provider}/activate` · `/test` | Activa una revisión verificada / prueba el borrador guardado |
-| `GET` | `/llm-settings/runtime` | Fuente LLM efectiva (`USER`, `ENV` o `MOCK`), sin claves ni prueba de red |
-| `POST` | `/llm-settings/deactivate-all` | Usa la configuración del servidor o mock, según disponibilidad |
+| `GET` · `DELETE` | `/documents` · `/documents/{id}` | Lista, detalle (polling) y borrado completo |
+| `POST` · `GET` · `PUT` · `DELETE` | `/goals` · `/goals/{id}` | Metas (borrar una elimina sus planes en cascada) |
+| `POST` | `/plans/generate` | Inicia la generación asíncrona. Exige documentos propios e indexados (`400 PLAN_DOCUMENTS_UNAVAILABLE`) y respeta `FREE_AI_DAILY_LIMIT` (`429`) |
+| `GET` | `/plans` · `/plans/{id}` · `/plans/{id}/status` | Lista, plan completo y estado con progreso |
+| `POST` | `/plans/{id}/resume` | Continúa un plan `FAILED` (`409` si no es reanudable) |
+| `DELETE` | `/plans/{id}` | Elimina el plan con sesiones, quizzes y repasos |
+| `GET` · `POST` | `/sessions/{id}` · `/sessions/{id}/complete` | Detalle y cierre de sesión |
+| `GET` | `/sessions/{id}/learning-mode` · `/learning-v2` | Versión del contenido y lección adaptativa |
+| `GET` | `/sessions/{id}/result` | Último resultado de la sesión |
+| `POST` | `/sessions/{id}/reinforcement` · `/reinforcement/cancel` | Refuerzo con IA de un repaso |
+| `GET` · `POST` | `/quizzes/{session_id}` · `/quizzes/{quiz_id}/submit` | Quiz clásico: preguntas, envío, calificación y SM-2 |
+| `GET` · `POST` | `/quizzes/{session_id}/assessment-v2` · `/assessment-v2/result` · `/quizzes/{quiz_id}/assessment-v2/submit` | Evaluación adaptativa |
+| `GET` | `/dashboard` | Métricas de progreso |
+| `GET` | `/llm-settings/catalog` · `/runtime` · `/OLLAMA/models` | Catálogo, fuente efectiva (`USER`, `ENV`, `MOCK`) y modelos locales |
+| `PUT` · `PATCH` · `DELETE` | `/llm-settings/{provider}` · `/{provider}/model` | Guardar clave, guardar borrador de modelo, eliminar |
+| `POST` | `/llm-settings/{provider}/test` · `/activate` · `/deactivate-all` | Verificar, activar o volver al servidor/mock |
 
----
-
-## Documentación de mantenimiento
-
-- [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md): resumen de la integración del frontend (A01–A18), huecos de contrato y pendientes.
-- [`docs/HISTORIAL-producto-backend.md`](docs/HISTORIAL-producto-backend.md): resumen de los planes ya ejecutados (proveedores, ruta adaptativa, generación reanudable, onboarding) y sus pendientes.
-- [`docs/qa-aislado.md`](docs/qa-aislado.md): entorno aislado de QA (Playwright, Bruno).
-- [`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md): hoja de ruta para llevar StudyAI a SaaS de pago.
-- [`odd/tasks/studyai-fluid-learning.md`](odd/tasks/studyai-fluid-learning.md): plan ODD de la interfaz «flow» (A08–A13, landing, demo), decisiones y registro de verificación.
-- [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
-- [`AGENTS.md`](AGENTS.md): reglas operativas para agentes y fuentes de verdad.
-- [`CLAUDE.md`](CLAUDE.md): notas ampliadas de arquitectura y diagnóstico.
-- [`studyai_multiagent_plan.md`](studyai_multiagent_plan.md): plan histórico de ejecución multi-agente.
-
-## Tests
+## 🧪 Pruebas
 
 ```bash
-cd backend
-source .venv/bin/activate
-python -m pytest -q
-```
+# Backend
+cd backend && source .venv/bin/activate && python -m pytest -q
 
-Cubren SM-2, Pareto, chunker, parsers de salida del LLM, `ProcessorFactory`,
-`GoalStrategy`, borrado de documentos/metas/planes (incluida la cascada
-meta → planes → sesiones/quizzes/repasos de flashcards), cifrado/enmascarado
-de claves, el transporte OpenAI-compatible y los adaptadores directos de
-OpenRouter y NVIDIA (mockeados con `respx`, sin red real), perfiles de payload,
-reintentos y límites de presupuesto, el registro y aislamiento de proveedores,
-el ciclo revisionado de `/llm-settings`, migraciones de evidencia, el pipeline
-de generación de planes (`2 + N` llamadas) y un flujo end-to-end con el LLM
-mockeado.
+# Frontend
+cd frontend && npm test && npm run lint && npm run build
 
-Frontend — pruebas, typecheck y build de producción:
-
-```bash
-cd frontend
-npm test
-npm run lint     # tsc --noEmit
-npm run build
-```
-
-La cobertura incluye errores de la API, la coordinación de «Estudiar»
-(`useStudyStart`), Inicio, Plan, Temas, Sesión, Práctica (que no escribe nada),
-Estadísticas, la demo (que no llama a la API), Conectar IA y la navegación.
-
-QA aislado contra el backend real en modo demo (Bruno + Playwright):
-
-```bash
+# QA aislado contra el backend real en modo demo (Bruno + Playwright)
 npm --prefix frontend run test:qa
 ```
 
-Playwright cubre el recorrido completo desde Inicio (subir material → plan →
-quiz → Estadísticas) y la navegación con teclado a 320 px.
+Los tests del backend fuerzan el LLM mock y directorios temporales: nunca tocan datos reales ni gastan tokens.
+Cubren SM-2, Pareto, chunker, parsers, factorías, borrado en cascada, cifrado de claves, transporte y proveedores
+(con `respx`, sin red), el ciclo revisionado de `/llm-settings`, la generación `2 + N` y su reanudación, la
+evaluación adaptativa y flujos end-to-end. Playwright cubre el recorrido completo (material → plan → test →
+estadísticas) y la navegación con teclado a 320 px. La guía del entorno aislado está en
+[`docs/qa-aislado.md`](docs/qa-aislado.md).
+
+## 🛡️ Seguridad
+
+- Subidas validadas por extensión (`.pdf` / `.md`) y tamaño máximo.
+- Acceso a datos solo vía ORM parametrizado.
+- Claves de usuario **cifradas en reposo** (Fernet) y nunca devueltas completas: solo un fragmento enmascarado.
+- **Protección SSRF** en URLs base personalizadas: se resuelve el host y se rechazan rangos privados, loopback,
+  enlace local y la IP de metadatos de nube.
+- NVIDIA solo acepta su endpoint oficial y modelos con contrato curado.
+- Un documento ajeno se reporta igual que uno inexistente, sin revelar datos de otros usuarios.
+- Los enlaces de YouTube se construyen como **búsqueda** desde palabras clave; nunca se renderiza una URL
+  generada por el LLM.
+
+## 🗺️ Hoja de ruta
+
+Hoy es un MVP de un solo usuario (usuario demo fijo). Lo que sigue hacia un SaaS: autenticación real con
+Supabase, créditos, rate limiting, ocultar las respuestas del quiz hasta el envío y despliegue de la beta
+(Cloudflare Pages + AWS Lightsail + Supabase + R2). Detalle en
+[`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md).
+
+## 📚 Documentación
+
+- [`docs/api_contract.yaml`](docs/api_contract.yaml): contrato OpenAPI.
+- [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
+- [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) · [`docs/HISTORIAL-producto-backend.md`](docs/HISTORIAL-producto-backend.md): lo ya ejecutado y sus pendientes.
+- [`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md): hoja de ruta hacia SaaS de pago.
+- [`docs/qa-aislado.md`](docs/qa-aislado.md): entorno aislado de QA.
+- [`CLAUDE.md`](CLAUDE.md) · [`AGENTS.md`](AGENTS.md): notas de arquitectura y reglas operativas para agentes.
+- [`odd/tasks/`](odd/tasks): planes ODD y registros de verificación.
 
 ---
 
-## Notas de seguridad
+<div align="center">
 
-- La subida valida extensión (`.pdf` / `.md`) y tamaño máximo (`MAX_UPLOAD_MB`).
-- Acceso a datos siempre vía SQLAlchemy ORM parametrizado (sin SQL crudo).
-- La API key de operador se lee del entorno; `.env` está en `.gitignore`.
-- Las claves que el usuario guarda desde **Conectar IA** se cifran en
-  reposo (Fernet) y nunca se devuelven completas por la API — ver sección
-  "Configurar tu propia clave de API" más arriba.
-- Los overrides compatibles de `base_url` (URL base personalizada) se validan para evitar
-  SSRF: se resuelve el host y se rechazan direcciones privadas, loopback o de
-  enlace local (incluida la IP de metadatos de nube `169.254.169.254`).
-- NVIDIA usa únicamente el endpoint hospedado oficial y modelos con contrato
-  curado; no acepta URLs/modelos personalizados ni repite el POST después de un
-  `202` aceptado.
-- Los enlaces de YouTube se construyen como **búsqueda** desde palabras clave;
-  nunca se renderiza una URL generada por el LLM.
+Hecho con FastAPI, React y mucha repetición espaciada.
 
-### Pendiente (post-MVP)
-
-Autenticación real (hoy usuario demo único), rate limiting y ocultar las
-respuestas del quiz hasta el envío. Ver [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md).
+</div>
