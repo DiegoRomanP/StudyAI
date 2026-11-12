@@ -255,7 +255,12 @@ export interface LLMConnectionTestResponse {
   credential: LLMCredentialDTO;
 }
 
-export type LLMRuntimeSource = "USER" | "ENV" | "MOCK";
+export type LLMRuntimeSource = "USER" | "ENV" | "MOCK" | "UNAVAILABLE";
+
+export interface AppConfigDTO {
+  deployment_mode: "self_hosted" | "saas";
+  auth_mode: "demo" | "supabase";
+}
 
 export interface LLMRuntimeModels {
   topic_analysis: string;

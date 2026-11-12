@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   AdaptivePlanOptions,
+  AppConfigDTO,
   DashboardDTO,
   DocumentDTO,
   GoalCreate,
@@ -25,6 +26,7 @@ import type {
 
 // Thin, typed wrappers around each backend endpoint.
 export const api = {
+  getAppConfig: () => apiClient.get<AppConfigDTO>("/config").then((r) => r.data),
   // Documents
   listDocuments: () =>
     apiClient.get<DocumentDTO[]>("/documents").then((r) => r.data),
