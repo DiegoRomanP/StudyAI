@@ -43,6 +43,7 @@ from app.algorithms.pareto import select_top_by_relevance
 from app.llm.base import LLMProvider
 from app.llm.factory import get_llm_provider, resolve_llm_provider
 from app.llm.output_budget import complete_within_budget
+from app.services.usage_recorder import UsageRecorder
 from app.llm.output_parsers import parse_llm_json
 from app.llm.prompts import (
     adaptive_session_content,
@@ -434,6 +435,7 @@ class _Generator:
         self.settings = get_settings()
         self.retriever = Retriever()
         self.llm: LLMProvider | None = None
+        self.recorder: UsageRecorder | None = None
 
     def run(self, plan_id: int) -> None:
         plan = self.db.get(Plan, plan_id)
@@ -443,6 +445,7 @@ class _Generator:
         user_id, spent_day = plan.user_id, plan.free_ai_use_date
         try:
             self.llm = get_llm_provider(self.db, user_id)
+            self.recorder = UsageRecorder(user_id=user_id, plan_id=plan_id)
             self._generate(plan)
             self._finish(plan_id)
         except _PlanGone:
@@ -728,7 +731,7 @@ class _Generator:
         instant.
         """
         result = complete_within_budget(
-            self.llm, kind=kind, escalate=escalate, before_retry=self._pace, **kwargs
+            self.llm, kind=kind, escalate=escalate, before_retry=self._pace, recorder=self.recorder, **kwargs
         )
         self._pace()
         return result

@@ -25,6 +25,7 @@ from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.llm.factory import get_llm_provider
 from app.llm.output_budget import complete_within_budget
+from app.services.usage_recorder import UsageRecorder
 from app.llm.output_parsers import parse_llm_json
 from app.llm.prompts import adaptive_session_content, session_content
 from app.llm.prompts.reinforcement import build_reinforcement_prompt
@@ -227,6 +228,7 @@ def _generate_adaptive_content(
     plan: Plan,
     goal_text: str,
     config: SessionConfig,
+    recorder: UsageRecorder | None = None,
 ) -> AdaptiveBuiltContent:
     draft = AdaptiveLearningService(db).require_published_content(session)
     snapshot = draft.pedagogy_snapshot
@@ -239,6 +241,7 @@ def _generate_adaptive_content(
     sources = adaptive_session_content.index_source_chunks(chunks)
     raw = complete_within_budget(
         llm,
+        recorder=recorder,
         kind="session_content",
         system=adaptive_session_content.SYSTEM,
         prompt=adaptive_session_content.build_adaptive_session_prompt(
@@ -294,8 +297,9 @@ def generate_reinforcement_task(
                 goal_type = GoalType(plan.generation_goal_type)
             config = GoalStrategyFactory.create(goal_type).get_session_config()
             llm = get_llm_provider(db, user_id)
+            recorder = UsageRecorder(user_id=user_id, plan_id=plan.id, session_id=session_id)
             if plan.content_version == 2:
-                adaptive = _generate_adaptive_content(db, llm, session, plan, goal_text, config)
+                adaptive = _generate_adaptive_content(db, llm, session, plan, goal_text, config, recorder)
                 if not _claim_publication(db, session_id, run_token):
                     db.rollback()
                     _refund(db, user_id, spent_day)
@@ -307,6 +311,7 @@ def generate_reinforcement_task(
             excerpt = (session.material.content_markdown if session.material else "")[:4000]
             raw = complete_within_budget(
                 llm,
+                recorder=recorder,
                 kind="session_content",
                 system=session_content.SYSTEM,
                 prompt=build_reinforcement_prompt(
