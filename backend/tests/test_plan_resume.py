@@ -17,6 +17,7 @@ from app.services import plan_service
 from app.services.free_ai_quota import FreeAiQuota
 from tests.test_default_free_provider import _free_ai_client, _goal, _reset_usage
 from tests.test_free_ai_refund import _uses
+from tests.helpers import indexed_doc
 
 
 @pytest.fixture(scope="module")
@@ -130,7 +131,7 @@ def _free_failed_plan(client: TestClient, message: str = "La generación quedó 
     """A FAILED plan whose spent use was already given back."""
     _reset_usage()
     client.post("/llm-settings/deactivate-all")
-    plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).json()["id"]
+    plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]}).json()["id"]
     _fail_directly(plan_id, message)
     _reset_usage()
     return plan_id
@@ -159,7 +160,7 @@ def test_a_double_resume_starts_one_task_and_spends_one_use(monkeypatch):
 def test_resume_over_the_daily_limit_is_429_and_keeps_the_plan_failed_with_its_message(monkeypatch):
     with _free_ai_client(monkeypatch, limit=1) as client:
         plan_id = _free_failed_plan(client, "Mensaje anterior")
-        client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []})  # spends the only use
+        client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]})  # spends the only use
         started = _record_resume_tasks(monkeypatch)
 
         refused = client.post(f"/plans/{plan_id}/resume")
@@ -206,7 +207,7 @@ def test_a_ready_plan_cannot_be_resumed(client):
     goal_id = client.post(
         "/goals", json={"goal_type": "LEARNING", "title": "Plan listo", "description": ""}
     ).json()["id"]
-    plan_id = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []}).json()["id"]
+    plan_id = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]}).json()["id"]
     assert client.get(f"/plans/{plan_id}/status").json()["status"] == "READY"
 
     refused = client.post(f"/plans/{plan_id}/resume")

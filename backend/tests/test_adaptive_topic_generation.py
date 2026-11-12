@@ -18,6 +18,7 @@ from app.models.plan import Plan, PlanTopic
 from app.pedagogy.contracts import PedagogySnapshot
 from app.services.plan_service import PlanService
 from app.strategies.goal_strategies import GoalStrategyFactory
+from tests.helpers import indexed_doc
 
 
 @pytest.fixture
@@ -109,10 +110,11 @@ def _generate(
     subject_hint: str = "auto",
     content_version: int = 2,
     idempotency_key: str | None = None,
+    document_ids: list[int] | None = None,
 ) -> dict:
     body = {
         "goal_id": goal_id,
-        "document_ids": [],
+        "document_ids": document_ids or [indexed_doc(client)],
         "content_version": content_version,
     }
     if content_version == 2:
@@ -383,11 +385,13 @@ def test_legacy_v2_identity_with_null_intention_replays_even_after_goal_changes(
     monkeypatch.setattr(
         "app.api.v1.routes.plans.generate_plan_task", scheduled.append
     )
+    docs = [indexed_doc(client)]
     goal_id = _create_goal(client, "Legacy v2 intention", goal_type="EXAM")
     first = _generate(
         client,
         goal_id,
         profile_hint="logical_deductive",
+        document_ids=docs,
         idempotency_key="legacy-v2-intention",
     )
     assert first["response"].status_code == 202
@@ -397,7 +401,7 @@ def test_legacy_v2_identity_with_null_intention_replays_even_after_goal_changes(
         plan.generation_goal_type = None
         plan.idempotency_request_hash = PlanService._idempotency_request_hash(
             goal_id,
-            [],
+            list(plan.document_ids),
             content_version=2,
             profile_hint="logical_deductive",
         )
@@ -408,6 +412,7 @@ def test_legacy_v2_identity_with_null_intention_replays_even_after_goal_changes(
         client,
         goal_id,
         profile_hint="logical_deductive",
+        document_ids=docs,
         idempotency_key="legacy-v2-intention",
     )
 
@@ -424,11 +429,13 @@ def test_legacy_v2_integrity_race_winner_uses_the_compatible_old_hash(
         "app.api.v1.routes.plans.generate_plan_task", scheduled.append
     )
     monkeypatch.setattr("app.services.plan_service.uses_free_ai", lambda *_args: False)
+    docs = [indexed_doc(client)]
     goal_id = _create_goal(client, "Legacy race winner", goal_type="EXAM")
     first = _generate(
         client,
         goal_id,
         profile_hint="logical_deductive",
+        document_ids=docs,
         idempotency_key="legacy-v2-race",
     )
     assert first["response"].status_code == 202
@@ -438,7 +445,7 @@ def test_legacy_v2_integrity_race_winner_uses_the_compatible_old_hash(
         winner.generation_goal_type = None
         winner.idempotency_request_hash = PlanService._idempotency_request_hash(
             goal_id,
-            [],
+            list(winner.document_ids),
             content_version=2,
             profile_hint="logical_deductive",
         )
@@ -462,7 +469,7 @@ def test_legacy_v2_integrity_race_winner_uses_the_compatible_old_hash(
         replayed_plan, created = service.create_plan(
             1,
             goal_id,
-            [],
+            list(winner.document_ids),
             idempotency_key="legacy-v2-race",
             content_version=2,
             profile_hint="logical_deductive",

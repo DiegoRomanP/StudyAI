@@ -23,6 +23,25 @@ router = APIRouter(prefix="/plans", tags=["plans"])
     response_model=PlanStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
     responses={
+        400: {
+            "description": (
+                "Algún documento no existe, no pertenece al usuario o no está INDEXED; "
+                "también si no se envía ninguno. No se crea el plan."
+            ),
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["detail", "code", "document_ids"],
+                        "properties": {
+                            "detail": {"type": "string"},
+                            "code": {"type": "string", "example": "PLAN_DOCUMENTS_UNAVAILABLE"},
+                            "document_ids": {"type": "array", "items": {"type": "integer"}},
+                        },
+                    }
+                }
+            },
+        },
         409: {
             "description": "La clave de idempotencia ya se utilizó con una solicitud diferente.",
             "content": {

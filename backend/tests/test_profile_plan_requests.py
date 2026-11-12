@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine, inspect, text
 
 from app.models.plan import Plan
+from tests.helpers import indexed_doc
 from app.schemas.plan import PlanGenerateRequest, PlanResponse
 
 
@@ -135,6 +136,7 @@ def test_profile_hint_reaches_storage_through_public_plan_generation(client, mon
     from app.services.plan_service import PlanService
 
     goal_id = _create_goal(client, "Profile persistence")
+    doc = indexed_doc(client)
     scheduled: list[int] = []
     monkeypatch.setattr(
         "app.api.v1.routes.plans.generate_plan_task", lambda plan_id: scheduled.append(plan_id)
@@ -142,7 +144,7 @@ def test_profile_hint_reaches_storage_through_public_plan_generation(client, mon
 
     response = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "content_version": 2, "profile_hint": "critical_argumentative"},
+        json={"goal_id": goal_id, "document_ids": [doc], "content_version": 2, "profile_hint": "critical_argumentative"},
         headers={"Idempotency-Key": "profile-persistence-1"},
     )
 
@@ -161,6 +163,7 @@ def test_profile_hint_reaches_storage_through_public_plan_generation(client, mon
 
 def test_v2_identity_normalizes_aliases_and_separates_different_profiles(client, monkeypatch):
     goal_id = _create_goal(client, "Profile identity")
+    doc = indexed_doc(client)
     scheduled: list[int] = []
     monkeypatch.setattr(
         "app.api.v1.routes.plans.generate_plan_task", lambda plan_id: scheduled.append(plan_id)
@@ -169,18 +172,19 @@ def test_v2_identity_normalizes_aliases_and_separates_different_profiles(client,
 
     first = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "content_version": 2, "profile_hint": "critical_argumentative"},
+        json={"goal_id": goal_id, "document_ids": [doc], "content_version": 2, "profile_hint": "critical_argumentative"},
         headers=headers,
     )
     alias_replay = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "content_version": 2, "subject_hint": "history"},
+        json={"goal_id": goal_id, "document_ids": [doc], "content_version": 2, "subject_hint": "history"},
         headers=headers,
     )
     explicit_null_alias_replay = client.post(
         "/plans/generate",
         json={
             "goal_id": goal_id,
+            "document_ids": [doc],
             "content_version": 2,
             "subject_hint": "history",
             "profile_hint": None,
@@ -189,7 +193,7 @@ def test_v2_identity_normalizes_aliases_and_separates_different_profiles(client,
     )
     different_profile = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "content_version": 2, "profile_hint": "logical_deductive"},
+        json={"goal_id": goal_id, "document_ids": [doc], "content_version": 2, "profile_hint": "logical_deductive"},
         headers=headers,
     )
 
@@ -208,6 +212,7 @@ def test_v2_identity_normalizes_aliases_and_separates_different_profiles(client,
 
 def test_v1_identity_is_unchanged_and_cannot_replay_as_v2(client, monkeypatch):
     goal_id = _create_goal(client, "Versioned identity")
+    d1, d2 = indexed_doc(client), indexed_doc(client)
     scheduled: list[int] = []
     monkeypatch.setattr(
         "app.api.v1.routes.plans.generate_plan_task", lambda plan_id: scheduled.append(plan_id)
@@ -216,17 +221,17 @@ def test_v1_identity_is_unchanged_and_cannot_replay_as_v2(client, monkeypatch):
 
     legacy = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [5, 2, 5]},
+        json={"goal_id": goal_id, "document_ids": [d2, d1, d2]},
         headers=headers,
     )
     legacy_replay = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [2, 5], "content_version": 1},
+        json={"goal_id": goal_id, "document_ids": [d1, d2], "content_version": 1},
         headers=headers,
     )
     adaptive_replay = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [2, 5], "content_version": 2,
+        json={"goal_id": goal_id, "document_ids": [d1, d2], "content_version": 2,
               "profile_hint": "logical_deductive"},
         headers=headers,
     )

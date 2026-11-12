@@ -12,6 +12,7 @@ from app.models.session import Session as StudySession
 from app.services.free_ai_quota import FreeAiQuota
 from tests.test_default_free_provider import _free_ai_client, _goal, _reset_usage
 from tests.test_free_ai_refund import _uses
+from tests.helpers import indexed_doc
 
 USER_ID = 1
 INTERRUPTED = (
@@ -24,7 +25,7 @@ def test_a_plan_left_processing_is_failed_and_refunded_on_startup(monkeypatch):
     with _free_ai_client(monkeypatch) as client:
         _reset_usage()
         client.post("/llm-settings/deactivate-all")
-        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).json()["id"]
+        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]}).json()["id"]
         assert client.get(f"/plans/{plan_id}/status").json()["status"] == "PROCESSING"
         assert _uses() == 1
 
@@ -39,7 +40,7 @@ def test_startup_recovery_is_idempotent(monkeypatch):
     with _free_ai_client(monkeypatch) as client:
         _reset_usage()
         client.post("/llm-settings/deactivate-all")
-        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).json()["id"]
+        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]}).json()["id"]
 
     with TestClient(main.app):
         pass
@@ -58,7 +59,7 @@ def test_a_reinforcement_left_processing_is_failed_on_startup():
         goal_id = client.post(
             "/goals", json={"goal_type": "LEARNING", "title": "Refuerzo cortado", "description": ""}
         ).json()["id"]
-        plan_id = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []}).json()["id"]
+        plan_id = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]}).json()["id"]
         session_id = client.get(f"/plans/{plan_id}").json()["sessions"][0]["id"]
         with SessionLocal() as db:
             db.execute(

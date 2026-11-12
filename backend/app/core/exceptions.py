@@ -35,6 +35,21 @@ class DailyLimitError(StudyAIError):
         self.code = code
 
 
+class PlanDocumentsUnavailableError(StudyAIError):
+    """A plan was requested with documents the caller cannot use.
+
+    ``document_ids`` lists the offending IDs (empty when none were sent). IDs
+    that do not exist and IDs owned by another user are reported identically,
+    so the response never reveals other users' documents.
+    """
+
+    code = "PLAN_DOCUMENTS_UNAVAILABLE"
+
+    def __init__(self, message: str, document_ids: list[int]) -> None:
+        super().__init__(message)
+        self.document_ids = document_ids
+
+
 class UnsupportedFileTypeError(StudyAIError):
     """No processor is registered for the given file extension."""
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
@@ -30,6 +31,19 @@ def _create_goal(client: TestClient, title: str) -> int:
     return response.json()["id"]
 
 
+@pytest.fixture(scope="module")
+def docs(client: TestClient) -> list[int]:
+    """Indexed documents: plan generation only accepts the caller's INDEXED ones."""
+    ids = []
+    for name in ("a.md", "b.md", "c.md"):
+        content = "# Tema\n\n" + "Contenido de prueba para indexar. " * 50
+        files = {"file": (name, io.BytesIO(content.encode()), "text/markdown")}
+        document_id = client.post("/documents/upload", files=files).json()["id"]
+        assert client.get(f"/documents/{document_id}").json()["status"] == "INDEXED"
+        ids.append(document_id)
+    return ids
+
+
 def _plans_for_goal(client: TestClient, goal_id: int) -> list[dict]:
     response = client.get("/plans")
     assert response.status_code == 200
@@ -37,7 +51,7 @@ def _plans_for_goal(client: TestClient, goal_id: int) -> list[dict]:
 
 
 def test_same_key_and_canonical_payload_replays_one_plan_and_one_task(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, docs: list[int]
 ):
     goal_id = _create_goal(client, "Replay canónico")
     scheduled: list[int] = []
@@ -47,12 +61,12 @@ def test_same_key_and_canonical_payload_replays_one_plan_and_one_task(
 
     first = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [9, 4, 9]},
+        json={"goal_id": goal_id, "document_ids": [docs[1], docs[0], docs[1]]},
         headers={"Idempotency-Key": "replay-canonical-1"},
     )
     replay = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [4, 9]},
+        json={"goal_id": goal_id, "document_ids": [docs[0], docs[1]]},
         headers={"Idempotency-Key": "replay-canonical-1"},
     )
 
@@ -74,7 +88,7 @@ def test_same_key_and_canonical_payload_replays_one_plan_and_one_task(
 
 
 def test_reusing_key_with_different_payload_conflicts_without_side_effects(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, docs: list[int]
 ):
     goal_id = _create_goal(client, "Payload conflict")
     other_goal_id = _create_goal(client, "Other payload goal")
@@ -84,14 +98,14 @@ def test_reusing_key_with_different_payload_conflicts_without_side_effects(
     )
     first = client.post(
         "/plans/generate",
-        json={"goal_id": goal_id, "document_ids": [3]},
+        json={"goal_id": goal_id, "document_ids": [docs[0]]},
         headers={"Idempotency-Key": "payload-conflict-1"},
     )
     assert first.status_code == 202
 
     for different_payload in (
-        {"goal_id": goal_id, "document_ids": [8]},
-        {"goal_id": other_goal_id, "document_ids": [3]},
+        {"goal_id": goal_id, "document_ids": [docs[2]]},
+        {"goal_id": other_goal_id, "document_ids": [docs[0]]},
     ):
         conflict = client.post(
             "/plans/generate",
@@ -109,7 +123,9 @@ def test_reusing_key_with_different_payload_conflicts_without_side_effects(
     assert scheduled == [first.json()["id"]]
 
 
-def test_distinct_keys_intentionally_create_distinct_plans(client: TestClient, monkeypatch):
+def test_distinct_keys_intentionally_create_distinct_plans(
+    client: TestClient, monkeypatch, docs: list[int]
+):
     goal_id = _create_goal(client, "Distinct keys")
     scheduled: list[int] = []
     monkeypatch.setattr(
@@ -119,7 +135,7 @@ def test_distinct_keys_intentionally_create_distinct_plans(client: TestClient, m
     responses = [
         client.post(
             "/plans/generate",
-            json={"goal_id": goal_id, "document_ids": []},
+            json={"goal_id": goal_id, "document_ids": [docs[0]]},
             headers={"Idempotency-Key": key},
         )
         for key in ("distinct-key-a", "distinct-key-b")
@@ -132,7 +148,9 @@ def test_distinct_keys_intentionally_create_distinct_plans(client: TestClient, m
     assert sorted(scheduled) == sorted(plan_ids)
 
 
-def test_omitting_key_preserves_legacy_new_plan_behavior(client: TestClient, monkeypatch):
+def test_omitting_key_preserves_legacy_new_plan_behavior(
+    client: TestClient, monkeypatch, docs: list[int]
+):
     goal_id = _create_goal(client, "Legacy requests")
     scheduled: list[int] = []
     monkeypatch.setattr(
@@ -140,7 +158,7 @@ def test_omitting_key_preserves_legacy_new_plan_behavior(client: TestClient, mon
     )
 
     responses = [
-        client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+        client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [docs[0]]})
         for _ in range(2)
     ]
 
@@ -152,7 +170,7 @@ def test_omitting_key_preserves_legacy_new_plan_behavior(client: TestClient, mon
 
 
 def test_concurrent_same_key_requests_create_one_plan_and_schedule_one_task(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, docs: list[int]
 ):
     goal_id = _create_goal(client, "Concurrent replay")
     key = "concurrent-replay-1"
@@ -176,7 +194,7 @@ def test_concurrent_same_key_requests_create_one_plan_and_schedule_one_task(
                 pool.submit(
                     client.post,
                     "/plans/generate",
-                    json={"goal_id": goal_id, "document_ids": [2, 5]},
+                    json={"goal_id": goal_id, "document_ids": [docs[0], docs[1]]},
                     headers={"Idempotency-Key": key},
                 )
                 for _ in range(2)

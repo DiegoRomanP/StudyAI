@@ -17,6 +17,7 @@ from app.services import plan_service
 from app.services.free_ai_quota import utc_today
 from app.services.plan_service import PlanService, _refund_plan_use
 from tests.test_default_free_provider import _free_ai_client, _goal, _reset_usage
+from tests.helpers import indexed_doc
 
 USER_ID = 1
 
@@ -34,7 +35,7 @@ def _uses(day=None) -> int:
 def _free_plan(client) -> int:
     """A plan that spent today's free use; its generation task is not run."""
     client.post("/llm-settings/deactivate-all")
-    response = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []})
+    response = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]})
     assert response.status_code == 202
     return response.json()["id"]
 
@@ -128,7 +129,7 @@ def test_a_plan_that_cannot_be_saved_gives_its_use_back(monkeypatch):
         event.listen(OrmSession, "before_flush", refuse_plans)
         try:
             with pytest.raises(OperationalError):
-                client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+                client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]})
         finally:
             event.remove(OrmSession, "before_flush", refuse_plans)
 

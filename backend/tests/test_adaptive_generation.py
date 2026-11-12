@@ -20,6 +20,7 @@ from app.pedagogy.contracts import LearningObjective, PedagogySnapshot
 from app.pedagogy.registry import resolve_profile, snapshot_profile
 from app.services.adaptive_content_builder import build_adaptive_session_content
 from app.strategies.goal_strategies import GoalStrategyFactory
+from tests.helpers import indexed_doc
 
 
 @pytest.fixture(scope="module")
@@ -105,7 +106,7 @@ def _generate(
         "/plans/generate",
         json={
             "goal_id": goal_id,
-            "document_ids": document_ids or [],
+            "document_ids": document_ids or [indexed_doc(client)],
             "content_version": 2,
             "profile_hint": "logical_deductive",
         },
@@ -132,7 +133,7 @@ def test_v2_plan_publishes_adaptive_sessions_with_one_call_per_session_and_strat
     monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_args: provider)
 
     def retrieval_must_not_run(*_args, **_kwargs):
-        raise AssertionError("v2 plans without document IDs must not retrieve user documents")
+        return []
 
     monkeypatch.setattr(
         "app.services.plan_service.Retriever.retrieve_texts", retrieval_must_not_run
@@ -248,9 +249,7 @@ def test_v2_resume_skips_fully_published_sessions_and_generates_only_missing_con
     monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_args: provider)
     monkeypatch.setattr(
         "app.services.plan_service.Retriever.retrieve_texts",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("v2 plans without document IDs must not retrieve user documents")
-        ),
+        lambda *_args, **_kwargs: [],
     )
     goal_id = _goal(client, "LEARNING")
 
@@ -296,9 +295,7 @@ def test_v2_resume_fails_closed_on_partial_historical_publication(
     monkeypatch.setattr("app.services.plan_service.get_llm_provider", lambda *_args: provider)
     monkeypatch.setattr(
         "app.services.plan_service.Retriever.retrieve_texts",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("v2 plans without document IDs must not retrieve user documents")
-        ),
+        lambda *_args, **_kwargs: [],
     )
     goal_id = _goal(client, "LEARNING")
     plan_id, ready_plan = _generate(client, goal_id)

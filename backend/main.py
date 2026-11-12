@@ -18,6 +18,7 @@ from app.core.exceptions import (
     DailyLimitError,
     LLMError,
     NotFoundError,
+    PlanDocumentsUnavailableError,
     StudyAIError,
     UnsupportedFileTypeError,
     ValidationError,
@@ -96,6 +97,13 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(DailyLimitError)
     async def _daily_limit(_: Request, exc: DailyLimitError) -> JSONResponse:
         return JSONResponse(status_code=429, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(PlanDocumentsUnavailableError)
+    async def _plan_documents(_: Request, exc: PlanDocumentsUnavailableError) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc), "code": exc.code, "document_ids": exc.document_ids},
+        )
 
     @app.exception_handler(UnsupportedFileTypeError)
     async def _unsupported(_: Request, exc: UnsupportedFileTypeError) -> JSONResponse:

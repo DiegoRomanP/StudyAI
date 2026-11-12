@@ -18,6 +18,7 @@ from app.llm.base import LLMProvider
 from app.llm.default_free_provider import FreeTier, FreeTierProvider, build_free_tiers
 from app.llm.providers.deepseek import DEEPSEEK_NON_THINKING_PROFILE
 from app.models.llm_credential import LLMProviderName
+from tests.helpers import indexed_doc
 
 
 class _Scripted(LLMProvider):
@@ -271,7 +272,7 @@ def test_runtime_reports_what_is_left_of_the_daily_allowance(monkeypatch):
         runtime = client.get("/llm-settings/runtime").json()
         assert runtime["free_ai"] == {"limit": 3, "used": 0, "remaining": 3}
 
-        client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []})
+        client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]})
         assert client.get("/llm-settings/runtime").json()["free_ai"] == {"limit": 3, "used": 1, "remaining": 2}
 
 
@@ -282,9 +283,9 @@ def test_the_plan_after_the_daily_limit_is_refused_without_creating_it(monkeypat
         goal_id = _goal(client)
         before = len(client.get("/plans").json())
         for _ in range(2):
-            assert client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []}).status_code == 202
+            assert client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]}).status_code == 202
 
-        refused = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+        refused = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]})
 
         assert refused.status_code == 429
         assert refused.json()["code"] == "FREE_AI_DAILY_LIMIT"
@@ -300,7 +301,7 @@ def test_an_idempotent_replay_does_not_spend_another_use(monkeypatch):
         for _ in range(2):
             client.post(
                 "/plans/generate",
-                json={"goal_id": goal_id, "document_ids": []},
+                json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]},
                 headers={"Idempotency-Key": "same-request"},
             )
         assert client.get("/llm-settings/runtime").json()["free_ai"]["used"] == 1
@@ -314,7 +315,7 @@ def test_a_failed_generation_gives_the_use_back(monkeypatch):
     _reset_usage()
     with _free_ai_client(monkeypatch) as client:
         client.post("/llm-settings/deactivate-all")
-        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).json()["id"]
+        plan_id = client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]}).json()["id"]
         monkeypatch.setattr(
             plan_service,
             "get_llm_provider",
@@ -335,5 +336,5 @@ def test_the_learners_own_key_or_demo_mode_never_spend_the_allowance(monkeypatch
     with TestClient(main.app) as client:
         client.post("/llm-settings/deactivate-all")
         for _ in range(5):
-            assert client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": []}).status_code == 202
+            assert client.post("/plans/generate", json={"goal_id": _goal(client), "document_ids": [indexed_doc(client)]}).status_code == 202
         assert client.get("/llm-settings/runtime").json()["free_ai"] is None

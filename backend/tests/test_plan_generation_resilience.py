@@ -18,6 +18,7 @@ from app.models.session import Session as StudySession
 from app.models.session import SessionMaterial
 from app.services import plan_service
 from app.services.plan_service import PlanService
+from tests.helpers import indexed_doc
 
 USER_ID = 1
 
@@ -169,7 +170,7 @@ def test_deleting_the_plan_mid_generation_leaves_no_rows(client, monkeypatch):
     goal_id = client.post(
         "/goals", json={"goal_type": "LEARNING", "title": "Plan borrado", "description": ""}
     ).json()["id"]
-    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": []})
+    response = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [indexed_doc(client)]})
     assert response.status_code == 202
 
     [plan_id] = deleted

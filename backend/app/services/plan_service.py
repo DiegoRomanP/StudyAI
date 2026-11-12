@@ -30,7 +30,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import ConflictError, LLMError, NotFoundError
+from app.core.exceptions import (
+    ConflictError,
+    LLMError,
+    NotFoundError,
+    PlanDocumentsUnavailableError,
+)
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.algorithms.adaptive_route import normalize
@@ -47,6 +52,7 @@ from app.llm.prompts import (
 )
 from app.services.adaptive_content_builder import build_adaptive_session_content
 from app.services.session_content_builder import build_session_content
+from app.models.document import DocumentStatus
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
@@ -54,6 +60,7 @@ from app.models.quiz import QuestionType, Quiz, QuizQuestion
 from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.adaptive_content_repository import AdaptiveContentRepository
+from app.repositories.document_repository import DocumentRepository
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
@@ -87,6 +94,7 @@ class PlanService:
         if goal is None or goal.user_id != user_id:
             raise NotFoundError("Meta no encontrada.")
 
+        document_ids = list(dict.fromkeys(document_ids))
         generation_goal_type = goal.goal_type.value if content_version == 2 else None
         request_hash = self._idempotency_request_hash(
             goal_id,
@@ -113,6 +121,8 @@ class PlanService:
                 return self._check_idempotency_payload(
                     existing, request_hash, legacy_v2_request_hash
                 ), False
+
+        self._require_indexed_documents(user_id, document_ids)
 
         # Spent before the plan exists, so a learner over the daily limit gets a 429 and no row.
         spent_day = FreeAiQuota(self.db).consume(user_id) if uses_free_ai(self.db, user_id) else None
@@ -148,6 +158,35 @@ class PlanService:
             ), False
         self.db.refresh(plan)
         return plan, True
+
+    def _require_indexed_documents(self, user_id: int, document_ids: list[int]) -> None:
+        """Only the caller's INDEXED documents can back a plan.
+
+        Checked in the same session that inserts the plan; without it, a plan
+        built from missing, foreign or unindexed documents would still reach
+        READY with generic content (retrieval silently finds nothing).
+        """
+        if not document_ids:
+            raise PlanDocumentsUnavailableError(
+                "Selecciona al menos un documento indexado para generar el plan.", []
+            )
+        owned = DocumentRepository(self.db).find_for_user(user_id, document_ids)
+        problems: list[tuple[int, str]] = []
+        for document_id in document_ids:
+            document = owned.get(document_id)
+            if document is None:
+                problems.append((document_id, "no existe"))
+            elif document.status == DocumentStatus.PENDING:
+                problems.append((document_id, "aún se está indexando"))
+            elif document.status != DocumentStatus.INDEXED:
+                problems.append((document_id, "no se pudo indexar"))
+        if problems:
+            listed = ", ".join(f"{document_id} ({reason})" for document_id, reason in problems)
+            raise PlanDocumentsUnavailableError(
+                f"No se puede generar el plan con estos documentos: {listed}. "
+                "Selecciona documentos indexados.",
+                [document_id for document_id, _ in problems],
+            )
 
     @staticmethod
     def _idempotency_request_hash(
