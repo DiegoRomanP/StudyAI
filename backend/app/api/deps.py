@@ -10,6 +10,8 @@ from __future__ import annotations
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.models.user import User
 
@@ -26,3 +28,9 @@ def get_current_user(db: Session = Depends(get_db)) -> User:
         db.commit()
         db.refresh(user)
     return user
+
+
+def require_self_hosted() -> None:
+    """404 in SaaS: bring-your-own-key and Ollama do not exist there (the UI hides them too)."""
+    if get_settings().is_saas:
+        raise NotFoundError("No encontrado.")

@@ -31,12 +31,13 @@ from app.llm.credential_state import is_verified
 from app.llm.default_free_provider import FreeTierProvider, build_free_tiers
 from app.llm.mock_provider import MockLLMProvider
 from app.llm.provider_registry import get_provider_definition
+from app.llm.unavailable_provider import UnavailableLLMProvider
 from app.models.llm_credential import LLMCredential, LLMProviderName
 from app.repositories.llm_credential_repository import LLMCredentialRepository
 
 logger = get_logger(__name__)
 
-RuntimeSource = Literal["USER", "ENV", "MOCK"]
+RuntimeSource = Literal["USER", "ENV", "MOCK", "UNAVAILABLE"]
 _RUNTIME_KINDS = ("topic_analysis", "session_plan", "session_content")
 
 
@@ -87,8 +88,44 @@ def build_provider_from_credential(
         ) from exc
 
 
+def _resolve_saas_provider() -> ProviderResolution:
+    """SaaS: only the server's Anthropic key. A paying user never gets the mock or a stranger's key."""
+    settings = get_settings()
+    if settings.has_llm_key:
+        try:
+            from app.llm.anthropic_provider import AnthropicProvider
+
+            return ProviderResolution(
+                provider=AnthropicProvider(),
+                runtime=LLMRuntimeState(
+                    source="ENV",
+                    provider=LLMProviderName.ANTHROPIC,
+                    models={
+                        "topic_analysis": settings.LLM_MODEL_PLAN,
+                        "session_plan": settings.LLM_MODEL_PLAN,
+                        "session_content": settings.LLM_MODEL_QUIZ,
+                    },
+                ),
+            )
+        except Exception:  # noqa: BLE001 - a bad key must not crash a request
+            logger.error("SaaS mode: could not initialise the Anthropic provider.")
+    else:
+        logger.error("SaaS mode: ANTHROPIC_API_KEY is not set; generation is unavailable.")
+    return ProviderResolution(
+        provider=UnavailableLLMProvider(),
+        runtime=LLMRuntimeState(
+            source="UNAVAILABLE",
+            provider=None,
+            models={kind: "no disponible" for kind in _RUNTIME_KINDS},
+            fallback_reason="El servicio de IA no está disponible en este momento.",
+        ),
+    )
+
+
 def resolve_llm_provider(db: Session, user_id: int) -> ProviderResolution:
     """Resolve and construct the effective provider without performing network I/O."""
+    if get_settings().is_saas:
+        return _resolve_saas_provider()
     credential = LLMCredentialRepository(db).find_active_for_user(user_id)
     user_fallback = False
     if credential is not None and is_verified(credential):
