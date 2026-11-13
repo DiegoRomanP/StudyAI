@@ -21,6 +21,7 @@ import {
   useLlmRuntime,
   useUploadDocument,
 } from "../../hooks/queries";
+import { useAppConfig } from "../../hooks/useAppConfig";
 import { useStudyStart, type StudyStartInput } from "../../hooks/useStudyStart";
 import {
   GOAL_TEMPLATES,
@@ -70,6 +71,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   const goalsQuery = useGoals();
   const goals = goalsQuery.data ?? [];
   const ai = useAiReadiness();
+  const { isSaas } = useAppConfig();
   const study = useStudyStart();
   const lastInput = useRef<StudyStartInput | null>(null);
   const stepRef = useRef<HTMLDivElement>(null);
@@ -121,7 +123,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
         ? "Falta elegir una meta."
         : "Falta tu meta.",
     ia:
-      ai.status === "ready"
+      isSaas || ai.status === "ready"
         ? null
         : ai.status === "pending"
           ? "Consultando el proveedor de IA…"
@@ -133,7 +135,8 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   };
   const missing = (Object.values(reasons) as (string | null)[]).filter((item): item is string => item !== null);
 
-  const steps = STEPS;
+  // SaaS: the server picks the AI, so there is no step to choose one.
+  const steps = isSaas ? STEPS.filter((item) => item.id !== "ia") : STEPS;
   const last = steps.length - 1;
 
   // A step is reachable once every step before it is done. Derived, so a step that
@@ -408,11 +411,13 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                   }
                   onChange={() => goTo(1)}
                 />
-                <RecapRow
-                  label="IA"
-                  value={ai.status === "ready" ? `${ai.title}. ${ai.detail}` : "—"}
-                  onChange={() => goTo(STEPS.findIndex((item) => item.id === "ia"))}
-                />
+                {!isSaas && (
+                  <RecapRow
+                    label="IA"
+                    value={ai.status === "ready" ? `${ai.title}. ${ai.detail}` : "—"}
+                    onChange={() => goTo(STEPS.findIndex((item) => item.id === "ia"))}
+                  />
+                )}
               </dl>
             )}
           </div>

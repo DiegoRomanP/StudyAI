@@ -51,8 +51,6 @@ export const NAVIGATION: NavigationItem[] = [
   { to: "/dashboard", label: "Estadísticas", icon: ChartColumn, primary: true, title: "Estadísticas" },
 ];
 
-const PRIMARY_NAVIGATION = NAVIGATION.filter((item) => item.primary);
-const OVERFLOW_NAVIGATION = NAVIGATION.filter((item) => !item.primary);
 
 function matchesRoute(path: string, pathname: string) {
   return matchPath({ path, end: true }, pathname) !== null;
@@ -121,17 +119,23 @@ export function AppShell({
   children,
   sidebarFooter,
   chrome = "default",
+  hideAiSettings = false,
 }: {
   children: ReactNode;
   sidebarFooter?: ReactNode;
   chrome?: "default" | "focus";
+  /** SaaS: the learner does not choose or connect an AI, so "Conectar IA" does not exist. */
+  hideAiSettings?: boolean;
 }) {
+  const navigation = hideAiSettings ? NAVIGATION.filter((item) => item.to !== "/settings") : NAVIGATION;
+  const primaryNavigation = navigation.filter((item) => item.primary);
+  const overflowNavigation = navigation.filter((item) => !item.primary);
   const { pathname } = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const previousPathname = useRef(pathname);
-  const activeOverflowItem = OVERFLOW_NAVIGATION.find((item) =>
+  const activeOverflowItem = overflowNavigation.find((item) =>
     isNavigationItemActive(item, pathname),
   );
 
@@ -186,7 +190,7 @@ export function AppShell({
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-line bg-surface-paper/80 p-4 md:flex">
         <BrandLink className="mb-6 flex items-center gap-3 rounded-control px-2 py-3 text-text-primary" />
         <nav aria-label="Navegación principal" className="flex flex-col gap-1">
-          <NavigationLinks pathname={pathname} />
+          <NavigationLinks pathname={pathname} items={navigation} />
         </nav>
         {sidebarFooter && <div className="mt-auto pt-6">{sidebarFooter}</div>}
       </aside>
@@ -212,9 +216,9 @@ export function AppShell({
         <nav
           aria-label="Navegación inferior"
           className="grid border-t border-line bg-surface-paper pt-1 pb-[env(safe-area-inset-bottom)]"
-          style={{ gridTemplateColumns: `repeat(${PRIMARY_NAVIGATION.length + 1}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${primaryNavigation.length + 1}, minmax(0, 1fr))` }}
         >
-          {PRIMARY_NAVIGATION.map((item) => {
+          {primaryNavigation.map((item) => {
             const isActive = isNavigationItemActive(item, pathname);
             const Icon = item.icon;
             return (
@@ -269,7 +273,7 @@ export function AppShell({
         >
           <NavigationLinks
             pathname={pathname}
-            items={OVERFLOW_NAVIGATION}
+            items={overflowNavigation}
             onNavigate={(to) => {
               setMobileMenuOpen(false);
               if (pathname === to) moreButtonRef.current?.focus();

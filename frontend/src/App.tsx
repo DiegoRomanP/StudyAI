@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import { StudyStreakCard } from "./components/home/HomeCards";
 import { Spinner } from "./components/ui";
+import { useAppConfig } from "./hooks/useAppConfig";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { HomePage } from "./pages/HomePage";
@@ -25,10 +26,21 @@ function Lazy({ children }: { children: ReactNode }) {
   return <Suspense fallback={<Spinner label="Cargando…" />}>{children}</Suspense>;
 }
 
+// SaaS has no bring-your-own-key page: the backend answers 404 there, so the UI does too.
+function SettingsRoute() {
+  const { isSaas } = useAppConfig();
+  return isSaas ? <NotFoundPage /> : <SettingsPage />;
+}
+
 function AppLayout() {
   const focus = useMatch("/session/:sessionId") !== null;
+  const { isSaas } = useAppConfig();
   return (
-    <AppShell chrome={focus ? "focus" : "default"} sidebarFooter={focus ? undefined : <StudyStreakCard />}>
+    <AppShell
+      chrome={focus ? "focus" : "default"}
+      sidebarFooter={focus ? undefined : <StudyStreakCard />}
+      hideAiSettings={isSaas}
+    >
       <RouteErrorBoundary>
         <Lazy>
           <Outlet />
@@ -70,7 +82,7 @@ export default function App() {
         <Route path="/plan/:planId" element={<PlanDetailPage />} />
         <Route path="/session/:sessionId" element={<SessionPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<SettingsRoute />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

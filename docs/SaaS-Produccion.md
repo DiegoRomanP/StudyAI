@@ -722,7 +722,7 @@ Recomendación: una sesión con un contador (régimen y boletas) y revisión de 
 
 ### P0
 - [x] Registro de uso de tokens y costo por llamada (`llm_usage`)
-- [ ] `DEPLOYMENT_MODE` con mock prohibido y BYOK/Ollama bloqueados en SaaS
+- [x] `DEPLOYMENT_MODE` con mock prohibido y BYOK/Ollama bloqueados en SaaS
 - [ ] Supabase Auth en backend (`get_current_user`) y frontend (login, registro, recuperar, rutas protegidas)
 - [ ] Postgres + Alembic + pgvector + almacenamiento de archivos en la nube
 - [ ] `credit_ledger`, `CreditService`, 402 `INSUFFICIENT_CREDITS`, reembolso exactamente una vez

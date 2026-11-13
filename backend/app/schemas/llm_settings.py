@@ -143,7 +143,7 @@ class FreeAiInfo(BaseModel):
 class LLMRuntimeResponse(BaseModel):
     """Effective LLM source, without credentials or a connectivity guarantee."""
 
-    source: Literal["USER", "ENV", "MOCK"]
+    source: Literal["USER", "ENV", "MOCK", "UNAVAILABLE"]
     provider: LLMProviderName | None
     models: LLMRuntimeModels
     fallback_reason: str | None
@@ -159,6 +159,8 @@ class LLMRuntimeResponse(BaseModel):
             model != "simulado" for model in self.models.model_dump().values()
         ):
             raise ValueError("MOCK requiere modelos simulados.")
+        if self.source == "UNAVAILABLE" and (self.provider is not None or self.bundled):
+            raise ValueError("UNAVAILABLE no admite un proveedor.")
         if self.bundled and self.source != "ENV":
             raise ValueError("La IA incluida solo puede venir del servidor.")
         if self.source == "ENV" and not self.bundled and self.provider != LLMProviderName.ANTHROPIC:

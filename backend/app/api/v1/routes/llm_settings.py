@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_self_hosted
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.llm.providers_catalog import PROVIDER_CATALOG
@@ -63,13 +63,13 @@ def get_llm_runtime(
     runtime = LLMSettingsService(db).get_runtime(user.id)
     settings = get_settings()
     free_ai = None
-    if settings.has_free_ai and not settings.has_llm_key:
+    if settings.has_free_ai and not settings.has_llm_key and not settings.is_saas:
         quota = FreeAiQuota(db).status(user.id)
         free_ai = FreeAiInfo(limit=quota.limit, used=quota.used, remaining=quota.remaining)
     return LLMRuntimeResponse(**runtime.__dict__, free_ai=free_ai)
 
 
-@router.get("", response_model=list[LLMCredentialResponse])
+@router.get("", response_model=list[LLMCredentialResponse], dependencies=[Depends(require_self_hosted)])
 def list_credentials(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -80,7 +80,7 @@ def list_credentials(
     ]
 
 
-@router.put("/{provider}", response_model=LLMCredentialResponse)
+@router.put("/{provider}", response_model=LLMCredentialResponse, dependencies=[Depends(require_self_hosted)])
 def upsert_credential(
     provider: LLMProviderName,
     payload: LLMCredentialUpsert,
@@ -94,7 +94,7 @@ def upsert_credential(
     return LLMCredentialResponse.from_credential(credential)
 
 
-@router.patch("/{provider}/model", response_model=LLMCredentialResponse)
+@router.patch("/{provider}/model", response_model=LLMCredentialResponse, dependencies=[Depends(require_self_hosted)])
 def update_credential_model(
     provider: LLMProviderName,
     payload: LLMCredentialModelUpdate,
@@ -108,7 +108,7 @@ def update_credential_model(
     return LLMCredentialResponse.from_credential(credential)
 
 
-@router.post("/{provider}/activate", response_model=LLMCredentialResponse)
+@router.post("/{provider}/activate", response_model=LLMCredentialResponse, dependencies=[Depends(require_self_hosted)])
 def activate_credential(
     provider: LLMProviderName,
     payload: LLMActivationRequest,
@@ -120,7 +120,7 @@ def activate_credential(
     return LLMCredentialResponse.from_credential(credential)
 
 
-@router.post("/deactivate-all", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/deactivate-all", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_self_hosted)])
 def deactivate_all_credentials(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -133,6 +133,7 @@ def deactivate_all_credentials(
     "/{provider}/models",
     response_model=list[OllamaModelResponse],
     responses=LLM_ERROR_RESPONSE,
+    dependencies=[Depends(require_self_hosted)],
 )
 def list_ollama_models(
     provider: LLMProviderName,
@@ -147,6 +148,7 @@ def list_ollama_models(
     "/{provider}/test",
     response_model=LLMConnectionTestResponse,
     responses=LLM_ERROR_RESPONSE,
+    dependencies=[Depends(require_self_hosted)],
 )
 def test_credential(
     provider: LLMProviderName,
@@ -161,7 +163,7 @@ def test_credential(
     )
 
 
-@router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{provider}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_self_hosted)])
 def delete_credential(
     provider: LLMProviderName,
     db: Session = Depends(get_db),

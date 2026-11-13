@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import math
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -122,6 +122,9 @@ class Settings(BaseSettings):
 
     # --- App -----------------------------------------------------------------
     APP_ENV: str = "development"
+    # self_hosted: today's behaviour (demo user, own key, Ollama, mock allowed).
+    # saas: server-side Anthropic key only; never the mock, never a learner's own key.
+    DEPLOYMENT_MODE: Literal["self_hosted", "saas"] = "self_hosted"
     SECRET_KEY: str = "change-me-in-production"
     # NoDecode: pydantic-settings otherwise tries to json.loads() env values for
     # list-typed fields *before* the CSV validator below runs, so a plain
@@ -153,6 +156,10 @@ class Settings(BaseSettings):
         if not model:
             raise ValueError("Los modelos de Anthropic no pueden estar vacíos.")
         return model
+
+    @property
+    def is_saas(self) -> bool:
+        return self.DEPLOYMENT_MODE == "saas"
 
     @property
     def has_llm_key(self) -> bool:

@@ -1,4 +1,5 @@
 import { useDemoAccepted } from "./useDemoAccepted";
+import { useAppConfig } from "./useAppConfig";
 import { useDashboard, useDocuments, useGoals, useLlmRuntime, usePlans } from "./queries";
 import { findNextSession, readyPlans } from "../lib/studyProgress";
 
@@ -31,6 +32,7 @@ export function useOnboardingProgress() {
   const plans = usePlans();
   const dashboard = useDashboard();
   const { accepted: demoAccepted, accept: acceptDemo } = useDemoAccepted();
+  const { isSaas } = useAppConfig();
 
   const source = runtime.data?.source;
   const sessionDone =
@@ -38,7 +40,7 @@ export function useOnboardingProgress() {
     (dashboard.data?.sessions_completed ?? 0) > 0;
   const next = findNextSession(plans.data);
 
-  const baseSteps: Omit<OnboardingStep, "locked">[] = [
+  const allSteps: Omit<OnboardingStep, "locked">[] = [
     {
       id: "material",
       label: "Sube tu material",
@@ -61,6 +63,7 @@ export function useOnboardingProgress() {
       to: next ? `/session/${next.session.id}` : "/plan",
     },
   ];
+  const baseSteps = isSaas ? allSteps.filter((step) => step.id !== "ia") : allSteps;
   const lastDone = baseSteps.reduce((last, step, index) => (step.done ? index : last), -1);
   const steps: OnboardingStep[] = baseSteps.map((step, index) => {
     const before = baseSteps.slice(0, index).filter((prev) => !prev.optional);
