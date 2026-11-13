@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     # --- Persistence ---------------------------------------------------------
     DATABASE_URL: str = f"sqlite:///{(BACKEND_DIR / 'studyai.db').as_posix()}"
     CHROMA_PERSIST_DIR: str = (STORAGE_DIR / "chroma").as_posix()
+    # "pgvector" keeps chunk embeddings in the Postgres DATABASE_URL (SaaS); "auto" = ChromaDB or in-memory.
+    VECTOR_BACKEND: Literal["auto", "pgvector"] = "auto"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
     # --- Storage / uploads ---------------------------------------------------

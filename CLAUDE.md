@@ -85,7 +85,9 @@ All routes mount at the **root path** (`/documents`, `/goals`, ...), not under `
   `__init__`/call time via `try/except ImportError`, with **identical call-site interfaces**:
   - `Embedder`: sentence-transformers (384-d) vs. deterministic hashing embedder.
   - `VectorStore` (`app/rag/vector_store.py`): ChromaDB (persistent, cosine) vs. `_InMemoryStore`
-    (JSON-persisted, pure-Python cosine).
+    (JSON-persisted, pure-Python cosine). With `VECTOR_BACKEND=pgvector` and a Postgres
+    `DATABASE_URL`, `_PgVectorStore` (raw SQL on a `document_chunks` table, no `pgvector` package)
+    takes the place of the fallback; if it can't start it logs a warning and the chain above applies.
   - `Chunker`: LangChain `RecursiveCharacterTextSplitter` vs. pure-Python splitter.
   - `PDFProcessor`: PyMuPDF, imported lazily so its absence doesn't break boot.
   - `LLMProvider` (`app/llm/base.py`): real providers (`AnthropicProvider`,
