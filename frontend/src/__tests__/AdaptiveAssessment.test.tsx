@@ -5,6 +5,12 @@ import { apiClient } from "../api/client";
 import { adaptiveLearningApi, type AssessmentResponseV2, type AssessmentResultV2 } from "../api/adaptiveLearning";
 import { AdaptiveAssessment } from "../components/session/AdaptiveAssessment";
 
+// The mixed order has its own test (lib/shuffle.test.ts); these flows assert the server order.
+vi.mock("../lib/shuffle", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/shuffle")>()),
+  seededShuffle: <T,>(items: readonly T[]) => [...items],
+}));
+
 const assessment: AssessmentResponseV2 = {
   quiz_id: 42,
   revision: "revision-1",

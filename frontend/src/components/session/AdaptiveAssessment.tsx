@@ -16,6 +16,7 @@ import { Alert, Badge, Button, Card, Spinner } from "../ui";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { StimulusCard } from "./LessonBlocks";
 import { AdaptiveAssessmentResult } from "./AdaptiveAssessmentResult";
+import { seededShuffle } from "../../lib/shuffle";
 
 type QuestionDraft = {
   selectedOption?: string;
@@ -160,7 +161,10 @@ export function AdaptiveAssessment({
   const [reloadPending, setReloadPending] = useState(false);
   const submittingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const questions = currentAssessment.questions;
+  const questions = useMemo(
+    () => seededShuffle(currentAssessment.questions, `${currentAssessment.quiz_id}:${currentAssessment.revision}`),
+    [currentAssessment],
+  );
   const question = questions[currentIndex];
   const questionDraft = drafts[question?.question_id] ?? {};
   const currentAnswer = question ? answerFor(question, questionDraft) : null;

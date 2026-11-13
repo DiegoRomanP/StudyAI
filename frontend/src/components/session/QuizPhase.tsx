@@ -6,6 +6,7 @@ import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
 import { clearQuizDraft, readQuizDraft, writeQuizDraft } from "../../lib/quizDraft";
+import { seededShuffle, shuffle } from "../../lib/shuffle";
 import { EmptyState } from "../EmptyState";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
 import { ChoiceOptions } from "./ChoiceOptions";
@@ -22,16 +23,6 @@ const QUALITY_LABELS = [
   "la recordé con dudas",
   "la recordé perfectamente",
 ];
-
-/** Fisher-Yates on a copy. */
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 export function QuizPhase({
   sessionId,
@@ -115,7 +106,8 @@ export function QuizPhase({
         .filter((item): item is QuizQuestionDTO => item !== undefined)
     : null;
   // A saved order that no longer matches the quiz (replaced by a reinforcement) is ignored.
-  const questions = shuffled && shuffled.length === quiz.questions.length ? shuffled : quiz.questions;
+  const questions =
+    shuffled && shuffled.length === quiz.questions.length ? shuffled : seededShuffle(quiz.questions, quiz.id);
   const firstUnanswered = questions.findIndex((item) => answers[item.id] === undefined);
   const position = index ?? (firstUnanswered === -1 ? questions.length - 1 : firstUnanswered);
   const question = questions[Math.min(position, questions.length - 1)];
@@ -143,7 +135,7 @@ export function QuizPhase({
     writeQuizDraft(sessionId, {
       quizId: quiz!.id,
       answers: updated,
-      order: questions === quiz!.questions ? null : questions.map((item) => item.id),
+      order: questions === shuffled ? questions.map((item) => item.id) : null,
     });
   }
 

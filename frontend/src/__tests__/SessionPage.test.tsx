@@ -11,6 +11,12 @@ import { adaptiveLearningKeys } from "../hooks/useAdaptiveLearning";
 import { SessionPage } from "../pages/SessionPage";
 import { makeSessionDetail, makeSessionSummary, makeTopic } from "../test/fixtures";
 
+// The mixed order has its own test (lib/shuffle.test.ts); these flows assert the server order.
+vi.mock("../lib/shuffle", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/shuffle")>()),
+  seededShuffle: <T,>(items: readonly T[]) => [...items],
+}));
+
 const session: SessionDetailDTO = makeSessionDetail({
   id: 5,
   plan_id: 9,
