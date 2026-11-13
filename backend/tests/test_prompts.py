@@ -42,3 +42,12 @@ def test_content_prompts_forbid_inner_double_quotes_and_show_a_valid_schema():
         assert "no uses comillas dobles" in prompt
         assert "{{" not in prompt and "}}" not in prompt
         assert '"summary_markdown"' in prompt
+
+
+def test_questions_are_grounded_in_the_material_written_in_the_same_call():
+    content = build_session_content_prompt("Tema", "Meta", ["fragmento"], 5, 5)
+    reinforcement = build_reinforcement_prompt("Tema", "Meta", [{"prompt": "P", "answer": "R"}], "extracto", 5, 5)
+
+    assert "sobre el material que acabas de escribir" in content
+    assert "SOLO con lo que dice 'summary_markdown'" in content
+    assert "SOLO con el material de refuerzo que escribes" in reinforcement

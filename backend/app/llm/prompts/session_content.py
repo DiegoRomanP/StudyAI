@@ -37,6 +37,14 @@ SCHEMA_TEMPLATE = """{
 # the model then loops until the server aborts with "token repeat limit reached".
 NO_DOUBLE_QUOTES = "Dentro de los textos no uses comillas dobles: usa «comillas angulares» o comillas simples."
 # Bounded lengths keep each session near 1.6-1.9k output tokens.
+# shortcut: grounding is only a prompt rule (no validation call, so plans stay at 2 + N calls);
+# add a checking pass if questions about untaught content keep showing up.
+GROUNDED_QUESTIONS = (
+    "Cada pregunta y su respuesta deben poder resolverse SOLO con lo que dice 'summary_markdown'. "
+    "No preguntes datos, nombres, fechas ni cifras que no aparezcan en él; si quieres evaluar algo, "
+    "explícalo antes en el material."
+)
+
 QUIZ_LENGTH_LIMITS = (
     "Cada flashcard: pregunta de 20 palabras como máximo y respuesta de 30 como máximo. "
     "Cada pregunta de opción múltiple: enunciado de 30 palabras como máximo y opciones de 12 palabras como máximo."
@@ -59,9 +67,10 @@ def build_session_content_prompt(
         f"(2) una explicación estructurada y (3) un punto clave para recordar. "
         f"Añade 2-4 'youtube_keywords' útiles para buscar videos (NO URLs).\n\n"
         f"Además, crea EXACTAMENTE {flashcards} flashcards y {multiple_choice} "
-        f"preguntas de opción múltiple (4 opciones cada una) sobre el tema. En "
-        f"cada pregunta de opción múltiple, 'answer' debe coincidir exactamente "
-        f"con una de las 'options'.\n\n"
+        f"preguntas de opción múltiple (4 opciones cada una) sobre el material que "
+        f"acabas de escribir. En cada pregunta de opción múltiple, 'answer' debe "
+        f"coincidir exactamente con una de las 'options'.\n\n"
+        f"{GROUNDED_QUESTIONS}\n\n"
         "Extensión: 'summary_markdown' entre 250 y 400 palabras en total (resumen de 80 palabras como máximo, "
         "explicación en 3 a 5 apartados breves y punto clave en 1 o 2 frases). "
         f"{QUIZ_LENGTH_LIMITS} {NO_DOUBLE_QUOTES}\n\n"

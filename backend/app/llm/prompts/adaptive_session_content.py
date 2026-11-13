@@ -91,6 +91,8 @@ def build_adaptive_session_prompt(
         f"Copia cada valor sin traducirlo ni sustituirlo. Cada objetivo debe aparecer "
         f"en al menos un bloque y una pregunta. Énfasis: {config.emphasis}.\n"
         f"Crea exactamente {config.flashcards} tarjetas y {config.multiple_choice} preguntas. "
+        "Cada pregunta y su respuesta deben poder resolverse SOLO con lo que explican los lesson_blocks "
+        "de esta misma respuesta; no evalúes datos, nombres ni cifras que la lección no enseña. "
         f"Incluye al menos una pregunta con clave objetiva. Formatos permitidos: "
         f"{', '.join(snapshot.allowed_question_types)}. Usa los formatos según el objetivo.\n"
         f"Modos de feedback permitidos: {', '.join(snapshot.feedback_modes)}. "

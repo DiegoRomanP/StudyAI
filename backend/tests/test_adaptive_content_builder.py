@@ -227,6 +227,7 @@ def test_prompt_specifies_exact_lesson_kinds_and_list_shaped_citations(content):
     assert 'valores exactos de kind: ["context", "source_comparison"]' in prompt
     assert "source_citations es una lista" in prompt
     assert "feedback es una lista" in prompt
+    assert "SOLO con lo que explican los lesson_blocks" in prompt
 
 
 def test_prompt_gives_literal_json_examples_for_boolean_keys_and_rubric_descriptors(content):
