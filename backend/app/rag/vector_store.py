@@ -186,6 +186,7 @@ class _PgVectorStore:
             conn.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_document_chunks_document_id ON document_chunks (document_id)")
             )
+            conn.execute(text("ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY"))  # see init_db
 
     def add(
         self,

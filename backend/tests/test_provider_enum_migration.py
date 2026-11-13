@@ -67,6 +67,7 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "_ensure_adaptive_content_columns",
         "_seed_default_user",
         "sync_id_sequences",
+        "_enable_row_level_security",
     ):
         monkeypatch.setattr(init_db_module, name, lambda: None)
 

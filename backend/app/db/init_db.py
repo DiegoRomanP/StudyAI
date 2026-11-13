@@ -89,6 +89,17 @@ def init_db() -> None:
     _ensure_adaptive_content_columns()
     _seed_default_user()
     sync_id_sequences()
+    _enable_row_level_security()
+
+
+def _enable_row_level_security() -> None:
+    """Close Supabase's REST API over our tables: RLS with no policies denies its anon and
+    authenticated roles, while the backend connects as the owner and is unaffected."""
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        for table in inspect(engine).get_table_names():
+            conn.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))
 
 
 def sync_id_sequences() -> None:

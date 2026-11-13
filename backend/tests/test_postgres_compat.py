@@ -83,3 +83,26 @@ def test_a_goal_title_at_the_limit_still_creates_a_plan(client: TestClient):
 
     assert r.status_code == 202
     assert len(client.get(f"/plans/{r.json()['id']}").json()["title"]) == 255
+
+
+@pytest.mark.skipif(
+    __import__("app.db.session", fromlist=["engine"]).engine.dialect.name != "postgresql",
+    reason="needs TEST_DATABASE_URL",
+)
+def test_every_postgres_table_has_row_level_security(client: TestClient):
+    # Supabase exposes public tables through its REST API to anyone with the publishable key;
+    # RLS with no policies closes that, while the backend (table owner) is unaffected.
+    from sqlalchemy import text
+
+    from app.db.session import engine
+    from app.rag.vector_store import _PgVectorStore
+
+    _PgVectorStore()
+    with engine.connect() as conn:
+        open_tables = conn.execute(
+            text(
+                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity"
+            )
+        ).scalars().all()
+    assert open_tables == []
