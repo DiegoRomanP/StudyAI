@@ -15,14 +15,13 @@ from __future__ import annotations
 import random
 from collections.abc import Iterable, Mapping, Sequence
 
-from app.algorithms.sm2 import PASSING_QUALITY
-
 UNKNOWN_MASTERY = 0.5          # "same level for every topic"
 LATEST_EXAM_WEIGHT = 0.6       # m' = 0.6·score + 0.4·m
 FLASHCARD_WEIGHT = 0.5         # self-rated, so it weighs half a multiple choice
 REINFORCE_BELOW = 0.6          # score / mastery under this → reinforce, box back to 0
 PROMOTE_AT = 0.8               # score at or over this climbs a box
 MASTERED_BOX = 3               # box at or over this → mastered
+REVIEW_PASS_QUALITY = 4        # a flashcard rated under this is reviewed (stricter than SM-2's lapse at 3)
 DEFAULT_LADDER = (1, 3, 7, 14, 30)
 
 SIN_DATOS, REFORZAR, EN_PROGRESO, DOMINADO = "SIN_DATOS", "REFORZAR", "EN_PROGRESO", "DOMINADO"
@@ -56,11 +55,32 @@ def adaptive_objective_grades(detail: Mapping[str, object]) -> dict[str, bool]:
     return grades
 
 
+def failed_adaptive_keys(detail: Mapping[str, object]) -> set[str]:
+    """v2 items to review: wrong objective items and flashcards rated under ``REVIEW_PASS_QUALITY``."""
+    failed = {key for key, correct in adaptive_objective_grades(detail).items() if not correct}
+    failed.update(
+        key
+        for key, entry in detail.items()
+        if isinstance(entry, Mapping)
+        and entry.get("type") == "flashcard"
+        and int(entry.get("quality") or 0) < REVIEW_PASS_QUALITY
+    )
+    return failed
+
+
 def exam_score(detail: Mapping[str, object]) -> float | None:
     """Exam score in 0..1 from a ``QuizResult.detail``; None when nothing was answered."""
     if is_adaptive_result(detail):
         grades = adaptive_objective_grades(detail)
-        return sum(grades.values()) / len(grades) if grades else None
+        if grades:
+            return sum(grades.values()) / len(grades)
+        # A review left with only flashcards: recalled (>= REVIEW_PASS_QUALITY) over rated.
+        cards = [
+            int(entry.get("quality") or 0) >= REVIEW_PASS_QUALITY
+            for entry in detail.values()
+            if isinstance(entry, Mapping) and entry.get("type") == "flashcard"
+        ]
+        return sum(cards) / len(cards) if cards else None
 
     earned = 0.0
     total = 0.0
@@ -79,7 +99,7 @@ def exam_score(detail: Mapping[str, object]) -> float | None:
 
 
 def failed_question_ids(detail: Mapping[str, Mapping]) -> set[int]:
-    """Questions to reinforce: wrong multiple choice or a flashcard rated under 3."""
+    """Questions to reinforce: wrong multiple choice or a flashcard rated under 4."""
     failed: set[int] = set()
     for key, entry in detail.items():
         if not isinstance(entry, Mapping):
@@ -87,7 +107,7 @@ def failed_question_ids(detail: Mapping[str, Mapping]) -> set[int]:
         kind = entry.get("type")
         if kind == "multiple_choice" and not entry.get("correct"):
             failed.add(int(key))
-        elif kind == "flashcard" and int(entry.get("quality") or 0) < PASSING_QUALITY:
+        elif kind == "flashcard" and int(entry.get("quality") or 0) < REVIEW_PASS_QUALITY:
             failed.add(int(key))
     return failed
 

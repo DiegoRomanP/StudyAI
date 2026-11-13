@@ -78,8 +78,10 @@ export function SessionResult({
                 {STATE_BADGES[topic.mastery_state].label}
               </Badge>
             </p>
-            {!mastered && reviewDate && (
+            {!mastered && reviewDate ? (
               <p className="text-sm text-text-muted">Próximo repaso: {formatDay(reviewDate)}</p>
+            ) : (
+              <p className="text-sm text-text-muted">No tienes repasos pendientes de este tema.</p>
             )}
           </div>
         )}

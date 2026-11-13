@@ -14,17 +14,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.algorithms.adaptive_route import (
-    DOMINADO,
-    adaptive_objective_grades,
     effective_ladder,
     exam_score,
+    failed_adaptive_keys,
     failed_question_ids,
     is_adaptive_result,
     normalize,
-    order_for_review,
     review_interval_days,
     shuffled_options,
-    topic_state,
     update_topic,
 )
 from app.core.config import get_settings
@@ -84,11 +81,7 @@ class AdaptiveRouteService:
         topic.mastery, topic.review_box = update_topic(
             topic.mastery, topic.review_box, score, promote_allowed=promote, ladder=ladder
         )
-        if topic_state(topic.mastery, topic.review_box) == DOMINADO:
-            self.db.flush()
-            return
 
-        interval = review_interval_days(topic.review_box, ladder)
         source_questions = self._questions(session)
         draft = None
         missed_adaptive: set[str] = set()
@@ -96,7 +89,7 @@ class AdaptiveRouteService:
             draft = self.content.get(session.id)
             if draft is None:
                 raise ValueError("Adaptive review requires published assessment content.")
-            missed_adaptive = {key for key, correct in adaptive_objective_grades(detail).items() if not correct}
+            missed_adaptive = failed_adaptive_keys(detail)
             failed = {q.id for q in source_questions if f"legacy:{q.id}" in missed_adaptive}
             points = self._adaptive_review_points(draft, source_questions, missed_adaptive)
         else:
@@ -104,6 +97,12 @@ class AdaptiveRouteService:
             points = [
                 {"prompt": q.prompt, "answer": q.answer} for q in source_questions if q.id in failed
             ]
+        # Only what was missed is reviewed: nothing missed, no review (SM-2 still spaces each card).
+        if not failed and not missed_adaptive:
+            self.db.flush()
+            return
+
+        interval = review_interval_days(topic.review_box, ladder)
         pending = self.db.scalars(
             select(StudySession).where(
                 StudySession.plan_id == session.plan_id,
@@ -153,15 +152,18 @@ class AdaptiveRouteService:
         failed_legacy: set[int],
         failed_adaptive: set[str],
     ) -> None:
-        ordered_source_ids = order_for_review([q.id for q in source_questions], failed_legacy)
+        ordered_source_ids = [q.id for q in source_questions if q.id in failed_legacy]
         copied_ids = {
             f"legacy:{original}": f"legacy:{copy.id}"
             for original, copy in zip(ordered_source_ids, review.quiz.questions, strict=True)
         }
         assessment = draft.adaptive_assessment
+        kept = [q for q in assessment.questions if q.question_id in failed_adaptive]
+        kept_keys = set(copied_ids) | {q.question_id for q in kept}
         question_objectives = {
             copied_ids.get(key, key): objectives
             for key, objectives in assessment.question_objectives.items()
+            if key in kept_keys
         }
         review.review_points = [
             {**point, "question_id": copied_ids.get(point["question_id"], point["question_id"])}
@@ -171,7 +173,7 @@ class AdaptiveRouteService:
         self.content.save(review.id, draft.model_copy(update={
             "adaptive_assessment": assessment.model_copy(update={
                 "question_objectives": question_objectives,
-                "questions": sorted(assessment.questions, key=lambda q: q.question_id not in failed_adaptive),
+                "questions": kept,
             }),
             "assessment_revision": uuid4().hex,
             "assessment_state": "open",
@@ -209,7 +211,7 @@ class AdaptiveRouteService:
         today: date,
     ) -> StudySession:
         by_id = {q.id: q for q in questions}
-        ids = order_for_review([q.id for q in questions], failed)
+        ids = [q.id for q in questions if q.id in failed]
         copies = [
             QuizQuestion(
                 order_index=index,

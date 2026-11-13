@@ -12,6 +12,7 @@ from app.events.session_events import SESSION_COMPLETED, SessionCompletedEvent, 
 from app.models.quiz import QuestionType, Quiz, QuizQuestion, QuizResult
 from app.models.session import SessionKind
 from app.pedagogy.answer_normalization import normalize_exact_answer, parse_numeric_answer
+from app.algorithms.adaptive_route import REVIEW_PASS_QUALITY
 from app.pedagogy.contracts import (
     AdaptiveSessionDraft,
     ObjectiveGrade,
@@ -361,7 +362,11 @@ def _evaluate(
                     objective_grades[objective_id].append(item.correct)
         detail[question_id] = entry
 
-    totals = summarize_objective_grades(grades)
+    # A review can keep only missed flashcards; then "recalled" (>= 4) is the score.
+    totals = summarize_objective_grades(grades or [
+        ObjectiveGrade(correct=quality >= REVIEW_PASS_QUALITY, feedback="")
+        for quality in qualities.values()
+    ])
     result = AssessmentResultV2(
         quiz_id=quiz.id, revision=submission.revision, **totals.model_dump(),
         detail=public_detail, formative_feedback=formative_feedback,

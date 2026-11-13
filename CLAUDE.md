@@ -388,7 +388,10 @@ on a *first* graded completion — retakes and `POST /sessions/{id}/complete` ne
 The maths is the pure `app/algorithms/adaptive_route.py` (mastery = moving average, Leitner box over
 `REVIEW_INTERVALS_DAYS`); mastery/box live on `PlanTopic` so they die with the plan cascade.
 - **No LLM in the route.** Submitting an exam makes 0 calls and creates at most one pending `REVIEW`
-  session per topic, built deterministically (failed questions first, options shuffled by a seed). Plan
+  session per topic with **only the missed items** (wrong multiple choice / objective item, or a
+  flashcard rated under 4 — `REVIEW_PASS_QUALITY`, stricter than SM-2's lapse at 3), options shuffled by a
+  seed. Nothing missed → no review (mastery and box still update; SM-2 still spaces each card). A v2 review
+  left with only flashcards scores them as recalled (≥ 4) / rated. Plan
   generation stays `2 + N` calls; an AI reinforcement is exactly 1 call, only when the learner asks.
 - `EventBus` de-duplicates handlers and runs each in a SAVEPOINT: a failing handler never loses the
   `QuizResult` or leaves a half-built review. `register_handlers()` may run many times in tests.
