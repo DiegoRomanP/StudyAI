@@ -88,6 +88,27 @@ def init_db() -> None:
     _ensure_adaptive_route_columns()
     _ensure_adaptive_content_columns()
     _seed_default_user()
+    sync_id_sequences()
+
+
+def sync_id_sequences() -> None:
+    """Move each Postgres ``id`` sequence past the largest stored id.
+
+    Rows inserted with an explicit id (the seeded demo user, copied data) don't advance
+    the sequence, so the next autoincrement insert would collide with them. SQLite needs nothing.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if "id" not in table.c or not table.c.id.autoincrement:
+                continue
+            sequence = conn.execute(text("SELECT pg_get_serial_sequence(:t, 'id')"), {"t": table.name}).scalar()
+            if sequence:
+                conn.execute(
+                    text(f"SELECT setval(:s, COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM {table.name}"),
+                    {"s": sequence},
+                )
 
 
 def _ensure_document_error_message_column() -> None:
@@ -270,15 +291,15 @@ def _ensure_llm_verification_columns() -> None:
                 conn.execute(
                     text(
                         "UPDATE llm_credentials "
-                        "SET is_active = 0, verified_revision = NULL, verified_at = NULL, "
+                        "SET is_active = FALSE, verified_revision = NULL, verified_at = NULL, "
                         "verified_fingerprint = NULL WHERE id = :credential_id"
                     ),
                     {"credential_id": credential_id},
                 )
         conn.execute(
             text(
-                "UPDATE llm_credentials SET is_active = 0 WHERE is_active = 1 AND id NOT IN "
-                "(SELECT MAX(id) FROM llm_credentials WHERE is_active = 1 GROUP BY user_id)"
+                "UPDATE llm_credentials SET is_active = FALSE WHERE is_active = TRUE AND id NOT IN "
+                "(SELECT MAX(id) FROM llm_credentials WHERE is_active = TRUE GROUP BY user_id)"
             )
         )
         if engine.dialect.name == "sqlite":

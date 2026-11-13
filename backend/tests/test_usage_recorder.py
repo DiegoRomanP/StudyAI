@@ -36,7 +36,7 @@ class _Billed(LLMProvider):
 
 def _rows(**filters) -> list[LLMUsageRecord]:
     with SessionLocal() as db:
-        return list(db.scalars(select(LLMUsageRecord).filter_by(**filters)))
+        return list(db.scalars(select(LLMUsageRecord).filter_by(**filters).order_by(LLMUsageRecord.id)))
 
 
 def test_failed_generation_still_records_usage(client):

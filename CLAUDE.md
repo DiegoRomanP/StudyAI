@@ -428,6 +428,16 @@ writes don't fail with "database is locked" while a generation commits; expect `
 next to the database (git-ignored). `PRAGMA foreign_keys` stays **off** on purpose (see the plan-deletion
 notes above).
 
+**Postgres (SaaS / Supabase)** runs the same code: `pip install -r requirements-saas.txt` (psycopg 3) and
+`DATABASE_URL=postgresql+psycopg://...` (the `+psycopg` driver is required). The suite runs against it with
+`docker compose -f docker-compose.dev.yml up -d db` and
+`TEST_DATABASE_URL=postgresql+psycopg://studyai:studyai@localhost:5433/studyai python -m pytest -q`
+(`conftest.py` drops and recreates the `public` schema first). Keep both engines green. Differences to
+keep in mind: Postgres enforces `VARCHAR(n)` (truncate user/LLM text before saving, e.g. document
+filename, plan title), its FK cascades *do* fire, raw SQL must use `TRUE`/`FALSE` for booleans (never
+`0`/`1`), and rows inserted with an explicit id don't advance the sequence — `init_db` ends with
+`sync_id_sequences()` for that.
+
 Single-user MVP: `app/api/deps.py` seeds/returns a fixed demo user (`DEFAULT_USER_ID = 1`) instead
 of real auth. This dependency boundary exists specifically so real auth can be dropped in later
 without touching route handlers — don't thread a different auth mechanism through routes/services

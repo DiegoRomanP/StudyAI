@@ -10,7 +10,18 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="studyai_test_")
 
-os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
+# TEST_DATABASE_URL runs the suite against Postgres (see docker-compose.dev.yml); it starts
+# from an empty public schema so every run is as fresh as the SQLite temp file.
+_TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "")
+if _TEST_DATABASE_URL:
+    from sqlalchemy import create_engine, text
+
+    _reset_engine = create_engine(_TEST_DATABASE_URL)
+    with _reset_engine.begin() as _conn:
+        _conn.execute(text("DROP SCHEMA public CASCADE"))
+        _conn.execute(text("CREATE SCHEMA public"))
+    _reset_engine.dispose()
+os.environ["DATABASE_URL"] = _TEST_DATABASE_URL or f"sqlite:///{_TMP}/test.db"
 os.environ["CHROMA_PERSIST_DIR"] = f"{_TMP}/chroma"
 os.environ["UPLOAD_DIR"] = f"{_TMP}/uploads"
 os.environ["ANTHROPIC_API_KEY"] = ""

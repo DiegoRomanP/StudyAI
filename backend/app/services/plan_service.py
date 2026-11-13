@@ -131,7 +131,7 @@ class PlanService:
         plan = Plan(
             user_id=user_id,
             goal_id=goal_id,
-            title=f"Plan: {goal.title}",
+            title=f"Plan: {goal.title}"[:255],  # goal titles may use all 255 chars
             status=PlanStatus.PROCESSING,
             document_ids=list(document_ids),
             content_version=content_version,

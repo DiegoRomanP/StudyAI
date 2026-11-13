@@ -50,6 +50,11 @@ class DocumentService:
         with open(storage_path, "wb") as fh:
             fh.write(content)
 
+        # Postgres enforces VARCHAR(512); keep the extension visible when trimming.
+        max_len = Document.__table__.c.filename.type.length
+        if len(filename) > max_len:
+            suffix = Path(filename).suffix[:16]
+            filename = filename[: max_len - len(suffix)] + suffix
         document = Document(
             user_id=user_id,
             filename=filename,
