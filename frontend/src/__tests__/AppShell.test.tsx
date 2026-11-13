@@ -41,6 +41,7 @@ describe("AppShell", () => {
       "Plan de estudio",
       "Práctica",
       "Temas clave",
+      "Mis preguntas",
       "Recursos",
       "Metas",
       "Conectar IA",
@@ -48,7 +49,7 @@ describe("AppShell", () => {
     ]);
     expect(
       within(desktopNavigation).getAllByRole("link").map((link) => link.getAttribute("href")),
-    ).toEqual(["/inicio", "/plan", "/practica", "/temas", "/documents", "/goals", "/settings", "/dashboard"]);
+    ).toEqual(["/inicio", "/plan", "/practica", "/temas", "/preguntas", "/documents", "/goals", "/settings", "/dashboard"]);
     expect(within(desktopNavigation).getByRole("link", { name: "Inicio" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -146,6 +147,7 @@ describe("AppShell", () => {
     expect(overflowNavigation).toBeInTheDocument();
     expect(within(overflowNavigation).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
       "/temas",
+      "/preguntas",
       "/documents",
       "/goals",
       "/settings",

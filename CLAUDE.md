@@ -410,6 +410,22 @@ The maths is the pure `app/algorithms/adaptive_route.py` (mastery = moving avera
 - "Siempre con IA" is a per-browser flag (`lib/reinforcePreference.ts`, `localStorage` with try/catch), not
   a user setting. "Hoy" is UTC in the backend and local in the browser (±1 day near midnight, accepted).
 
+### Study assistant
+
+`POST /sessions/{id}/assistant` (`app/services/assistant_service.py`) answers one learner message with
+**one** LLM call, kind `assistant_chat` (1024 tokens, free Markdown, not JSON; the mock returns fixed text),
+grounded in the session material and 4 retrieved chunks plus the last 6 messages. `mode=EXAM` adds the
+question on screen (prompt and options) but **never its answer key**: the model can't leak what it never
+receives, so a client forcing `mode=STUDY` gains nothing. Rows live in `assistant_messages` (no FK to plan or
+session; `delete_plan` removes them explicitly, like `FlashcardReview`). The free AI counts
+`free_ai_usage.assistant_uses` against `FREE_AI_ASSISTANT_DAILY_LIMIT` (default 20, separate from plan uses,
+refunded on a failed call; 429 `FREE_AI_ASSISTANT_LIMIT`). `GET /assistant/questions` feeds «Mis preguntas»
+(`/preguntas`). Frontend: `AssistantPanel` (non-modal side panel / bottom sheet) learns the question on
+screen through `AssistantQuestionContext` (`ReportAssistantQuestion` in `QuizPhase`/`AdaptiveAssessment`).
+`SafeMarkdown` renders GFM tables and KaTeX formulas (`$...$`, default `trust: false`); images and links
+from the LLM stay blocked. The test shows question types mixed with `seededShuffle` (`lib/shuffle.ts`,
+seed = quiz id [+ revision]) so a reload keeps the order.
+
 ### Config
 
 `app/core/config.py` is the single place environment variables are read (Twelve-Factor); nothing

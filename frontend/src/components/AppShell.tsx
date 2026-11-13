@@ -8,6 +8,7 @@ import {
   FolderOpen,
   House,
   KeyRound,
+  MessageCircleQuestion,
   Target,
   type LucideIcon,
 } from "lucide-react";
@@ -45,6 +46,7 @@ export const NAVIGATION: NavigationItem[] = [
   },
   { to: "/practica", label: "Práctica", icon: ClipboardCheck, primary: true, title: "Práctica" },
   { to: "/temas", label: "Temas clave", shortLabel: "Temas", icon: ChartNoAxesColumnDecreasing, title: "Temas clave" },
+  { to: "/preguntas", label: "Mis preguntas", shortLabel: "Preguntas", icon: MessageCircleQuestion, title: "Mis preguntas" },
   { to: "/documents", label: "Recursos", icon: FolderOpen, title: "Recursos" },
   { to: "/goals", label: "Metas", icon: Target, title: "Metas" },
   { to: "/settings", label: "Conectar IA", icon: KeyRound, title: "Conectar IA" },

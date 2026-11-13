@@ -9,6 +9,7 @@ import { clearQuizDraft, readQuizDraft, writeQuizDraft } from "../../lib/quizDra
 import { seededShuffle, shuffle } from "../../lib/shuffle";
 import { EmptyState } from "../EmptyState";
 import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
+import { ReportAssistantQuestion } from "./AssistantPanel";
 import { ChoiceOptions } from "./ChoiceOptions";
 import { SafeMarkdown } from "./SafeMarkdown";
 
@@ -172,6 +173,7 @@ export function QuizPhase({
 
   return (
     <div className="space-y-4">
+      <ReportAssistantQuestion id={question.id} />
       <ProgressBar value={(answeredCount / questions.length) * 100} label="Preguntas respondidas" />
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-text-muted">

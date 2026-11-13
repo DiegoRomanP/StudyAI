@@ -19,6 +19,7 @@ import { TopicsPage } from "./pages/TopicsPage";
 // Heavy routes load on demand: Recharts (Estadísticas), Markdown (Sesión/Práctica), the demo.
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const DemoPage = lazy(() => import("./pages/DemoPage").then((module) => ({ default: module.DemoPage })));
+const QuestionsPage = lazy(() => import("./pages/QuestionsPage").then((module) => ({ default: module.QuestionsPage })));
 const PracticePage = lazy(() => import("./pages/PracticePage").then((module) => ({ default: module.PracticePage })));
 const SessionPage = lazy(() => import("./pages/SessionPage").then((module) => ({ default: module.SessionPage })));
 
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="/inicio" element={<HomePage />} />
         <Route path="/practica" element={<PracticePage />} />
         <Route path="/temas" element={<TopicsPage />} />
+        <Route path="/preguntas" element={<QuestionsPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/plan" element={<PlanPage />} />

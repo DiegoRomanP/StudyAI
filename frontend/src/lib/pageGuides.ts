@@ -2,7 +2,7 @@
  * "¿Cómo funciona esta página?" content, rendered by `PageGuide`. Tests import these
  * constants instead of repeating the copy.
  */
-export type GuideId = "recursos" | "metas" | "conectar-ia" | "plan" | "practica" | "temas";
+export type GuideId = "recursos" | "metas" | "conectar-ia" | "plan" | "practica" | "temas" | "preguntas";
 
 export interface PageGuideContent {
   title: string;
@@ -62,5 +62,14 @@ export const PAGE_GUIDES: Record<GuideId, PageGuideContent> = {
       "El resto queda fuera para que estudies menos y mejor.",
     ],
     next: { to: "/plan", label: "Ver mi plan" },
+  },
+  preguntas: {
+    title: "¿Cómo funciona el asistente?",
+    steps: [
+      "En una sesión, pulsa «Pregúntale al asistente» cuando te surja una duda.",
+      "Mientras lees te explica el material; en el examen solo te da pistas, nunca la respuesta.",
+      "Aquí quedan todas tus preguntas para repasarlas cuando quieras.",
+    ],
+    next: { to: "/plan", label: "Ir a mi plan" },
   },
 };

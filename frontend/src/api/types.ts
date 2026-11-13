@@ -318,3 +318,44 @@ export interface OllamaModel {
   parameter_size: string | null;
   context_length: number | null;
 }
+
+// Study assistant
+export type AssistantMode = "STUDY" | "EXAM";
+
+export interface AssistantMessageDTO {
+  id: number;
+  role: "USER" | "ASSISTANT";
+  mode: AssistantMode;
+  content: string;
+  created_at: string;
+}
+
+export interface AssistantHistoryDTO {
+  messages: AssistantMessageDTO[];
+  /** Free-AI messages left today; null with the learner's own AI. */
+  remaining: number | null;
+}
+
+export interface AssistantAskInput {
+  message: string;
+  mode: AssistantMode;
+  question_id?: string | null;
+}
+
+export interface AssistantAskDTO {
+  question: AssistantMessageDTO;
+  answer: AssistantMessageDTO;
+  remaining: number | null;
+}
+
+export interface AssistantQuestionDTO {
+  id: number;
+  plan_id: number;
+  plan_title: string;
+  session_id: number;
+  topic_name: string;
+  mode: AssistantMode;
+  question: string;
+  answer: string;
+  created_at: string;
+}

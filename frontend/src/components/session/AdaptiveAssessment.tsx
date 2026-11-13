@@ -16,6 +16,7 @@ import { Alert, Badge, Button, Card, Spinner } from "../ui";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { StimulusCard } from "./LessonBlocks";
 import { AdaptiveAssessmentResult } from "./AdaptiveAssessmentResult";
+import { ReportAssistantQuestion } from "./AssistantPanel";
 import { seededShuffle } from "../../lib/shuffle";
 
 type QuestionDraft = {
@@ -533,6 +534,7 @@ export function AdaptiveAssessment({
 
   return (
     <section className="space-y-4" aria-labelledby="adaptive-assessment-title" aria-busy={submitting}>
+      <ReportAssistantQuestion id={question?.question_id} />
       <Card className="space-y-5">
         <header>
           <h2 id="adaptive-assessment-title" className="font-display text-xl font-semibold text-text-primary">

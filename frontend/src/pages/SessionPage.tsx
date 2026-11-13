@@ -9,6 +9,7 @@ import type { PlanTopicDTO, QuizResultDTO, SessionDetailDTO } from "../api/types
 import { EmptyState } from "../components/EmptyState";
 import { AdaptiveAssessment } from "../components/session/AdaptiveAssessment";
 import { AnswerReview } from "../components/session/AnswerReview";
+import { AssistantPanel, AssistantQuestionContext } from "../components/session/AssistantPanel";
 import { LessonBlocks } from "../components/session/LessonBlocks";
 import { QuizPhase } from "../components/session/QuizPhase";
 import { ReviewPanel, ReviewPoints } from "../components/session/ReviewPanel";
@@ -197,6 +198,7 @@ function LegacySessionFlow({
   // The plan's session panel opens the stats (`?fase=resultado`) or a confirmed retake (`?reintento=1`).
   const [searchParams, setSearchParams] = useSearchParams();
   const [phase, setPhase] = useState<Phase>(() => initialPhase(searchParams.get("fase")));
+  const [questionId, setQuestionId] = useState<string | null>(null);
   const [retakeConfirmed, setRetakeConfirmed] = useState(() => searchParams.get("reintento") === "1");
   const [result, setResult] = useState<QuizResultDTO | null>(null);
   // Reading the material during the test keeps QuizPhase mounted (answers, retake consent).
@@ -254,83 +256,86 @@ function LegacySessionFlow({
   );
 
   return (
-    <div className="space-y-4">
-      {updateError}
+    <AssistantQuestionContext.Provider value={setQuestionId}>
+      <div className="space-y-4">
+        {updateError}
 
-      {phase === "study" ? (
-        <StudyPhase
-          topic={session.topic_name}
-          durationMinutes={session.duration_minutes}
-          exit={exit}
-          badge={badge}
-          aside={showReviewSide && !reinforced ? <ReviewPanel session={session} /> : undefined}
-          preview={showReviewSide ? <ReviewPoints points={points} /> : undefined}
-          startDisabledReason={
-            session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
-          }
-          onDone={() => setPhase("break")}
-        >
-          {showReviewSide && <ReviewPoints points={points} />}
-          <SafeMarkdown>{material}</SafeMarkdown>
-        </StudyPhase>
-      ) : (
-        <>
-          <div className="flex items-center gap-2 pt-2">
-            {exit}
-            {phase === "test" && fromPractice && (
-              <Button type="button" variant="ghost" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
-                {reviewing ? "Volver al test" : "Repasar el material"}
-              </Button>
-            )}
-          </div>
-          <h1 className="sr-only">{session.topic_name}</h1>
-        </>
-      )}
-
-      {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
-      {phase === "test" && reviewing && (
-        <Card>
-          <div className="prose-study mx-auto max-w-reading">
+        {phase === "study" ? (
+          <StudyPhase
+            topic={session.topic_name}
+            durationMinutes={session.duration_minutes}
+            exit={exit}
+            badge={badge}
+            aside={showReviewSide && !reinforced ? <ReviewPanel session={session} /> : undefined}
+            preview={showReviewSide ? <ReviewPoints points={points} /> : undefined}
+            startDisabledReason={
+              session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
+            }
+            onDone={() => setPhase("break")}
+          >
+            {showReviewSide && <ReviewPoints points={points} />}
             <SafeMarkdown>{material}</SafeMarkdown>
-          </div>
-        </Card>
-      )}
-      {phase === "test" && (
-        <div hidden={reviewing}>
-          <QuizPhase
-            sessionId={session.id}
-            planId={session.plan_id}
-            alreadyCompleted={alreadyCompleted}
-            allowShuffle={isReview}
-            retakeAlreadyConfirmed={retakeConfirmed}
-            onSubmitted={handleSubmitted}
-          />
-        </div>
-      )}
-      {phase === "stats" && <SessionStats session={session} topic={topic} onRestart={restart} />}
-      {phase === "done" &&
-        (result ? (
-          <SessionResult
-            result={result}
-            planId={session.plan_id}
-            topic={topic}
-            nextSession={nextSession}
-            nextIsAvailable={nextIsAvailable}
-            reviewDate={reviewDate}
-            keywords={session.material?.youtube_keywords ?? []}
-          />
+          </StudyPhase>
         ) : (
-          <Card className="space-y-3">
-            <p className="font-medium text-text-primary">Sesión completada.</p>
-            <div className="flex flex-wrap gap-2">
-              <ButtonLink to={`/plan/${session.plan_id}`}>Volver al plan</ButtonLink>
-              <ButtonLink to="/inicio" variant="secondary">
-                Ir a Inicio
-              </ButtonLink>
+          <>
+            <div className="flex items-center gap-2 pt-2">
+              {exit}
+              {phase === "test" && fromPractice && (
+                <Button type="button" variant="ghost" aria-pressed={reviewing} onClick={() => setReviewing((current) => !current)}>
+                  {reviewing ? "Volver al test" : "Repasar el material"}
+                </Button>
+              )}
+            </div>
+            <h1 className="sr-only">{session.topic_name}</h1>
+          </>
+        )}
+
+        {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
+        {phase === "test" && reviewing && (
+          <Card>
+            <div className="prose-study mx-auto max-w-reading">
+              <SafeMarkdown>{material}</SafeMarkdown>
             </div>
           </Card>
-        ))}
-    </div>
+        )}
+        {phase === "test" && (
+          <div hidden={reviewing}>
+            <QuizPhase
+              sessionId={session.id}
+              planId={session.plan_id}
+              alreadyCompleted={alreadyCompleted}
+              allowShuffle={isReview}
+              retakeAlreadyConfirmed={retakeConfirmed}
+              onSubmitted={handleSubmitted}
+            />
+          </div>
+        )}
+        {phase === "stats" && <SessionStats session={session} topic={topic} onRestart={restart} />}
+        {phase === "done" &&
+          (result ? (
+            <SessionResult
+              result={result}
+              planId={session.plan_id}
+              topic={topic}
+              nextSession={nextSession}
+              nextIsAvailable={nextIsAvailable}
+              reviewDate={reviewDate}
+              keywords={session.material?.youtube_keywords ?? []}
+            />
+          ) : (
+            <Card className="space-y-3">
+              <p className="font-medium text-text-primary">Sesión completada.</p>
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink to={`/plan/${session.plan_id}`}>Volver al plan</ButtonLink>
+                <ButtonLink to="/inicio" variant="secondary">
+                  Ir a Inicio
+                </ButtonLink>
+              </div>
+            </Card>
+          ))}
+      </div>
+      <AssistantPanel sessionId={session.id} mode={phase === "test" ? "EXAM" : "STUDY"} questionId={questionId} />
+    </AssistantQuestionContext.Provider>
   );
 }
 
@@ -345,6 +350,7 @@ function AdaptiveSessionFlow({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const completed = session.status === "COMPLETED";
+  const [questionId, setQuestionId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(() =>
     completed && searchParams.get("reintento") === "1" ? "stats" : initialPhase(searchParams.get("fase")),
   );
@@ -372,42 +378,49 @@ function AdaptiveSessionFlow({
   }
 
   return (
-    <div className="space-y-4">
-      {updateError}
-      {phase === "study" ? (
-        <StudyPhase
-          topic={session.topic_name}
-          durationMinutes={session.duration_minutes}
-          exit={exit}
-          badge={badge}
-          aside={showReviewPanel ? <ReviewPanel session={session} /> : undefined}
-          startDisabledReason={
-            session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
-          }
-          onDone={() => setPhase("break")}
-        >
-          <LessonBlocks lesson={lesson} />
-        </StudyPhase>
-      ) : (
-        <div className="flex items-center gap-2 pt-2">
-          {exit}
-          <Button type="button" variant="ghost" onClick={() => setPhase("study")}>
-            Volver al material
-          </Button>
-        </div>
-      )}
+    <AssistantQuestionContext.Provider value={setQuestionId}>
+      <div className="space-y-4">
+        {updateError}
+        {phase === "study" ? (
+          <StudyPhase
+            topic={session.topic_name}
+            durationMinutes={session.duration_minutes}
+            exit={exit}
+            badge={badge}
+            aside={showReviewPanel ? <ReviewPanel session={session} /> : undefined}
+            startDisabledReason={
+              session.reinforcement_status === "PROCESSING" ? "Esperando el refuerzo con IA" : undefined
+            }
+            onDone={() => setPhase("break")}
+          >
+            <LessonBlocks lesson={lesson} />
+          </StudyPhase>
+        ) : (
+          <div className="flex items-center gap-2 pt-2">
+            {exit}
+            <Button type="button" variant="ghost" onClick={() => setPhase("study")}>
+              Volver al material
+            </Button>
+          </div>
+        )}
 
-      {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
-      {(phase === "test" || phase === "stats") && (
-        <AdaptiveAssessmentPhase
-          session={session}
-          lesson={lesson}
-          showResult={phase === "stats" || completed}
-          onOpenAssessment={() => setPhase("test")}
-          onResult={openResult}
-        />
-      )}
-    </div>
+        {phase === "break" && <BreakPhase onDone={() => setPhase("test")} />}
+        {(phase === "test" || phase === "stats") && (
+          <AdaptiveAssessmentPhase
+            session={session}
+            lesson={lesson}
+            showResult={phase === "stats" || completed}
+            onOpenAssessment={() => setPhase("test")}
+            onResult={openResult}
+          />
+        )}
+      </div>
+      <AssistantPanel
+        sessionId={session.id}
+        mode={phase === "test" && !completed ? "EXAM" : "STUDY"}
+        questionId={questionId}
+      />
+    </AssistantQuestionContext.Provider>
   );
 }
 
