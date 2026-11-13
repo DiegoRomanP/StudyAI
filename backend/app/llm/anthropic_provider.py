@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 # Tasks that should use the cheaper/faster "quiz" model; everything else uses
 # the stronger planning model. ``session_content`` is the merged content + quiz
 # call, so it belongs here rather than with the planning stages.
-_QUIZ_KINDS = {"quiz", "content", "session_content"}
+_QUIZ_KINDS = {"quiz", "content", "session_content", "assistant_chat"}
 
 
 class AnthropicProvider(LLMProvider):

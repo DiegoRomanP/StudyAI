@@ -100,6 +100,8 @@ class Settings(BaseSettings):
     DEFAULT_DEEPSEEK_MODEL: str = "deepseek-flash"
     # Plan generations per learner and day on the included AI; their own key has no limit.
     FREE_AI_DAILY_LIMIT: int = Field(default=3, ge=1)
+    # Study assistant messages per user and UTC day on the free AI (separate from plan uses).
+    FREE_AI_ASSISTANT_DAILY_LIMIT: int = Field(default=20, ge=1)
     # The free tier gets a short leash so a stalled provider fails fast.
     DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
     DEFAULT_AI_TOTAL_BUDGET_SECONDS: float = Field(default=120.0, gt=0, allow_inf_nan=False)

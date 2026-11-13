@@ -83,6 +83,7 @@ def init_db() -> None:
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()
     _ensure_plan_generation_columns()
+    _ensure_free_ai_assistant_column()
     _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
@@ -187,6 +188,10 @@ def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
             if name not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_free_ai_assistant_column() -> None:
+    _add_missing_columns("free_ai_usage", {"assistant_uses": "INTEGER NOT NULL DEFAULT 0"})
 
 
 def _ensure_plan_generation_columns() -> None:

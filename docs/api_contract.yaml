@@ -416,6 +416,75 @@ paths:
           description: REINFORCEMENT_NOT_AVAILABLE o CONTENT_NOT_READY para contenido v2 incompleto
         "429": { description: FREE_AI_DAILY_LIMIT — sin usos gratis hoy; el estado vuelve a NONE }
 
+  /sessions/{session_id}/assistant:
+    get:
+      summary: Historial del asistente de estudio en esta sesión
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Mensajes (más antiguos primero) y mensajes gratis restantes hoy (null con IA propia)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssistantHistory" }
+        "404": { description: Sesión no encontrada }
+    post:
+      summary: Pregunta al asistente (1 llamada LLM)
+      description: >
+        STUDY resuelve dudas con el material; EXAM solo da pistas. La clave de la pregunta nunca
+        entra al prompt. Con la IA gratuita gasta 1 mensaje de FREE_AI_ASSISTANT_DAILY_LIMIT (se devuelve si falla).
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                mode: { type: string, enum: [STUDY, EXAM], default: STUDY }
+                question_id: { type: string, nullable: true, maxLength: 64 }
+      responses:
+        "200":
+          description: Pregunta y respuesta guardadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  question: { $ref: "#/components/schemas/AssistantMessage" }
+                  answer: { $ref: "#/components/schemas/AssistantMessage" }
+                  remaining: { type: integer, nullable: true }
+        "404": { description: Sesión no encontrada }
+        "429": { description: FREE_AI_ASSISTANT_LIMIT — sin mensajes gratis del asistente hoy }
+
+  /assistant/questions:
+    get:
+      summary: Preguntas que hizo el estudiante al asistente, con su respuesta (más recientes primero)
+      parameters:
+        - { name: plan_id, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    plan_id: { type: integer }
+                    plan_title: { type: string }
+                    session_id: { type: integer }
+                    topic_name: { type: string }
+                    mode: { type: string, enum: [STUDY, EXAM] }
+                    question: { type: string }
+                    answer: { type: string }
+                    created_at: { type: string, format: date-time }
+
   /sessions/{session_id}/reinforcement/cancel:
     post:
       summary: Cancela un refuerzo en PROCESSING
@@ -742,6 +811,19 @@ paths:
 
 components:
   schemas:
+    AssistantMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        role: { type: string, enum: [USER, ASSISTANT] }
+        mode: { type: string, enum: [STUDY, EXAM] }
+        content: { type: string, description: Markdown (fórmulas en $...$) }
+        created_at: { type: string, format: date-time }
+    AssistantHistory:
+      type: object
+      properties:
+        messages: { type: array, items: { $ref: "#/components/schemas/AssistantMessage" } }
+        remaining: { type: integer, nullable: true }
     Document:
       type: object
       properties:

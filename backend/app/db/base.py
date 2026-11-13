@@ -18,6 +18,7 @@ class Base(DeclarativeBase):
 # NOTE: imported for their side effect of registering tables on Base.metadata.
 # The `noqa` keeps linters from removing these "unused" imports.
 from app.models import (  # noqa: E402,F401  (side-effect imports)
+    assistant_message,
     document,
     flashcard,
     free_ai_usage,

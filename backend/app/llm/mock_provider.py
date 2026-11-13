@@ -74,6 +74,8 @@ class MockLLMProvider(LLMProvider):
         max_tokens: int = 4096,
     ) -> str:
         ctx = context or {}
+        if kind == "assistant_chat":  # free Markdown text, not JSON
+            return _assistant_reply(ctx)
         handler = {
             "topic_analysis": self._topics,
             "session_plan": self._sessions,
@@ -410,3 +412,17 @@ class MockLLMProvider(LLMProvider):
             "flashcards": flashcards,
             "multiple_choice": multiple_choice,
         }
+
+
+def _assistant_reply(ctx: dict) -> str:
+    topic = ctx.get("topic") or "este tema"
+    if ctx.get("mode") == "EXAM":
+        return (
+            f"**Pista (modo demo):** vuelve a la idea central de *{topic}* en el material y pregúntate "
+            "qué la distingue de las demás opciones. ¿Qué dato del enunciado conecta con ella?"
+        )
+    return (
+        f"**Respuesta de demostración** sobre *{topic}*.\n\n"
+        "Conecta tu IA para obtener explicaciones reales. Mientras tanto, un ejemplo con fórmula: "
+        "el área de un círculo es $A = \\pi r^2$."
+    )

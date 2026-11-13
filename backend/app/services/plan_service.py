@@ -54,6 +54,7 @@ from app.llm.prompts import (
 from app.services.adaptive_content_builder import build_adaptive_session_content
 from app.services.session_content_builder import build_session_content
 from app.models.document import DocumentStatus
+from app.models.assistant_message import AssistantMessage
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
@@ -315,6 +316,8 @@ class PlanService:
             self.db.execute(
                 delete(FlashcardReview).where(FlashcardReview.question_id.in_(question_ids))
             )
+        # Same reason: assistant messages only hold the plan id, nothing cascades to them.
+        self.db.execute(delete(AssistantMessage).where(AssistantMessage.plan_id == plan.id))
         self.repo.delete(plan)
 
 
