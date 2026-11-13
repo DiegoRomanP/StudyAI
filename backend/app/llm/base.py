@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from app.llm.usage import LLMUsage
+
 
 class LLMProvider(ABC):
     # Local and mock providers do not need cloud rate-limit pacing.
@@ -31,6 +33,14 @@ class LLMProvider(ABC):
     ) -> str:
         """Return the raw text completion for ``prompt``."""
         ...
+
+    def _record_usage(self, usage: LLMUsage) -> None:
+        # Per instance: a class-level list would be shared by every provider.
+        self.__dict__.setdefault("_usage_log", []).append(usage)
+
+    def drain_usage(self) -> list[LLMUsage]:
+        """Return the usage reported since the last call and forget it."""
+        return self.__dict__.pop("_usage_log", [])
 
     def close(self) -> None:
         """Release provider resources after a short-lived operation."""

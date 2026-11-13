@@ -142,6 +142,9 @@ class FreeTierProvider(LLMProvider):
         assert last_error is not None
         raise last_error
 
+    def drain_usage(self):
+        return [u for provider in self._built.values() for u in provider.drain_usage()]
+
     def close(self) -> None:
         for provider in self._built.values():
             provider.close()

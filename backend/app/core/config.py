@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     # Cheaper alternatives you may set here: claude-sonnet-5, claude-haiku-4-5.
     LLM_MODEL_PLAN: str = "claude-opus-4-8"
     LLM_MODEL_QUIZ: str = "claude-haiku-4-5"
+    # USD per million tokens, JSON: {"<model>": [input, output, cached_input]}. Unlisted models have no cost.
+    LLM_PRICES_USD_PER_MTOK: dict[str, list[float]] = {}
     LLM_MAX_RETRIES: int = Field(default=3, ge=1)
     LLM_MAX_RATE_LIMIT_RETRIES: int = Field(default=6, ge=0)
     # 4096-token generations on a large hosted model (NVIDIA NIM's 70B/405B

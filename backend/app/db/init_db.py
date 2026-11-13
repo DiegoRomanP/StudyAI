@@ -15,6 +15,7 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
+from app.models.llm_usage import LLMUsageRecord  # noqa: F401 - register before create_all
 from app.models.plan import Plan
 from app.models.quiz import Quiz, QuizQuestion, QuizResult  # noqa: F401 - register before create_all
 from app.models.session import Session as StudySession, SessionMaterial  # noqa: F401 - register before create_all
