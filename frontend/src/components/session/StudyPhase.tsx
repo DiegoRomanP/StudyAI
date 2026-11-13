@@ -45,12 +45,12 @@ export function StudyPhase({
   }
 
   return (
-    <div className={!started && withSide ? "lg:grid lg:grid-cols-3 lg:gap-x-8" : undefined}>
+    <div>
       <div
         className={`sticky top-0 z-10 flex transition-[min-height] duration-[var(--motion-card)] ease-flow ${
           started
             ? "min-h-14 flex-row items-center justify-between gap-3 border-b border-line bg-surface-paper/95 backdrop-blur"
-            : `${withSide ? "min-h-[60dvh] lg:col-span-2" : "min-h-[100dvh]"} flex-col items-center justify-center`
+            : `${withSide ? "min-h-[60dvh]" : "min-h-[100dvh]"} flex-col items-center justify-center`
         }`}
       >
         <div className={started ? "" : "absolute left-0 top-2"}>{exit}</div>
@@ -93,9 +93,9 @@ export function StudyPhase({
       </div>
 
       {!started && aside !== undefined && (
-        <div className="lg:col-start-3 lg:row-span-2 lg:row-start-1">{aside}</div>
+        <div className="mx-auto max-w-reading">{aside}</div>
       )}
-      {!started && preview !== undefined && <div className="mt-6 lg:col-span-2 lg:mt-0">{preview}</div>}
+      {!started && preview !== undefined && <div className="mx-auto mt-6 max-w-reading">{preview}</div>}
 
       {started && (
         <div className="pt-6 transition-opacity duration-[var(--motion-micro)]">
