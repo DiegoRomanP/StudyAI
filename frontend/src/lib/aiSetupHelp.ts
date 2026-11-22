@@ -79,3 +79,16 @@ export const OLLAMA_NOTES = [
   "El servidor debe llegar a Ollama (por defecto http://127.0.0.1:11434; se cambia con OLLAMA_BASE_URL).",
   "Si Ollama corre como servicio, añade Environment=\"OLLAMA_CONTEXT_LENGTH=16384\" con «sudo systemctl edit ollama», reinícialo y compruébalo con «ollama ps» (columna CONTEXT).",
 ];
+
+/** Agent CLIs launched by the backend with the learner's own terminal login (self-hosted only). */
+export function isAgentCli(entry: { installed?: boolean | null }): boolean {
+  return entry.installed !== undefined && entry.installed !== null;
+}
+
+/** How to sign in to each agent CLI in a terminal on the machine that runs StudyAI. */
+export const AGENT_CLI_LOGIN: Partial<Record<LLMProviderKey, string>> = {
+  CLAUDE_CODE: "claude  (y luego /login)",
+  OPENCODE: "opencode auth",
+  PI: "pi auth",
+  CODEX: "codex login",
+};

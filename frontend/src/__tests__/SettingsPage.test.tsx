@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -80,6 +80,16 @@ function renderSettings() {
 }
 
 describe("SettingsPage", () => {
+  it("shows loading, not an empty catalog, while offline queries are paused", async () => {
+    onlineManager.setOnline(false);
+    try {
+      renderSettings();
+      expect(await screen.findByRole("status", { name: "Cargando proveedores…" })).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     api.listProviderCatalog.mockResolvedValue([catalog]);
@@ -118,8 +128,7 @@ describe("SettingsPage", () => {
     renderSettings();
 
     expect(screen.getByRole("heading", { level: 1, name: "Conectar IA" })).toBeInTheDocument();
-    expect(screen.getByText(/No necesitas clave para probar StudyAI/)).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: PAGE_GUIDES["conectar-ia"].title })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Ayuda: ${PAGE_GUIDES["conectar-ia"].title}` })).toBeInTheDocument();
     expect(await screen.findByText("Modo demo (respuestas de ejemplo, sin costo)")).toBeInTheDocument();
   });
 
@@ -718,6 +727,18 @@ describe("SettingsPage", () => {
 
     expect(() => resolveLlmRuntime(malformedRuntime, [catalog])).not.toThrow();
     expect(resolveLlmRuntime(malformedRuntime, [catalog]).kind).toBe("unknown");
+  });
+
+  it("resolves the bundled free AI whatever its vendor (DeepSeek)", () => {
+    const runtime = {
+      source: "ENV",
+      provider: "DEEPSEEK",
+      models: { topic_analysis: "deepseek-flash", session_plan: "deepseek-flash", session_content: "deepseek-flash" },
+      fallback_reason: null,
+      bundled: true,
+    };
+    const resolved = resolveLlmRuntime(runtime, [{ ...catalog, provider: "DEEPSEEK", label: "DeepSeek" }]);
+    expect(resolved).toMatchObject({ kind: "env", bundled: true, label: "DeepSeek" });
   });
 
   it("shows an unknown state when the completed runtime response is empty", async () => {

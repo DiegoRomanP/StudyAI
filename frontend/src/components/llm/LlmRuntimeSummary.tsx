@@ -56,7 +56,8 @@ export function resolveLlmRuntime(
   const bundled = runtime.bundled === true;
   if (
     runtime.source === "ENV" &&
-    (bundled ? runtime.provider === "NVIDIA" || runtime.provider === "GEMINI" : runtime.provider === "ANTHROPIC")
+    // The bundled free tier changes vendor (NVIDIA → Gemini → DeepSeek); any catalog provider is valid.
+    (bundled || runtime.provider === "ANTHROPIC")
   ) {
     const provider = providerCatalog.find((entry) => entry.provider === runtime.provider);
     if (provider) {

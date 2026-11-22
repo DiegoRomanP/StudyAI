@@ -47,6 +47,28 @@ describe("getApiErrorMessage", () => {
     ).toBe("Google Gemini rechazó la clave.");
   });
 
+  it.each(["CLAUDE_CODE", "OPENCODE", "PI", "CODEX"])("renders typed errors from the %s terminal CLI", (provider) => {
+    expect(
+      getApiErrorMessage(
+        {
+          isAxiosError: true,
+          response: {
+            status: 502,
+            data: {
+              detail: "La CLI no tiene una sesión iniciada.",
+              code: "LLM_AUTHENTICATION_FAILED",
+              provider,
+              upstream_status: null,
+              retryable: false,
+              retry_after_seconds: null,
+            },
+          },
+        },
+        "No se pudo verificar.",
+      ),
+    ).toBe("La CLI no tiene una sesión iniciada.");
+  });
+
   it.each(["LLM_OUTPUT_LIMIT", "LLM_REFUSED", "LLM_UNSUPPORTED_CONFIGURATION"])("renders the safe %s detail", (code) => {
     expect(
       getApiErrorMessage(
