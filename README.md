@@ -183,7 +183,7 @@ Tema oscuro «flow» con tokens semánticos, iconos Lucide y transiciones que re
 | Ruta | Pantalla |
 |---|---|
 | `/` · `/demo` | Landing y demostración simulada (no llama a la API ni pide claves) |
-| `/inicio` | Asistente Material → Meta → IA → Estudiar, «Primeros pasos», sesión de hoy y repaso |
+| `/inicio` | Sesión de hoy, accesos rápidos, progreso y asistente plegable Material → Meta → IA → Estudiar |
 | `/plan`, `/plan/:id` | Planes con vista Calendario / Lista y progreso de generación |
 | `/session/:id` | Estudio → receso → test → resultado (`?fase=test` abre el test) |
 | `/practica` | «Preguntas» locales sin guardar y «Simulacro» |
@@ -311,7 +311,7 @@ Cubren SM-2, Pareto, chunker, parsers, factorías, borrado en cascada, cifrado d
 (con `respx`, sin red), el ciclo revisionado de `/llm-settings`, la generación `2 + N` y su reanudación, la
 evaluación adaptativa y flujos end-to-end. Playwright cubre el recorrido completo (material → plan → test →
 estadísticas) y la navegación con teclado a 320 px. La guía del entorno aislado está en
-[`docs/qa-aislado.md`](docs/qa-aislado.md).
+[`docs/frontend/qa/qa-aislado.md`](docs/frontend/qa/qa-aislado.md).
 
 ## 🛡️ Seguridad
 
@@ -330,15 +330,15 @@ estadísticas) y la navegación con teclado a 320 px. La guía del entorno aisla
 Hoy es un MVP de un solo usuario (usuario demo fijo). Lo que sigue hacia un SaaS: autenticación real con
 Supabase, créditos, rate limiting, ocultar las respuestas del quiz hasta el envío y despliegue de la beta
 (Cloudflare Pages + AWS Lightsail + Supabase + R2). Detalle en
-[`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md).
+[`docs/backend/despliegue/saas-produccion.md`](docs/backend/despliegue/saas-produccion.md).
 
 ## 📚 Documentación
 
 - [`docs/api_contract.yaml`](docs/api_contract.yaml): contrato OpenAPI.
 - [`docs/AGENTS_STATUS.md`](docs/AGENTS_STATUS.md): estado actual y pendientes del MVP.
-- [`docs/HISTORIAL-frontend.md`](docs/HISTORIAL-frontend.md) · [`docs/HISTORIAL-producto-backend.md`](docs/HISTORIAL-producto-backend.md): lo ya ejecutado y sus pendientes.
-- [`docs/SaaS-Produccion.md`](docs/SaaS-Produccion.md): hoja de ruta hacia SaaS de pago.
-- [`docs/qa-aislado.md`](docs/qa-aislado.md): entorno aislado de QA.
+- [`docs/frontend/historial.md`](docs/frontend/historial.md) · [`docs/backend/historial.md`](docs/backend/historial.md): lo ya ejecutado y sus pendientes.
+- [`docs/backend/despliegue/saas-produccion.md`](docs/backend/despliegue/saas-produccion.md): hoja de ruta hacia SaaS de pago.
+- [`docs/frontend/qa/qa-aislado.md`](docs/frontend/qa/qa-aislado.md): entorno aislado de QA.
 - [`CLAUDE.md`](CLAUDE.md) · [`AGENTS.md`](AGENTS.md): notas de arquitectura y reglas operativas para agentes.
 - [`odd/tasks/`](odd/tasks): planes ODD y registros de verificación.
 

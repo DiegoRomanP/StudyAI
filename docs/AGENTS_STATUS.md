@@ -76,7 +76,7 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 - Integración de Claude Pro/Max, pendiente de autorización y contrato oficial.
 - Rediseño visual amplio y optimización adicional de PDF/tokens; la extracción y recuperación actuales siguen funcionando con fallbacks.
 - Verificación live con cuentas reales de cada proveedor; la suite usa transporte simulado y no consume claves.
-- Revisión pedagógica humana del [piloto de perfiles académicos](subject-adaptive-pilot.md).
+- Revisión pedagógica humana del [piloto de perfiles académicos](backend/generacion-planes/piloto-perfiles.md).
 
 ## Fuentes de verdad
 
@@ -88,6 +88,6 @@ no es la cola de trabajo actual ni una fuente de verdad sobre los proveedores.
 ## Historial de planes ejecutados
 
 La integración incremental del frontend (A01–A18), la ruta adaptativa, la generación reanudable y el
-onboarding UX están resumidos, con sus pendientes, en [`HISTORIAL-frontend.md`](HISTORIAL-frontend.md) y
-[`HISTORIAL-producto-backend.md`](HISTORIAL-producto-backend.md). La hoja de ruta hacia SaaS de pago es
-[`SaaS-Produccion.md`](SaaS-Produccion.md); la guía de QA aislado, [`qa-aislado.md`](qa-aislado.md).
+onboarding UX están resumidos, con sus pendientes, en [`frontend/historial.md`](frontend/historial.md) y
+[`backend/historial.md`](backend/historial.md). La hoja de ruta hacia SaaS de pago es
+[`backend/despliegue/saas-produccion.md`](backend/despliegue/saas-produccion.md); la guía de QA aislado, [`frontend/qa/qa-aislado.md`](frontend/qa/qa-aislado.md).

@@ -1,528 +1,97 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+StudyAI: app de planificación de estudio asistida por IA. El usuario sube documentos (`.pdf`/`.md`),
+define una meta (examen / aprendizaje / memorización) y el backend genera un plan con repetición espaciada
+(SM-2 / Ebbinghaus), temas priorizados por Pareto y tests, mediante un pipeline LLM de varios pasos.
+Monorepo: backend FastAPI (`backend/`) + frontend Vite/React (`frontend/`).
 
-## What this is
+**Invariante principal**: la app funciona completa en **modo demo**, sin API keys ni dependencias pesadas
+(LLM mock, embedder por hashing, vector store en memoria), y se mejora sola a IA real + RAG semántico al
+instalar los extras y poner una clave. Nunca rompas el camino de fallback en `llm/`, `rag/` o `processors/`.
 
-StudyAI: an AI-assisted study-planning app. Users upload documents (`.pdf`/`.md`), define a goal
-(exam / learning / memorization), and the backend generates a study plan with spaced-repetition
-sessions (SM-2 / Ebbinghaus), Pareto-prioritized topics, and quizzes — all via a multi-step LLM
-pipeline. Monorepo: FastAPI backend + Vite/React frontend.
+Este archivo solo dice **dónde** está cada cosa, **cuándo** leerla y las **reglas** de trabajo. El
+detalle vive en `docs/`, las reglas estrictas por ruta en `.claude/rules/` y los procedimientos en
+`.claude/skills/`. El código y los tests mandan si la prosa los contradice (y entonces se corrige la prosa).
 
-The most important design fact about this repo: **it runs fully "in demo mode" with zero API keys
-and zero heavy dependencies**, and *transparently upgrades* to real Claude + semantic RAG when you
-install the optional deps and set a key. Never break this property when touching `llm/`, `rag/`, or
-`processors/` — always preserve the fallback path.
+## Mapa de documentación
 
-## Commands
+Índice completo con la tabla «si tocas este código → lee este documento»: **`docs/README.md`**.
+Léelo antes de empezar cualquier tarea que no sea trivial.
 
-### Backend (from `backend/`)
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # core — runs the full MVP (mock LLM, hashing embedder, in-memory vector store)
-pip install -r requirements-dev.txt      # pytest, httpx, respx
-pip install -r requirements-rag.txt      # optional: PyMuPDF, sentence-transformers, chromadb (pulls in torch)
-
-cp .env.example .env
-uvicorn main:app --reload --port 8001    # http://localhost:8001, Swagger at /docs
-```
-
-Tests:
-
-```bash
-python -m pytest -q                                    # full backend suite
-python -m pytest tests/test_sm2.py -q                   # single file
-python -m pytest tests/test_sm2.py::test_third_review_multiplies_by_ef -q   # single test
-```
-
-`tests/conftest.py` redirects `DATABASE_URL`/`CHROMA_PERSIST_DIR`/`UPLOAD_DIR` to a temp dir and
-forces `ANTHROPIC_API_KEY=""` (mock LLM) *before* the app/config import — tests never touch real
-data or spend tokens.
-
-There is no `alembic upgrade` step in normal dev/test flow — see "Database" below.
-
-### Frontend (from `frontend/`)
-
-```bash
-npm install
-cp .env.example .env      # VITE_API_URL, defaults to http://localhost:8001
-npm run dev               # http://localhost:5173
-npm run lint              # tsc --noEmit (no separate linter configured)
-npm test                  # Vitest suite
-npm run build             # tsc --noEmit && vite build
-```
-
-## Architecture
-
-### Layering (backend)
-
-Strict separation, enforced by directory: `api/v1/routes` (controllers) → `services` (orchestration)
-→ `repositories` (data access, wraps SQLAlchemy `Session`) → `models` (ORM entities) / `schemas`
-(Pydantic DTOs, `from_attributes=True`). Routes never touch the ORM directly — they go through a
-repository or service. `BaseRepository` (`app/repositories/base.py`) gives every repo
-`find_by_id`/`save`/`delete`/`list_all`; concrete repos add aggregate-specific queries.
-
-All routes mount at the **root path** (`/documents`, `/goals`, ...), not under `/api/v1`, to match
-`docs/api_contract.yaml` — despite living in `app/api/v1/routes/`.
-
-### Design patterns in use (each is load-bearing, not decorative)
-
-- **Factory** — `DocumentProcessorFactory` (`app/processors/factory.py`, ext → processor),
-  `GoalStrategyFactory` (`app/strategies/goal_strategies.py`), `get_llm_provider(db, user_id)`
-  (`app/llm/factory.py` — see "LLM provider settings" below for the full fallback chain).
-- **Strategy** — `GoalStrategy` (Exam/Learning/Memorization) shapes the topic-weighting prompt and
-  the per-session `SessionConfig` (duration, flashcard/MC mix).
-- **Pipeline** — document ingestion: Validate → Parse (Factory) → Chunk → Embed → Store
-  (`app/processors/pipeline.py`).
-- **Repository** — see above.
-- **Observer** — `EventBus` (`app/events/session_events.py`), singleton `event_bus`. Completing a
-  session publishes `session.completed`; `ProgressService.register_handlers()` (wired in
-  `main.py` lifespan) subscribes and updates SM-2 schedules. Handlers run synchronously in the
-  caller's transaction and one handler's exception never breaks another's.
-- **Dual-implementation-with-fallback** (the recurring theme of this codebase) — every
-  RAG-adjacent component has a heavy "real" backend and a pure-Python fallback, chosen at
-  `__init__`/call time via `try/except ImportError`, with **identical call-site interfaces**:
-  - `Embedder`: sentence-transformers (384-d) vs. deterministic hashing embedder.
-  - `VectorStore` (`app/rag/vector_store.py`): ChromaDB (persistent, cosine) vs. `_InMemoryStore`
-    (JSON-persisted, pure-Python cosine). With `VECTOR_BACKEND=pgvector` and a Postgres
-    `DATABASE_URL`, `_PgVectorStore` (raw SQL on a `document_chunks` table, no `pgvector` package)
-    takes the place of the fallback; if it can't start it logs a warning and the chain above applies.
-  - `Chunker`: LangChain `RecursiveCharacterTextSplitter` vs. pure-Python splitter.
-  - `PDFProcessor`: PyMuPDF, imported lazily so its absence doesn't break boot.
-  - `LLMProvider` (`app/llm/base.py`): real providers (`AnthropicProvider`,
-    `OpenAICompatibleProvider`, `OpenRouterProvider`, `NvidiaNimProvider`) vs.
-    `MockLLMProvider` (deterministic, schema-valid fake JSON per `kind`) — see
-    "LLM provider settings" below for the full selection chain. Never crashes boot
-    even on a bad key (falls back to mock with a logged warning).
-  When adding a new capability here, follow the same shape: one interface, two backends, silent
-  degrade with a log line — never a hard dependency on the optional package.
-
-### The plan-generation pipeline (core business logic)
-
-`PlanService.create_plan` creates a `Plan` row with `status=PROCESSING` and returns immediately;
-`generate_plan_task` (a FastAPI `BackgroundTask`, entry point in `app/services/plan_service.py`)
-does the real work in `_Generator.run`:
-
-1. `Retriever.retrieve_texts` — RAG retrieval over the goal's documents (`top_k=8`, kept modest —
-   see "request volume" below).
-2. LLM call #1 (`topic_analysis`) — extract topics/subtopics/difficulty/relevance as JSON.
-3. `select_top_by_relevance` (Pareto, `app/algorithms/pareto.py`) — keep the high-value slice of
-   topics.
-4. LLM call #2 (`session_plan`) — distribute selected topics into sessions with
-   `REVIEW_INTERVALS_DAYS` (Ebbinghaus) offsets; on any failure this degrades to a deterministic
-   round-robin session layout rather than failing the whole plan.
-5. Per session: **one merged LLM call** (`session_content`, `app/llm/prompts/session_content.py`)
-   produces study material + YouTube *keywords* + flashcards + multiple choice together.
-
-All LLM JSON responses go through `parse_llm_json` (`app/llm/output_parsers.py`), which strips
-markdown fences and repairs common malformations before `json.loads`.
-
-**Generation is resumable and commits after every step.** `_Generator._generate` works out what is
-missing from the stored rows (no topics → analyse; none selected → select; missing sessions →
-plan them, matched by `topic_id`/normalized name; sessions without material → generate them), so the
-same code runs a new plan and `POST /plans/{id}/resume` (`PlanService.resume_plan`: FAILED →
-PROCESSING by conditional UPDATE, 409 `PLAN_NOT_RESUMABLE` otherwise, a double POST starts one task).
-Each step writes `Plan.progress_stage` (`TOPICS`/`SESSIONS`/`CONTENT`) and `progress_done`/`progress_total`
-(sessions with material / sessions) through an UPDATE guarded by `status='PROCESSING'`; rowcount 0 means
-the plan was deleted and the task stops (`_PlanGone`) without leaving orphan rows. On any error the
-generator rolls back first, then sets `FAILED` with the message truncated to 1000 chars, keeping
-everything already committed. That rollback + guarded UPDATE + startup recovery is why the pipeline
-never leaves a plan stuck in `PROCESSING`. A `BackgroundTask` dies with the process
-(`--reload`, crash), so the `lifespan` runs `recover_interrupted_plans` (PROCESSING → FAILED,
-resumable, free use refunded) and `recover_interrupted_reinforcements` (PROCESSING → FAILED, no
-refund) at startup. **This assumes a single backend process** (the SQLite MVP): with several
-workers, one starting up would fail the live generations of the others.
-
-**Request volume is deliberately minimised — don't undo this.** A plan makes `2 + N` LLM calls (N =
-session count), not `2 + 2N`: step 5 used to be two separate calls (`content_gen` then `quiz_gen`,
-in now-deleted prompt modules) that got merged into `session_content` specifically because that
-per-session multiplier is what exhausts a rate-limited free-tier provider's request budget fastest.
-The merged prompt also asks for **exactly** `config.flashcards`/`config.multiple_choice` (from the
-goal's `SessionConfig`) instead of a hardcoded "5 and 5" that then got truncated client-side —
-that old behavior silently under-delivered for e.g. `MemorizationStrategy` (wants 8 flashcards,
-only ever got 5). Every `_Generator._llm_call` also passes an explicit `max_tokens` sized to what
-that specific call actually needs, from `OUTPUT_BUDGETS` in `app/llm/output_budget.py` (2048 for
-topic analysis, 1024 for session planning, 4096 for the merged session call, shared with the AI
-reinforcement) — smaller expected output makes each request cheaper/faster on a capacity-constrained
-model. `complete_within_budget` retries **once** with double the budget (capped at 8192) only on
-`LLM_OUTPUT_LIMIT`; `session_plan` never retries (it degrades to the deterministic layout instead), so
-success stays `2 + N` and the worst case is `3 + 2N`. `_llm_call` also
-proactively sleeps `Settings.LLM_REQUEST_PACING_SECONDS` (default 2s) between successive calls (and
-before that retry), skipped entirely when the provider's `requires_request_pacing` is false (the mock and
-Ollama — keep this check if you touch `_llm_call`, or the whole test suite gets slow). This pacing is *proactive* — it
-complements, not replaces, `OpenAICompatibleProvider`'s *reactive* retry-on-429 described below.
-
-Completing a session (`POST /sessions/{id}/complete`) publishes `session.completed` with
-per-flashcard quality ratings (0–5); `ProgressService` applies `calculate_next_review` (SM-2,
-`app/algorithms/sm2.py`) to update `FlashcardReview` rows.
-
-#### Profile-adaptive content v2
-
-`POST /plans/generate` opts in with `content_version=2` and accepts an optional
-`profile_hint`. Topic analysis resolves a profile and learning objectives for each
-topic in the first LLM call. The topic checkpoint stores the snapshot and the
-plan stores the generation goal type. Resuming uses those persisted values. The
-merged content call validates lesson and assessment together before writing a
-session. Quiz flashcards retain integer IDs for SM-2. Other v2 questions and
-their keys live in the versioned adaptive payload.
-
-The client reads `/sessions/{id}/learning-mode` before choosing a lesson or quiz
-endpoint. V2 assessment reads project public DTOs and omit answer keys and
-grounded feedback. Submission claims the session before the quiz, validates the
-revision and persists the result in the same transaction as the completion
-effects. An equivalent replay returns the saved result. Only objective items
-contribute to the v2 score and mastery.
-
-Reinforcement generates a replacement against the stored profile and goal
-strategy. The v2 job checks its run token before publishing. Publishing keeps
-the quiz ID and opens a new assessment revision. Cancellation and completion
-invalidate an active token, so a superseded task cannot replace the quiz.
-
-**Creating a plan validates its documents server-side.** `PlanService.create_plan` requires at
-least one `document_id` and that each one exists, belongs to the caller and is `INDEXED`
-(`_require_indexed_documents`), otherwise 400 `PLAN_DOCUMENTS_UNAVAILABLE` with the offending
-`document_ids` and no plan row. A foreign ID is reported exactly like a missing one (never
-disclose other users' documents). The check runs *after* the idempotency lookup so a replay of
-an already-accepted request still returns its plan. Without it, retrieval silently found nothing
-and a plan reached READY with generic content.
-
-**Deleting a plan (`DELETE /plans/{id}`, `PlanService.delete_plan`) must clean up `FlashcardReview`
-rows explicitly** — `FlashcardReview.question_id` points *at* a `QuizQuestion` but isn't a child of
-it in the ORM's `cascade="all, delete-orphan"` chain (`Plan` → `Session` → `Quiz` → `QuizQuestion`),
-and this app's SQLite connection never issues `PRAGMA foreign_keys=ON`, so the model-level
-`ondelete="CASCADE"` on that FK is inert. Without the explicit bulk `delete(FlashcardReview)` in
-`delete_plan` (matched by the plan's question ids via a `Session`/`Quiz`/`QuizQuestion` join), a
-deleted plan would leave orphaned reviews inflating the dashboard's upcoming-review counts forever.
-**Deleting a goal (`DELETE /goals/{id}`) cascades to its plans** for the same underlying reason —
-`Plan.goal_id` has no reverse ORM relationship on `Goal`, so the route loops
-`PlanRepository.list_for_goal` and calls `PlanService.delete_plan` per plan (reusing the fix above)
-before deleting the goal itself. Don't drop this loop even if it looks redundant with the FK's
-`ondelete="CASCADE"` — that clause does nothing under this app's SQLite setup.
-
-### LLM provider settings (bring-your-own-key)
-
-Users configure their own API key per provider from the **⚙️ Configuración** page instead of only
-via `.env`. `get_llm_provider(db, user_id)` (`app/llm/factory.py`) resolves a provider in priority
-order — check this chain before assuming which LLM is actually being called:
-
-1. The user's `LLMCredential` with `is_active=True` (`app/models/llm_credential.py`) — decrypted
-   and built via `build_provider_from_credential()`.
-2. The operator's `.env` `ANTHROPIC_API_KEY` (legacy path, unchanged, zero-migration for existing
-   deployments).
-3. The included free-tier AI (`app/llm/default_free_provider.py`): DeepSeek via `DEEPSEEK_API_KEY`
-   (`DEFAULT_DEEPSEEK_MODEL`, default `deepseek-flash`, thinking disabled through its request profile).
-   NVIDIA NIM and Gemini are no longer free tiers (they remain as bring-your-own-key providers). The
-   chain shape is kept with a single tier: one whose server key stops working (out of quota — DeepSeek's
-   402 "saldo" —, rejected key, model gone) is skipped for a cooldown (in-process, `reset_cooldowns()` for
-   tests) and then it raises `LLM_QUOTA_EXHAUSTED` ("conecta tu propia IA"), never silently falls to the mock.
-   A temporary failure (timeout, 429, connection, 5xx) never benches the tier: it concerns one call, so its
-   real error is reported to that learner and everyone else keeps the free AI.
-   The key exists only in the environment: `Settings` reads the **repo-root `.env`** and then
-   `backend/.env` (the latter wins; both git-ignored). `tests/conftest.py` and the QA runner
-   (`scripts/qa-runtime.mjs`) force it empty as an environment variable (which beats both files) so no
-   test spends quota — keep that when adding env keys.
-   `GET /llm-settings/runtime` reports it as `source=ENV`, `bundled=true`, and `free_ai` (`limit`/`used`/`remaining`,
-   null when the server has no free keys or an Anthropic `.env` key).
-   **Daily limit**: `FREE_AI_DAILY_LIMIT` (default 3) uses per user and UTC day (a plan generation *or* an AI reinforcement of a review), counted in `free_ai_usage`
-   (`app/services/free_ai_quota.py`). `PlanService.create_plan` spends one use *only when the resolved provider is bundled*
-   (429 `FREE_AI_DAILY_LIMIT`, no plan row, when it is spent) and `_Generator` gives it back if generation fails; the learner's own key,
-   Ollama and the mock never count. Idempotent replays do not spend another use. Resuming a plan spends one use the same way
-   (429 leaves the plan FAILED with its message). The refund uses the UTC day stored in `Plan.free_ai_use_date` and clears it,
-   so a use is given back **exactly once**, on the day it was spent, even across a midnight or a restart.
-   A real environment variable beats both `.env` files (pydantic-settings), so a stale key exported in the
-   shell silently overrides them (it showed up as 403 "Authorization failed" with the old NVIDIA tier).
-4. `MockLLMProvider`.
-
-`resolve_llm_provider()` es la única resolución compartida por la generación y
-`GET /llm-settings/runtime`. El endpoint devuelve solo `source` (`USER`, `ENV`
-o `MOCK`), `bundled` (IA gratuita incluida del servidor), proveedor, modelos por tipo de llamada y un motivo de fallback
-saneado; no prueba conectividad ni expone/descifra claves hacia el navegador.
-La UI debe mostrar modo demo únicamente cuando `source` sea `MOCK` y debe
-invalidar ese estado tras guardar, probar, activar, desactivar o eliminar una
-credencial.
-
-Provider construction is cheap (an SDK/httpx client, no network I/O), so — unlike the old
-`lru_cache`d singleton — it's rebuilt on every call; that's required now that credentials can
-change at runtime. `PlanService._Generator` builds it in `run()` (after loading the `Plan`, so
-`plan.user_id` is known), not in `__init__`.
-
-`OpenAICompatibleProvider` (`app/llm/openai_compatible_provider.py`, built on raw `httpx`, no
-`openai` SDK dependency) serves the generic OpenAI-compatible providers: OpenAI and DeepSeek
-(`https://api.deepseek.com`). OpenRouter uses
-its direct adapter, NVIDIA NIM uses `NvidiaNimProvider` and Anthropic uses its native SDK adapter.
-Each provider owns its metadata, configuration validation, request profile, runtime construction and
-verification contract under `app/llm/providers/`; `app/llm/provider_registry.py` is the sole assembly
-point. `PROVIDER_CATALOG` is a compatibility view derived from that registry and is served to the frontend
-via `GET /llm-settings/catalog`. Keep transport/retry/error primitives shared, but do not add vendor branches
-to the factory, settings service, profile resolver, or verification fingerprint. Unlike the `.env` path (which splits Opus-for-plan / Haiku-for-quiz via
-`AnthropicProvider._model_for`), a user-configured credential always uses **one fixed model for
-every call kind** — simpler UX, deliberate product decision, not an oversight. Adding a provider requires
-its own definition, registry entry, `LLMProviderName` member/database migration, and contract tests.
-
-**NVIDIA NIM is deliberately not generic**: its public catalog includes non-generative APIs, and
-hosted asynchronous responses can return `202` after accepting billable work. The source-controlled
-`app/llm/nvidia_models.py` registry is the authorization boundary for NVIDIA models and stores the
-payload contract, output limit and verification version per model. `NvidiaNimProvider` fixes the
-hosted endpoint to `https://integrate.api.nvidia.com/v1`, sends `stream: false`, disallows custom
-model IDs and URLs, and polls the documented NVCF status endpoint without ever reissuing the POST.
-If NVCF returns metadata instead of a completion, it raises `LLM_ASYNC_RESULT_UNAVAILABLE`; never
-guess a retrieval endpoint or retry the original request.
-
-**Generation runs with reasoning off or minimal**: reasoning models spend hidden tokens that eat each
-call's sized `max_tokens` budget (the cause of the old `LLM_OUTPUT_LIMIT` failures) and slow every request.
-Fixed vendor fields go through `RequestProfile.extra_parameters` (or NVIDIA's `static_parameters`), never a
-branch in the transport:
-
-| Provider | Where | Field |
+| Documento | Cuándo leerlo | Por qué |
 |---|---|---|
-| Ollama | `providers/ollama.py` | `"reasoning_effort": "none"` |
-| NVIDIA NIM | `nvidia_models.py` | `"reasoning_effort": "none"` |
-| Gemini 3.x Flash / Pro | `providers/gemini.py` (`gemini-3*` profiles) | `thinkingConfig.thinkingLevel` `"minimal"` / `"low"` |
-| DeepSeek | `providers/deepseek.py` | `"thinking": {"type": "disabled"}` |
-| Gemma, Gemini 2.x, OpenRouter, OpenAI, Anthropic | — | unchanged |
+| `docs/README.md` | Al empezar una tarea; al terminar un cambio importante | Mapa código → doc; dice qué documento leer y cuál actualizar |
+| `docs/backend/arquitectura/capas-y-patrones.md` | Antes de crear/mover código en `backend/app/` | Capas, patrones (Factory, Strategy, Pipeline, Repository, Observer, Registry, fallback dual) y qué reutilizar |
+| `docs/backend/arquitectura/base-de-datos.md` | Antes de tocar modelos, columnas, SQL crudo o borrados | SQLite sin FK, borrados explícitos, backfills, diferencias con Postgres |
+| `docs/backend/arquitectura/configuracion-y-despliegue.md` | Antes de añadir variables de entorno o lógica `self_hosted`/`saas` | Config única, `.env`, modo de despliegue |
+| `docs/backend/llm/*.md` | Antes de tocar cualquier cosa en `backend/app/llm/` o que llame al LLM | Qué proveedor se usa, cuota gratuita, credenciales, SSRF, reintentos, agentes CLI, costes |
+| `docs/backend/generacion-planes/*.md` | Antes de tocar `plan_service.py`, prompts, v2 o borrados de plan/meta | Pipeline `2 + N`, generación reanudable, contenido adaptativo |
+| `docs/backend/documentos/ingesta-y-figuras.md` | Antes de tocar ingesta, RAG, figuras o SVG | Pipeline de ingesta y estímulos ricos |
+| `docs/backend/estudio/*.md` | Antes de tocar ruta adaptativa, refuerzo, quiz o asistente | Reglas de la ruta sin LLM, refuerzo y asistente |
+| `docs/frontend/arquitectura.md` | Antes de crear página, ruta, hook o llamada a la API | Capas, rutas y componentes/helpers a reutilizar |
+| `docs/frontend/diseno/colores.md` | **Siempre** antes de usar un color | Roles de color, contrastes verificados, deuda |
+| `docs/frontend/diseno/sistema-visual.md` | Antes de maquetar | Tipografía, espaciado, radios, movimiento |
+| `docs/frontend/seguridad.md` | Antes de pintar salida del LLM | YouTube, Markdown, SVG, figuras |
+| `docs/frontend/funcionalidades/*.md` | Antes de tocar Conectar IA, plan, sesión/test o ayuda | Comportamiento de cada pantalla |
+| `docs/api_contract.yaml` | Al cambiar cualquier ruta o DTO | Contrato OpenAPI; se mantiene sincronizado con el código |
+| `docs/backend/desarrollo.md`, `docs/frontend/desarrollo.md` | Para instalar, arrancar o correr tests | Comandos |
+| `docs/AGENTS_STATUS.md` | Para saber el estado y pendientes | Estado por fases |
 
-Changing a profile's identity (`identifier`/`version`, NVIDIA `contract_version`) invalidates every verified
-credential using it, so do it **only** when the new field can break an already verified configuration (that is
-why the Gemini 3 profiles are new: those credentials must be tested again). A field documented as accepted or
-ignored by every model of the profile goes into `extra_parameters` without a version bump.
-Zhipu GLM and Hugging Face were removed as providers; `init_db` deletes their leftover credentials
-(`RETIRED_PROVIDER_NAMES`) before any ORM read, since the enum can no longer load those rows.
+## Reglas
 
-**Credential setup is revisioned and enforced backend-side**: `PUT /llm-settings/{p}` stores or
-replaces only the key. `PATCH /llm-settings/{p}/model` persists a model/URL draft with its
-`expected_revision`, invalidating prior evidence. `POST .../test` tests exactly that saved revision;
-it never substitutes a catalog default model. `POST .../activate` accepts only evidence matching
-the same revision and effective URL fingerprint. `LLMCredential.model` is a draft, not a verification
-marker; use the derived `is_verified` response field. Replacing a key resets the model and evidence,
-while changing a model or URL creates a new revision and deactivates it. `PROVIDER_CATALOG.common_models` is `ModelOption(id, free)` tuples
-ordered free-tier first, then cheapest-to-priciest — preserve that order (`common_models[0].free`)
-if you add or reorder entries. `ProviderMeta.key_placeholder` (default `"sk-..."`, overridden per
-provider e.g. `"nvapi-..."` for NVIDIA, `"AIza..."` for Gemini) is UI-only — it's the input's
-placeholder text in `SettingsPage.tsx`, not validated against.
+### 1. Planes: siempre agénticos, por fases, en `plans/`
 
-**`base_url` is an SSRF surface**: `ProviderMeta.supports_custom_base_url` is false for Anthropic,
-DeepSeek, NVIDIA and Ollama; never accept an override for them. Anthropic historical overrides must fail with
-`LLM_UNSUPPORTED_CONFIGURATION` before the SDK is constructed, so the user can explicitly clear
-the stored value. For supported OpenAI-compatible providers, it is a free-text override that ends up as the
-`base_url` of a real outbound `httpx.Client`. `app/core/url_safety.py::assert_safe_outbound_url`
-resolves the hostname and rejects private/loopback/link-local/reserved ranges (this covers the
-cloud-metadata IP `169.254.169.254` too) — called both at save time
-(`LLMSettingsService.upsert_credential`) and again right before use
-(`factory.build_provider_from_credential`), since DNS can resolve differently between the two.
-Never reintroduce a bare `startswith("http")` check in its place.
+Todo plan se escribe para ejecutarse con **varios agentes**. Usa la skill **`studyai-plan`**
+(`.claude/skills/studyai-plan/SKILL.md`), que fija el formato. Mínimo obligatorio:
+- Fases con dependencias y **qué fases se lanzan en paralelo** (p. ej. «Ola 1: A ∥ B ∥ C → Ola 2: D»).
+  Solo son paralelas si no tocan los mismos archivos.
+- El **orden** de las olas y una ola final de verificación y revisión.
+- Las **skills que recibe cada agente** y los documentos de `docs/` que debe leer y actualizar.
+- Se guarda **siempre en `plans/`**, nunca en `docs/` ni en `docs/superpowers/`.
 
-**Key security**: `app/core/security.py` encrypts `LLMCredential.encrypted_api_key` at rest with
-Fernet keyed from `SECRET_KEY` (SHA-256 → urlsafe-base64) — change `SECRET_KEY` from the placeholder
-before deploying for real. Decryption failure (e.g. `SECRET_KEY` rotated) raises
-`SecretDecryptionError`, which `get_llm_provider` treats as "this tier doesn't work," not a crash.
-`LLMCredentialResponse` (`app/schemas/llm_settings.py`) is built field-by-field, never
-`from_attributes=True` on the raw ORM row — the encrypted column must never be reachable through
-that shortcut. Only `key_preview` (computed once at write time via `mask_secret()`, never
-re-derived from a live decrypt) ever leaves the server. Provider code only ever logs status
-codes/truncated error bodies, never request payloads or the `Authorization` header.
+### 2. Arquitectura y modularización (backend)
 
-**429s get their own generation retry budget, separate from 5xx** (`OpenAICompatibleProvider.complete`,
-`app/llm/openai_compatible_provider.py`). Quota/saldo errors are classified before retrying and never
-wait. A temporary 429 honours numeric or HTTP-date `Retry-After`; it falls back to `10 * attempt`
-seconds only when absent. Never cap or shorten a provider-directed wait: if it cannot fit in the
-remaining per-call budget, return `LLM_RATE_LIMITED` with `retry_after_seconds` and do not retry.
-Credential tests share a single transient retry across 429, 5xx and connection failures. **429 is
-deliberately excluded from `_RETRYABLE_STATUS_CODES`** — don't add it back, or it would burn both
-generation budgets. `asyncio.timeout_at` wraps the whole outbound operation, so the deadline covers
-connection, write, full response read, waits and parsing rather than only individual HTTPX phases.
-Plan generation makes `2 + N` calls, where N is the number of sessions.
+Respeta las capas y los patrones existentes y reutiliza lógica antes de escribirla. Reglas estrictas en
+`.claude/rules/backend-arquitectura.md`, `backend-datos.md` y `backend-llm.md` (se cargan solas al
+editar esas rutas); porqué en `docs/backend/arquitectura/capas-y-patrones.md`. Un patrón nuevo o un
+cambio de patrón se documenta allí en el mismo cambio.
 
-**`LLM_TIMEOUT_SECONDS` (`Settings`, default 180s) is threaded into `OpenAICompatibleProvider` via
-`factory.build_provider_from_credential`** — don't let this regress to a hardcoded value in the
-provider's own `__init__` default. A trivial `test_connection()` call uses its request-profile
-budget: 32 tokens for conventional chat/Ollama and 256 for confirmed OpenAI o-series models. A
-real generation call (`max_tokens=4096`, a full system+user prompt) on a large hosted model can
-legitimately take well over a minute — a too-short timeout there reads to the user as "the key
-works but generation still fails," which is indistinguishable from an actual provider outage
-without a longer timeout to rule it out first.
+### 3. Colores y UI (frontend)
 
-**`PlanResponse` (`app/schemas/plan.py`) carries `error_message`** — `Plan.error_message` was, for a
-while, only exposed via `PlanStatusResponse` (the polling endpoint nothing in the frontend actually
-calls), so `PlanDetailPage`'s FAILED view rendered a bare "La generación falló." with the real cause
-completely invisible to the user. Keep `error_message` on `PlanResponse` and keep rendering it
-(`PlanDetailPage.tsx`) — it's the only way a user can self-diagnose *why* generation failed (bad
-key, dead/retired model, rate limit, etc.) without reading server logs. Both responses also carry
-`progress_stage`/`progress_done`/`progress_total`, which the UI shows while generating and to say what an
-incomplete plan kept.
+Las reglas de color son **obligatorias siempre** y mandan sobre cualquier skill o referencia de diseño:
+`.claude/rules/frontend-colores.md` (resumen) y `docs/frontend/diseno/colores.md` (roles y contrastes).
+Reglas de UI generales: `.claude/rules/frontend-ui.md`.
 
-**Model changes never inherit verification evidence.** `update_model` stays a no-network draft
-write so users can recover from unavailable models, but it invalidates the prior revision atomically.
-The UI then tests the saved draft and only enables activation after the server returns matching
-evidence. Catalog entries remain suggestions for generic providers; NVIDIA's curated registry is an
-enforced authorization boundary.
+### 4. Mantener `docs/` al día
 
-### LLM usage and cost accounting
+Tras un cambio importante (comportamiento, contrato, patrón, flujo, regla, decisión de producto): busca en
+`docs/README.md` el documento de esa zona y actualízalo **en el mismo cambio**. Si la zona no tiene
+documento, créalo en `docs/backend/<funcionalidad>/` o `docs/frontend/<funcionalidad>/` y añade su fila
+al mapa de `docs/README.md` (y aquí si es una zona nueva). Ruta o DTO cambiado → `docs/api_contract.yaml`.
 
-Every provider reports the tokens of each response through `LLMProvider._record_usage` /
-`drain_usage()` (`app/llm/usage.py`; the delegating providers drain their inner one). Usage is
-recorded as soon as the response arrives, *before* validation, because a `LLM_OUTPUT_LIMIT` call is
-still billed. `complete_within_budget(..., recorder=)` hands each attempt to `UsageRecorder`
-(`app/services/usage_recorder.py`), which writes `llm_usage` rows in its **own** session with an
-immediate commit (the generator's rollback would erase them) and never raises. Cost comes from
-`Settings.LLM_PRICES_USD_PER_MTOK` (empty = tokens only, `cost_usd` NULL). `llm_usage` has no FK to
-plans: rows outlive a deleted plan, and SQLite may reuse a plan id. `python scripts/usage_report.py`
-prints cost per plan and per reinforcement. NVIDIA's async (202) result path does not report usage yet.
+### 5. CLAUDE.md debe seguir siendo pequeño
 
-### Deployment mode (`self_hosted` | `saas`)
+No añadas aquí detalle de implementación. Si algo se repite varias veces (aquí, en docs o en las
+conversaciones), **avísalo al usuario** y muévelo a su sitio:
+- Procedimiento que se repite (cómo hacer X paso a paso) → skill en `.claude/skills/<nombre>/SKILL.md`.
+- Regla que nunca se rompe y aplica a unas rutas → `.claude/rules/<tema>.md` con `paths:`.
+- Explicación / porqué / comportamiento → documento en `docs/`.
+Aquí solo queda el puntero.
 
-`Settings.DEPLOYMENT_MODE` (default `self_hosted` = everything above, unchanged). In `saas`,
-`resolve_llm_provider` skips the learner's credential and the free tier and uses **only** the server's
-Anthropic key; without it, `UnavailableLLMProvider` raises `LLM_UNAVAILABLE` and the runtime reports
-`source="UNAVAILABLE"` — never the mock, so a paying user never gets fake content. `require_self_hosted`
-(`app/api/deps.py`) makes every `/llm-settings/*` route except `catalog` and `runtime` answer 404.
-`GET /config` tells the frontend the mode (`useAppConfig`): in `saas` it hides «Conectar IA», answers
-not-found at `/settings` and drops the «Elige tu IA» step and checklist item. Hiding is courtesy; the
-backend enforces. While `/config` loads, the UI behaves as self-hosted.
+### 6. Verificar antes de dar algo por hecho
 
-### Adaptive route (focus mode + reinforcement)
+- Backend: `cd backend && python -m pytest -q` (Postgres también si tocaste SQL o modelos; ver
+  `docs/backend/desarrollo.md`).
+- Frontend: `cd frontend && npm run lint && npm test` (`npm run build` si tocaste configuración).
+- Los tests nunca gastan tokens ni tocan datos reales (`tests/conftest.py` fuerza el mock); mantenlo así.
 
-An exam adjusts the plan. `session.completed` carries `quiz_result_id` and `first_completion`;
-`AdaptiveRouteService` (`app/services/adaptive_route_service.py`, registered in the `lifespan`) acts only
-on a *first* graded completion — retakes and `POST /sessions/{id}/complete` never move the route.
-The maths is the pure `app/algorithms/adaptive_route.py` (mastery = moving average, Leitner box over
-`REVIEW_INTERVALS_DAYS`); mastery/box live on `PlanTopic` so they die with the plan cascade.
-- **No LLM in the route.** Submitting an exam makes 0 calls and creates at most one pending `REVIEW`
-  session per topic with **only the missed items** (wrong multiple choice / objective item, or a
-  flashcard rated under 4 — `REVIEW_PASS_QUALITY`, stricter than SM-2's lapse at 3), options shuffled by a
-  seed. Nothing missed → no review (mastery and box still update; SM-2 still spaces each card). A v2 review
-  left with only flashcards scores them as recalled (≥ 4) / rated. Plan
-  generation stays `2 + N` calls; an AI reinforcement is exactly 1 call, only when the learner asks.
-- `EventBus` de-duplicates handlers and runs each in a SAVEPOINT: a failing handler never loses the
-  `QuizResult` or leaves a half-built review. `register_handlers()` may run many times in tests.
-- Review questions are copies keyed by `source_question_id`: SM-2 uses `source_question_id or id`, so a
-  card keeps one schedule. `delete_plan` already clears reviews by every question id of the plan.
-- The route order is computed on read by `routeOrder` (`src/lib/studyProgress.ts`), never persisted:
-  what is "due" changes daily. Plan progress counts only `kind === "NEW"` sessions.
-- **Reinforcement** (`POST /sessions/{id}/reinforcement`, `.../cancel`; `app/services/reinforcement_service.py`):
-  state machine `NONE → PROCESSING → READY|FAILED` via conditional UPDATEs, so a double POST starts one task
-  and spends one use. It spends 1 free-AI use only when the provider is bundled; **only the background task
-  refunds** (on failure, cancel or deleted plan) — cancelling by itself does not. Same `session_content`
-  kind and output budget as plan generation, so model routing and the runtime report are unchanged. A
-  reinforcement left PROCESSING by a restart is set to FAILED at startup (no refund).
-- `QuizService.submit` answers 409 `QUIZ_OUTDATED` if an answer names a question the quiz no longer has
-  (a reinforcement replaced it); the UI reloads the quiz and keeps the answers that still apply.
-- "Siempre con IA" is a per-browser flag (`lib/reinforcePreference.ts`, `localStorage` with try/catch), not
-  a user setting. "Hoy" is UTC in the backend and local in the browser (±1 day near midnight, accepted).
+### 7. Seguridad que no se negocia
 
-### Study assistant
+Claves cifradas que nunca salen del servidor, `base_url` validada contra SSRF, salida del LLM nunca
+renderizada como URL/HTML/SVG inline. Detalle: `docs/backend/llm/proveedores-y-credenciales.md` y
+`docs/frontend/seguridad.md`.
 
-`POST /sessions/{id}/assistant` (`app/services/assistant_service.py`) answers one learner message with
-**one** LLM call, kind `assistant_chat` (1024 tokens, free Markdown, not JSON; the mock returns fixed text),
-grounded in the session material and 4 retrieved chunks plus the last 6 messages. `mode=EXAM` adds the
-question on screen (prompt and options) but **never its answer key**: the model can't leak what it never
-receives, so a client forcing `mode=STUDY` gains nothing. Rows live in `assistant_messages` (no FK to plan or
-session; `delete_plan` removes them explicitly, like `FlashcardReview`). The free AI counts
-`free_ai_usage.assistant_uses` against `FREE_AI_ASSISTANT_DAILY_LIMIT` (default 20, separate from plan uses,
-refunded on a failed call; 429 `FREE_AI_ASSISTANT_LIMIT`). `GET /assistant/questions` feeds «Mis preguntas»
-(`/preguntas`). Frontend: `AssistantPanel` (non-modal side panel / bottom sheet) learns the question on
-screen through `AssistantQuestionContext` (`ReportAssistantQuestion` in `QuizPhase`/`AdaptiveAssessment`).
-`SafeMarkdown` renders GFM tables and KaTeX formulas (`$...$`, default `trust: false`); images and links
-from the LLM stay blocked. The test shows question types mixed with `seededShuffle` (`lib/shuffle.ts`,
-seed = quiz id [+ revision]) so a reload keeps the order.
+## Skills de proyecto
 
-### Config
-
-`app/core/config.py` is the single place environment variables are read (Twelve-Factor); nothing
-else should touch `os.environ` directly. `Settings` has safe defaults for every field so the app
-boots with no `.env` at all. Note `CORS_ORIGINS` and `REVIEW_INTERVALS_DAYS` use `NoDecode` +
-a `field_validator` to accept plain comma-separated strings — pydantic-settings would otherwise
-try `json.loads()` on them first and crash on boot.
-
-### Database
-
-SQLAlchemy models + `init_db()` (`app/db/init_db.py`) call `Base.metadata.create_all()` at FastAPI
-startup — there is no `alembic upgrade` step in the normal dev loop, even though Alembic is
-configured (`alembic.ini`, `app/db/migrations/`) for when the schema stabilizes. Because
-`create_all` never alters existing tables, `init_db.py` also hand-rolls additive column backfills
-(see `_ensure_document_error_message_column`) for anyone with a pre-existing `studyai.db`. If you
-add a column to an existing model, add a matching backfill here rather than relying on `create_all`
-(the plan progress columns and `free_ai_use_date` come from `_ensure_plan_generation_columns`).
-
-`app/db/session.py` opens SQLite in WAL mode with a 30 s `busy_timeout`, so the 3 s polling and other
-writes don't fail with "database is locked" while a generation commits; expect `studyai.db-wal`/`-shm`
-next to the database (git-ignored). `PRAGMA foreign_keys` stays **off** on purpose (see the plan-deletion
-notes above).
-
-**Postgres (SaaS / Supabase)** runs the same code: `pip install -r requirements-saas.txt` (psycopg 3) and
-`DATABASE_URL=postgresql+psycopg://...` (the `+psycopg` driver is required). The suite runs against it with
-`docker compose -f docker-compose.dev.yml up -d db` and
-`TEST_DATABASE_URL=postgresql+psycopg://studyai:studyai@localhost:5433/studyai python -m pytest -q`
-(`conftest.py` drops and recreates the `public` schema first). Keep both engines green. Differences to
-keep in mind: Postgres enforces `VARCHAR(n)` (truncate user/LLM text before saving, e.g. document
-filename, plan title), its FK cascades *do* fire, raw SQL must use `TRUE`/`FALSE` for booleans (never
-`0`/`1`), and rows inserted with an explicit id don't advance the sequence — `init_db` ends with
-`sync_id_sequences()` for that.
-
-Single-user MVP: `app/api/deps.py` seeds/returns a fixed demo user (`DEFAULT_USER_ID = 1`) instead
-of real auth. This dependency boundary exists specifically so real auth can be dropped in later
-without touching route handlers — don't thread a different auth mechanism through routes/services
-ad hoc.
-
-### Frontend
-
-Vite + React 18 + TypeScript + Tailwind + TanStack Query + React Router + Axios. `apiClient`
-(`src/api/client.ts`) is the single Axios instance (`VITE_API_URL`, default
-`http://localhost:8001`). Pages under `src/pages/` map 1:1 to the routes in `App.tsx`:
-public `/` (landing) and `/demo` (simulated walkthrough with local sample data — it must never
-import the API client), and inside `AppShell` `/inicio` (home + setup wizard + "Estudiar"
-coordinator, `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` opens the test; it renders with `AppShell chrome="focus"`: only `<main>`, no navigation),
-`/practica` (read-only practice; never writes), `/temas` ("Temas clave"), `/documents` ("Recursos"), `/goals`,
-`/dashboard` ("Estadísticas") and `/settings` ("Conectar IA"). Backend datetimes arrive as naive
-UTC; parse them with `parseApiDate` (`src/lib/studyProgress.ts`), not `new Date()`. `usePlan` polls a PROCESSING plan every 3 s via TanStack Query `refetchInterval` since
-generation is async on the backend. `GenerationProgress` (`src/components/plan/`) shows the real stage
-and, only during `CONTENT`, «Preparando la sesión N de M» with a bar (never an invented percentage);
-`generationLabel` gives Inicio the same text. A FAILED plan is labelled «Incompleto» everywhere and offers
-«Continuar generación» (`useResumePlan`, also `useStudyStart.resume`), which sends one request even on a
-double click and is disabled with its reason when the free AI has no uses left. `SettingsPage` renders one card per `PROVIDER_CATALOG` entry
-(fetched from the backend, not hardcoded) so the provider list/model suggestions never drift from
-`app/llm/providers_catalog.py`, whose compatibility view is derived from
-`app/llm/provider_registry.py`.
-
-**Security-relevant, don't regress**: YouTube resource links are always built as a *search URL*
-from LLM-provided keywords (`src/lib/youtube.ts`) — an LLM-generated URL is never rendered directly.
-
-**In-app guidance**: La ayuda contextual vive en `src/components/help/` (`PageGuide`, `HelpTerm`)
-con textos en `src/lib/pageGuides.ts` y `src/lib/glossary.ts`; el estado de guías cerradas va en
-`localStorage` vía `src/lib/onboardingStorage.ts` (siempre con try/catch). Reutilízalos en páginas
-nuevas en vez de crear otro patrón. Vacíos con explicación y CTA usan `src/components/EmptyState.tsx`;
-la checklist «Primeros pasos» de Inicio (`GettingStarted`, `useOnboardingProgress`) se deriva de datos
-reales y se muestra como un recorrido horizontal donde cada paso se desbloquea al completar el anterior
-(el paso opcional «Conecta tu IA» nunca bloquea al siguiente). La checklist solo aparece cuando ya hay un plan listo: antes, `StudySetup` es un asistente de un
-paso a la vez (Material → Meta → IA → Listo) y «Estudiar» solo existe en el último paso. El paso de IA
-siempre se muestra («Elige tu IA») con tres opciones: «Gratis · N al día» (solo si `runtime.free_ai` existe; «Usar la IA
-gratuita» desactiva las credenciales propias), «Mi API key» (con «¿Cómo conseguir una API key?» desplegable) y «En local (Ollama)». Exige un
-proveedor real, la IA gratuita con usos disponibles, o elegir el modo demo de forma explícita (`useDemoAccepted`, flag compartida
-con la checklist). Los comandos de Ollama y las fuentes de claves viven en `lib/aiSetupHelp.ts`
-(solo texto y URLs fijos, nunca generados por el LLM). Un botón principal deshabilitado siempre
-muestra su motivo visible enlazado con `aria-describedby`.
-
-**Test feedback, drafts and the session panel**: a multiple-choice answer is corrected the moment it is
-picked (right option green with the `state-correct` token — `state-success` is the brand cyan —, a wrong
-pick red) and then locks; `ChoiceOptions` compares with `trim()` like `quiz_service.submit`. Unfinished
-test answers are saved per browser in `lib/quizDraft.ts` (`localStorage`, try/catch, cleared on a successful
-submit) and `QuizPhase` resumes at the first unanswered question. In `SessionTimeline` each session opens a
-modal `components/Dialog.tsx` (reuse it for any new confirmation panel) whose actions depend on
-`lib/sessionState.ts`: not started → material or `?fase=test`; draft → resume or clear + `?fase=test`;
-completed → `?fase=resultado` (last result + `AnswerReview`, from `GET /sessions/{id}/result`) or
-`?reintento=1` (a retake already confirmed, so `QuizPhase` doesn't ask again). Completed rows show
-`SessionSummary.last_result` (latest `QuizResult`; `correct`/`total` count only multiple choice, derived
-from `detail`) with `lib/timeAgo.ts`.
-
-**List pagination**: `useShowMore` (`src/hooks/useShowMore.ts`) caps `DocumentsPage`/`GoalsPage`/
-`PlanPage`'s "Tus ..." lists at 6 items with a "Mostrar N más" button, client-side (it slices an
-already-fetched array — there's no backend page/limit param). Reuse this hook for any new list
-section rather than inventing another truncation scheme.
-
-### Reference docs
-
-- `docs/api_contract.yaml` — OpenAPI contract; keep in sync with actual route signatures.
-- `docs/AGENTS_STATUS.md` — phase-by-phase build status. Note its header: this project was built
-  as one coherent monorepo rather than the 5-agent/branch choreography in
-  `studyai_multiagent_plan.md`; the latter is a historical planning document, not the current
-  workflow — layering and design patterns from it were kept, the multi-branch process was not.
+- `studyai-plan` — escribir y ejecutar planes agénticos (regla 1).
+- `onboarding-ux` — guía de usuario, vacíos y primeros pasos.

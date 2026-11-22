@@ -65,6 +65,18 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Document" }
 
+  /documents/figures/{asset_id}:
+    get:
+      summary: PNG de una figura extraída de un PDF del usuario (404 si no existe o es de otro usuario)
+      parameters:
+        - { name: asset_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: La figura
+          content:
+            image/png: {}
+        "404": { description: Figura no encontrada }
+
   /documents/{document_id}:
     get:
       summary: Detalle de un documento (para hacer polling del status)
@@ -138,9 +150,9 @@ paths:
         "404": { description: Meta no encontrada }
     delete:
       summary: >-
-        Elimina una meta. Cascada explícita: también elimina cualquier plan
-        generado a partir de ella (y, con ellos, sus sesiones, quizzes y
-        repasos de flashcards) — ver PlanService.delete_plan.
+        Elimina una meta (borrado lógico). Deja de aparecer y no admite planes
+        nuevos, pero sus planes, sesiones, resultados y repasos se conservan;
+        un plan se borra solo con DELETE /plans/{plan_id}.
       parameters:
         - { name: goal_id, in: path, required: true, schema: { type: integer } }
       responses:
@@ -668,7 +680,7 @@ paths:
         queda disponible de inmediato, pero el modelo/URL se guarda como
         borrador con PATCH y se prueba después contra esa misma revisión.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       requestBody:
         required: true
         content:
@@ -688,7 +700,7 @@ paths:
     delete:
       summary: Elimina la clave guardada de un proveedor
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       responses:
         "204": { description: Eliminada }
         "404": { description: No hay clave configurada para ese proveedor }
@@ -701,7 +713,7 @@ paths:
         un cambio real. Omitir base_url conserva la anterior; "" restaura la URL
         predeterminada.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       requestBody:
         required: true
         content:
@@ -739,7 +751,7 @@ paths:
         modelo no es evidencia: la prueba debe coincidir con la revisión y URL
         efectivas.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       requestBody:
         required: true
         content:
@@ -763,7 +775,7 @@ paths:
     post:
       summary: Prueba con una llamada mínima el modelo y URL del borrador guardado
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       requestBody:
         required: true
         content:
@@ -801,11 +813,27 @@ paths:
 
   /llm-settings/{provider}/models:
     get:
-      summary: Lista los modelos instalados localmente en Ollama (excluye modelos cloud)
+      summary: >-
+        Lista los modelos que el proveedor permite usar: los instalados en Ollama (sin cloud) o los
+        de una IA de terminal (Claude Code: alias; OpenCode: «opencode models», gratuitos primero;
+        Pi: «pi --list-models»; Codex: catálogo visible). Solo self_hosted.
       parameters:
-        - { name: provider, in: path, required: true, schema: { type: string, enum: [OLLAMA] } }
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [OLLAMA, CLAUDE_CODE, OPENCODE, PI, CODEX] } }
       responses:
-        "200": { description: Inventario de modelos locales }
+        "200":
+          description: Inventario de modelos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string }
+                    size_bytes: { type: integer, nullable: true }
+                    parameter_size: { type: string, nullable: true }
+                    context_length: { type: integer, nullable: true }
+                    free: { type: boolean, description: Modelo gratuito del harness (p. ej. opencode/*-free). }
         "400": { description: El proveedor no admite descubrimiento de modelos }
         "502": { description: Ollama no está disponible o devolvió una respuesta inválida }
 
@@ -840,6 +868,7 @@ components:
         goal_type: { type: string, enum: [EXAM, LEARNING, MEMORIZATION] }
         title: { type: string }
         description: { type: string }
+        exam_date: { type: string, format: date, nullable: true }
     GoalUpdate:
       type: object
       description: All fields optional — only the ones provided are changed.
@@ -847,6 +876,7 @@ components:
         goal_type: { type: string, enum: [EXAM, LEARNING, MEMORIZATION] }
         title: { type: string }
         description: { type: string }
+        exam_date: { type: string, format: date, nullable: true }
     Goal:
       allOf:
         - $ref: "#/components/schemas/GoalCreate"
@@ -1112,10 +1142,13 @@ components:
         - {$ref: '#/components/schemas/GraphStimulus'}
         - {$ref: '#/components/schemas/CaseStimulus'}
         - {$ref: '#/components/schemas/LongTextStimulus'}
+        - {$ref: '#/components/schemas/SvgStimulus'}
+        - {$ref: '#/components/schemas/FigureStimulus'}
       discriminator:
         propertyName: kind
         mapping: {case: '#/components/schemas/CaseStimulus', diagram: '#/components/schemas/DiagramStimulus', graph: '#/components/schemas/GraphStimulus',
-          long_text: '#/components/schemas/LongTextStimulus'}
+          long_text: '#/components/schemas/LongTextStimulus', svg: '#/components/schemas/SvgStimulus',
+          figure: '#/components/schemas/FigureStimulus'}
     FlashcardQuestionResponseV2:
       properties:
         question_id: {type: string}
@@ -1644,6 +1677,34 @@ components:
       additionalProperties: false
       type: object
       required: [id, title, objective_ids, origin, kind, body_markdown]
+    SvgStimulus:
+      description: Dibujo generado por la IA (solo proveedores rich_content). Se guarda ya saneado con una allowlist SVG y se muestra en <img>.
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        title: {type: string, maxLength: 160, minLength: 1}
+        objective_ids: {type: array, items: {type: string}, minItems: 1, maxItems: 12}
+        origin: {type: string, enum: [generated_example]}
+        source_id: {type: string, nullable: true}
+        kind: {type: string, enum: [svg]}
+        svg: {type: string, maxLength: 20000}
+        text_alternative: {type: string, minLength: 1, maxLength: 24000}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, kind, svg, text_alternative]
+    FigureStimulus:
+      description: Figura de un documento del estudiante; asset_id debe aparecer como [figura:N] en el fragmento citado. Se sirve en /documents/figures/{asset_id}.
+      properties:
+        id: {type: string, maxLength: 80, minLength: 1, pattern: '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'}
+        title: {type: string, maxLength: 160, minLength: 1}
+        objective_ids: {type: array, items: {type: string}, minItems: 1, maxItems: 12}
+        origin: {type: string, enum: [derived]}
+        source_id: {type: string}
+        kind: {type: string, enum: [figure]}
+        asset_id: {type: integer, minimum: 1}
+        text_alternative: {type: string, minLength: 1, maxLength: 24000}
+      additionalProperties: false
+      type: object
+      required: [id, title, objective_ids, origin, source_id, kind, asset_id, text_alternative]
     AssessmentMatchingItem:
       properties:
         id: {type: string, minLength: 1}
@@ -1804,7 +1865,7 @@ components:
     ProviderCatalogEntry:
       type: object
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] }
         label: { type: string }
         requires_model_selection: { type: boolean }
         default_model: { type: string }
@@ -1828,11 +1889,17 @@ components:
         allows_custom_model:
           type: boolean
           description: Si admite IDs de modelo no presentes en el catálogo. NVIDIA solo permite sus modelos con contrato StudyAI validado.
+        installed:
+          type: boolean
+          nullable: true
+          description: >-
+            Solo IA de terminal (CLAUDE_CODE, OPENCODE, PI, CODEX): si el binario está en el PATH del
+            servidor. Nulo para los proveedores por API. En saas estas entradas no se listan.
     LLMCredential:
       type: object
       description: La clave real nunca se expone; solo un fragmento enmascarado.
       properties:
-        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI] }
+        provider: { type: string, enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX] }
         label: { type: string }
         masked_api_key: { type: string, example: "sk-a••••••9f2k" }
         model:
@@ -1859,7 +1926,7 @@ components:
         source: { type: string, enum: [USER, ENV, MOCK] }
         provider:
           type: string
-          enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI]
+          enum: [ANTHROPIC, OPENAI, DEEPSEEK, OPENROUTER, NVIDIA, OLLAMA, GEMINI, CLAUDE_CODE, OPENCODE, PI, CODEX]
           nullable: true
           description: Nulo solo si source es MOCK; USER requiere un proveedor real y ENV requiere ANTHROPIC, salvo bundled=true (NVIDIA o GEMINI).
         models:
