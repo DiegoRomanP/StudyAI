@@ -111,12 +111,80 @@ def test_single_feedback_object_uses_the_same_evidence_validation_as_a_list(cont
         expected.draft.adaptive_assessment.questions[0].feedback
     )
     question["feedback"]["quote"] = "Cita ausente del material."
+    dropped = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+    assert dropped.draft.adaptive_assessment.questions[0].feedback == []
+
+
+@pytest.mark.parametrize("unverifiable", ["feedback_mode", "feedback_quote", "feedback_block_id", "block_source"])
+def test_unverifiable_citations_are_dropped_without_failing_the_session(content, unverifiable):
+    data, snapshot = content
+    feedback = data["questions"][0]["feedback"][0]
+    match unverifiable:
+        case "feedback_mode":
+            feedback["mode"] = "formula"
+        case "feedback_quote":
+            feedback["quote"] = "texto que no llegó en el contexto"
+        case "feedback_block_id":
+            feedback["source_id"] = "context"  # a lesson block id, as real models answer
+        case "block_source":
+            data["lesson_blocks"][0]["source_citations"][0]["source_id"] = "outside"
+    built = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+    if unverifiable == "block_source":
+        assert built.draft.lesson_blocks[0].source_refs == []
+    else:
+        assert built.draft.adaptive_assessment.questions[0].feedback == []
+
+
+def test_retyped_quote_still_matches_and_publishes_the_source_text(content):
+    data, snapshot = content
+    sources = {"fragment-1": "Features can be:\n• Task Type: the model’s query"}
+    feedback = data["questions"][0]["feedback"][0]
+    feedback.update(quote="Features can be: Task Type: the model's query", heading=None)
+    data["lesson_blocks"][0].pop("source_citations")
+    data.pop("stimuli")
+    data["lesson_blocks"][0].pop("stimulus_id")
+    data["questions"][0].pop("stimulus_id")
+    built = build_adaptive_session_content(data, CONFIG, snapshot, sources)
+    assert "• Task Type: the model’s query" in built.draft.adaptive_assessment.questions[0].feedback[0].text
+
+
+def test_invalid_questions_from_a_real_model_are_dropped_and_the_rest_published(content):
+    data, snapshot = content
+    config = SessionConfig(duration_minutes=20, flashcards=1, multiple_choice=4, emphasis="examen")
+    many_to_one = {
+        "kind": "matching", "prompt": "Relaciona.", "objective_ids": ["contrast"],
+        "matching_left": [{"id": "l1", "text": "A"}, {"id": "l2", "text": "B"}, {"id": "l3", "text": "C"}],
+        "matching_right": [{"id": "r1", "text": "X"}, {"id": "r2", "text": "Y"}],
+        "matching_pairs": [{"left_id": "l1", "right_id": "r1"}, {"left_id": "l2", "right_id": "r1"},
+                           {"left_id": "l3", "right_id": "r2"}],
+    }
+    no_rubric = {
+        "kind": "short_answer", "prompt": "Resume.", "objective_ids": ["contrast"],
+        "grading_mode": "formative", "rubric_criteria": None,
+    }
+    data["questions"] += [many_to_one, no_rubric]
+    built = build_adaptive_session_content(data, config, snapshot, SOURCES)
+    assert [q.kind for q in built.draft.adaptive_assessment.questions] == ["true_false", "essay"]
+
+
+def test_dropping_the_only_question_of_an_objective_still_fails(content):
+    data, snapshot = content
+    data["questions"][0]["objective_ids"] = ["foreign"]
     with pytest.raises(LLMError, match="adaptativas válidas"):
         build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
 
 
+def test_invalid_stimulus_is_dropped_and_its_references_unlinked(content):
+    data, snapshot = content
+    data["stimuli"][0]["origin"] = {"type": "derived", "source_id": "fragment-1"}  # seen from DeepSeek
+    built = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+    assert built.draft.adaptive_assessment.stimuli == []
+    assert built.draft.lesson_blocks[0].stimulus_id is None
+    assert built.draft.adaptive_assessment.questions[0].stimulus_id is None
+
+
 @pytest.mark.parametrize("invalid", [
-    "count", "kind", "alignment", "feedback_mode", "feedback_quote", "stimulus", "block_source",
+    "count", "kind", "alignment",
     "profile_blocks", "no_objective_question", "url_keyword", "reserved_marker", "blank_prompt",
 ])
 def test_invalid_generation_fails_before_publication(content, invalid):
@@ -129,14 +197,6 @@ def test_invalid_generation_fails_before_publication(content, invalid):
             question.update(kind="step_by_step", grading_mode="exact", expected_answer=["A"], rubric_criteria=RUBRIC)
         case "alignment":
             question["objective_ids"] = ["foreign"]
-        case "feedback_mode":
-            question["feedback"][0]["mode"] = "formula"
-        case "feedback_quote":
-            question["feedback"][0]["quote"] = "texto que no llegó en el contexto"
-        case "stimulus":
-            question["stimulus_id"] = "invented"
-        case "block_source":
-            data["lesson_blocks"][0]["source_citations"][0]["source_id"] = "outside"
         case "profile_blocks":
             data["lesson_blocks"][1]["kind"] = "another"
         case "no_objective_question":
@@ -157,9 +217,8 @@ def test_invalid_generation_fails_before_publication(content, invalid):
 def test_generated_legacy_rubric_requires_complete_criteria(content, criteria):
     data, snapshot = content
     data["questions"][1].update(kind="rubric", rubric_criteria=criteria)
-    with pytest.raises(LLMError) as error:
-        build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
-    assert error.value.code == "LLM_INVALID_RESPONSE"
+    built = build_adaptive_session_content(data, CONFIG, snapshot, SOURCES)
+    assert [q.kind for q in built.draft.adaptive_assessment.questions] == ["true_false"]
 
 
 @pytest.mark.parametrize("kind", ["matching", "sequence"])

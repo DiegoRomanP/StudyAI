@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 
 from pydantic import (
     AfterValidator,
+    BeforeValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -18,6 +19,8 @@ from pydantic import (
     TypeAdapter,
     model_validator,
 )
+
+from app.pedagogy.svg_sanitizer import sanitize_svg
 
 _UNSAFE_TEXT = re.compile(
     r"<\s*/?\s*[a-z][^>]*>|\]\s*\(|(?:https?|ftp)://|www\.|javascript:\S|data:(?:[a-z0-9.+-]+/|[;,])",
@@ -137,15 +140,47 @@ class LongTextStimulus(_StimulusBase):
     body_markdown: Body
 
 
+class SvgStimulus(_StimulusBase):
+    """An illustrative drawing written by the AI; stored already sanitized."""
+
+    kind: Literal["svg"]
+    origin: Literal["generated_example"]
+    svg: Annotated[str, BeforeValidator(sanitize_svg)]
+    text_alternative: EquivalentText
+
+
+FIGURE_MARKER = re.compile(r"\[figura:(\d+)\]")
+
+
+class FigureStimulus(_StimulusBase):
+    """A figure extracted from the learner's own document, shown by its server-side ID."""
+
+    kind: Literal["figure"]
+    origin: Literal["derived"]
+    asset_id: Annotated[int, Field(gt=0)]
+    text_alternative: EquivalentText
+
+
 Stimulus = Annotated[
-    DiagramStimulus | GraphStimulus | CaseStimulus | LongTextStimulus,
+    DiagramStimulus | GraphStimulus | CaseStimulus | LongTextStimulus | SvgStimulus | FigureStimulus,
     Field(discriminator="kind"),
 ]
 _STIMULUS = TypeAdapter(Stimulus)
 
 
+_BULLETS = "•●▪◦‣∙"
+# Models retype quotes: a PDF bullet or a typographic quote mark must not void a citation.
+# The match still returns the server's own text, so nothing unverified is published.
+_QUOTE_VARIANTS = {char: "['‘’]" for char in "'‘’"} | {char: "[\"“”«»]" for char in "\"“”«»"}
+_GAP = rf"[\s{_BULLETS}]+"
+
+
+def _token_pattern(token: str) -> str:
+    return "".join(_QUOTE_VARIANTS.get(char) or re.escape(char) for char in token)
+
+
 def _literal_match(source: str, quote: str) -> re.Match[str] | None:
-    tokens = unicodedata.normalize("NFKC", quote).split()
+    tokens = [token for token in unicodedata.normalize("NFKC", quote).split() if token.strip(_BULLETS)]
     if not tokens:
         return None
     start = r"(?<!\w)" if tokens[0][0].isalnum() else ""
@@ -154,7 +189,7 @@ def _literal_match(source: str, quote: str) -> re.Match[str] | None:
         start += r"(?<!\d[.,/])(?<![+\-−])"
     if tokens[-1][-1].isdigit():
         end += r"(?![.,/]\d)"
-    pattern = start + r"\s+".join(map(re.escape, tokens)) + end
+    pattern = start + _GAP.join(map(_token_pattern, tokens)) + end
     return re.search(pattern, unicodedata.normalize("NFKC", source))
 
 
@@ -275,7 +310,12 @@ def validate_stimuli(
             if not isinstance(quote, str):
                 raise ValueError("El estímulo derivado requiere una cita del fragmento.")
             excerpt = evidence_excerpt(sources, stimulus.source_id, quote)
-            if isinstance(stimulus, DiagramStimulus):
+            if isinstance(stimulus, FigureStimulus):
+                # Only a figure retrieved for this session (and so from the plan's own documents).
+                markers = {int(match) for match in FIGURE_MARKER.findall(sources[stimulus.source_id])}
+                if stimulus.asset_id not in markers:
+                    raise ValueError("La figura debe aparecer en el fragmento citado.")
+            elif isinstance(stimulus, DiagramStimulus):
                 stimulus = stimulus.model_copy(update={"text_alternative": _diagram_equivalent(stimulus, excerpt)})
             elif isinstance(stimulus, GraphStimulus):
                 stimulus = stimulus.model_copy(update={"text_alternative": _graph_equivalent(stimulus, excerpt)})

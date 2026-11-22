@@ -165,6 +165,9 @@ class _PgVectorStore:
     a filtered sequential scan is fine for a beta, add HNSW with a fixed dimension when it grows.
     """
 
+    # DDL once per process: a VectorStore is built per request, and ALTER TABLE takes an exclusive lock.
+    _schema_ready = False
+
     def __init__(self) -> None:
         from sqlalchemy import text
 
@@ -174,7 +177,13 @@ class _PgVectorStore:
             raise RuntimeError("VECTOR_BACKEND=pgvector needs a Postgres DATABASE_URL")
         self._engine = engine
         self._text = text
-        with engine.begin() as conn:
+        if not _PgVectorStore._schema_ready:
+            self._ensure_schema()
+            _PgVectorStore._schema_ready = True
+
+    def _ensure_schema(self) -> None:
+        text = self._text
+        with self._engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             conn.execute(
                 text(

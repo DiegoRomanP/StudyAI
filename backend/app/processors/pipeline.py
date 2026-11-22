@@ -1,4 +1,4 @@
-"""Ingestion pipeline: Validate -> Parse -> Chunk -> Embed -> Store.
+"""Ingestion pipeline: Validate -> Parse -> Describe -> Chunk -> Embed -> Store.
 
 Implements the Pipeline Pattern as an ordered list of steps operating on a
 mutable context. Kept intentionally small; each step has a single job so new
@@ -7,12 +7,16 @@ stages (OCR, language detection, ...) can be inserted without touching others.
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.core.exceptions import ProcessingError
 from app.core.logging import get_logger
+from app.processors.base import ExtractedDocument
 from app.processors.factory import DocumentProcessorFactory
+from app.processors.pdf_processor import IMAGE_REF
 from app.rag.chunker import chunk_text
 from app.rag.embedder import Embedder
 from app.rag.vector_store import VectorStore
@@ -36,6 +40,15 @@ class IngestionResult:
     chunk_count: int
 
 
+# Turns the extracted images into indexable text (figure markers + descriptions).
+Describer = Callable[[ExtractedDocument], str]
+
+
+def drop_images(extracted: ExtractedDocument) -> str:
+    """Default Describe step: remove image references so no server path reaches RAG."""
+    return IMAGE_REF.sub("", extracted.text)
+
+
 class IngestionPipeline:
     def __init__(
         self,
@@ -45,10 +58,22 @@ class IngestionPipeline:
         self._store = vector_store or VectorStore()
         self._embedder = embedder or Embedder.instance()
 
-    def run(self, document_id: int, file_path: str, file_type: str) -> IngestionResult:
+    def run(
+        self,
+        document_id: int,
+        file_path: str,
+        file_type: str,
+        *,
+        assets_dir: str | None = None,
+        describe: Describer = drop_images,
+    ) -> IngestionResult:
         ctx = IngestionContext(document_id=document_id, file_path=file_path, file_type=file_type)
         self._validate(ctx)
-        self._parse(ctx)
+        if assets_dir is None:
+            with tempfile.TemporaryDirectory(prefix="studyai-assets-") as scratch:
+                self._parse(ctx, scratch, describe)
+        else:
+            self._parse(ctx, assets_dir, describe)
         self._chunk(ctx)
         self._embed(ctx)
         self._store_chunks(ctx)
@@ -62,9 +87,9 @@ class IngestionPipeline:
             raise ProcessingError(f"File not found: {ctx.file_path}")
 
     @staticmethod
-    def _parse(ctx: IngestionContext) -> None:
+    def _parse(ctx: IngestionContext, assets_dir: str, describe: Describer) -> None:
         processor = DocumentProcessorFactory.create(ctx.file_type)
-        ctx.text = processor.extract_text(ctx.file_path)
+        ctx.text = describe(processor.extract(ctx.file_path, assets_dir))
         if not ctx.text.strip():
             raise ProcessingError("Extracted text is empty; nothing to index.")
 
