@@ -24,7 +24,14 @@ from app.models.user import User
 logger = get_logger(__name__)
 
 # Providers registered after the native PostgreSQL enum type was first created.
-_BACKFILLED_PROVIDER_NAMES = (LLMProviderName.GEMINI, LLMProviderName.DEEPSEEK)
+_BACKFILLED_PROVIDER_NAMES = (
+    LLMProviderName.GEMINI,
+    LLMProviderName.DEEPSEEK,
+    LLMProviderName.CLAUDE_CODE,
+    LLMProviderName.OPENCODE,
+    LLMProviderName.PI,
+    LLMProviderName.CODEX,
+)
 
 
 def _ensure_provider_enum_values() -> None:
@@ -84,6 +91,8 @@ def init_db() -> None:
     _ensure_plan_idempotency_columns()
     _ensure_plan_generation_columns()
     _ensure_free_ai_assistant_column()
+    _ensure_goal_deleted_at_column()
+    _ensure_goal_exam_date_column()
     _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
@@ -188,6 +197,14 @@ def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
             if name not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_goal_deleted_at_column() -> None:
+    _add_missing_columns("goals", {"deleted_at": "TIMESTAMP"})
+
+
+def _ensure_goal_exam_date_column() -> None:
+    _add_missing_columns("goals", {"exam_date": "DATE"})
 
 
 def _ensure_free_ai_assistant_column() -> None:

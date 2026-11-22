@@ -20,6 +20,7 @@ class Base(DeclarativeBase):
 from app.models import (  # noqa: E402,F401  (side-effect imports)
     assistant_message,
     document,
+    document_asset,
     flashcard,
     free_ai_usage,
     goal,

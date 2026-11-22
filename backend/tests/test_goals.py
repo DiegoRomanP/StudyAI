@@ -1,6 +1,4 @@
-"""Goal CRUD: create/update already existed; this covers edit + delete +
-the cascade-to-plans behavior that comes with allowing deletion.
-"""
+"""Goal CRUD: edit + delete. Deleting a goal hides it but keeps its plans and progress."""
 
 import io
 
@@ -76,7 +74,7 @@ def test_delete_nonexistent_goal_returns_404(client: TestClient):
     assert r.status_code == 404
 
 
-def test_delete_goal_cascades_to_its_plans(client: TestClient):
+def test_delete_goal_keeps_its_plans_sessions_and_results(client: TestClient):
     goal_id = _create_goal(client, "Meta con plan")
 
     md = "# Tema\n\n" + "Contenido de prueba. " * 200
@@ -87,10 +85,45 @@ def test_delete_goal_cascades_to_its_plans(client: TestClient):
     r = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [doc_id]})
     assert r.status_code == 202
     plan_id = r.json()["id"]
-    assert client.get(f"/plans/{plan_id}").json()["status"] == "READY"
+    plan = client.get(f"/plans/{plan_id}").json()
+    assert plan["status"] == "READY"
+    session_id = plan["sessions"][0]["id"]
+    quiz = client.get(f"/quizzes/{session_id}").json()
+    answers = [
+        {"question_id": q["id"], "quality": 5}
+        if q["question_type"] == "FLASHCARD"
+        else {"question_id": q["id"], "selected_option": q["answer"]}
+        for q in quiz["questions"]
+    ]
+    assert client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers}).status_code == 200
 
     assert client.delete(f"/goals/{goal_id}").status_code == 204
 
     assert client.get(f"/goals/{goal_id}").status_code == 404
-    assert client.get(f"/plans/{plan_id}").status_code == 404
-    assert plan_id not in [p["id"] for p in client.get("/plans").json()]
+    assert goal_id not in [g["id"] for g in client.get("/goals").json()]
+    kept = client.get(f"/plans/{plan_id}")
+    assert kept.status_code == 200
+    assert [s["id"] for s in kept.json()["sessions"]] == [s["id"] for s in plan["sessions"]]
+    assert plan_id in [p["id"] for p in client.get("/plans").json()]
+    assert client.get(f"/sessions/{session_id}/result").status_code == 200
+    # A deleted goal takes no new plans.
+    r = client.post("/plans/generate", json={"goal_id": goal_id, "document_ids": [doc_id]})
+    assert r.status_code == 404
+    # The plan is still removable on its own (and its reviews leave the shared test DB clean).
+    assert client.delete(f"/plans/{plan_id}").status_code == 204
+
+
+def test_goal_exam_date_create_update_clear_and_omit(client: TestClient):
+    r = client.post("/goals", json={"title": "Con examen", "exam_date": "2030-05-20"})
+    assert r.status_code == 201
+    goal_id = r.json()["id"]
+    assert r.json()["exam_date"] == "2030-05-20"
+
+    r = client.put(f"/goals/{goal_id}", json={"exam_date": "2030-06-01"})
+    assert r.json()["exam_date"] == "2030-06-01"
+
+    r = client.put(f"/goals/{goal_id}", json={"title": "Otro título"})  # omitted: unchanged
+    assert r.json()["exam_date"] == "2030-06-01"
+
+    r = client.put(f"/goals/{goal_id}", json={"exam_date": None})  # explicit null clears
+    assert r.json()["exam_date"] is None

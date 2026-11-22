@@ -61,15 +61,19 @@ def _orphan_reviews() -> int:
         )
 
 
-def test_delete_goal_with_two_plans_and_reviews_leaves_no_orphans(client: TestClient):
+def test_deleted_goal_keeps_plans_and_deleting_them_leaves_no_orphans(client: TestClient):
     goal_id = client.post("/goals", json={"goal_type": "MEMORIZATION", "title": "Meta", "description": ""}).json()["id"]
     _ready_plan_with_reviews(client, goal_id)
     _ready_plan_with_reviews(client, goal_id)
 
+    # Postgres enforces Plan.goal_id's FK: a soft delete must not fire its cascade.
     assert client.delete(f"/goals/{goal_id}").status_code == 204
-
     assert client.get(f"/goals/{goal_id}").status_code == 404
-    assert [p for p in client.get("/plans").json() if p["goal_id"] == goal_id] == []
+    plan_ids = [p["id"] for p in client.get("/plans").json() if p["goal_id"] == goal_id]
+    assert len(plan_ids) == 2
+
+    for plan_id in plan_ids:
+        assert client.delete(f"/plans/{plan_id}").status_code == 204
     assert _orphan_reviews() == 0
 
 

@@ -28,3 +28,16 @@ os.environ["ANTHROPIC_API_KEY"] = ""
 # The operator's free-tier key must never reach a test run (no network, no quota).
 # An environment variable beats both .env files, including the repo-root one.
 os.environ["DEEPSEEK_API_KEY"] = ""
+
+import pytest  # noqa: E402 - after the environment redirection above
+
+
+@pytest.fixture(autouse=True)
+def _no_real_agent_cli(monkeypatch):
+    """Agent CLIs (Claude Code, OpenCode, Pi, Codex) spend the operator's subscription."""
+    from app.llm.harness import provider
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("A test tried to launch a real agent CLI; pass a fake runner.")
+
+    monkeypatch.setattr(provider, "run_cli", refuse)
