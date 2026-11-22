@@ -212,6 +212,16 @@ describe("HomePage", () => {
     expect(document.getElementById("preparar-plan")).toBeInTheDocument();
   });
 
+  it("does not show the assistant while plans are still loading", async () => {
+    mockApi();
+    vi.spyOn(api, "listPlans").mockReturnValue(new Promise(() => {}));
+    renderHome();
+
+    expect(await screen.findByRole("heading", { name: "Tu camino de estudio de hoy" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continuar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preparar otro plan" })).not.toBeInTheDocument();
+  });
+
   it("unlocks each step only when the previous one is done, and Estudiar only at the end", async () => {
     mockApi({ documents: [indexedDocument] });
     renderHome();
@@ -400,7 +410,9 @@ describe("HomePage", () => {
       await screen.findByText("No pudimos comprobar tu IA."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
-    expect(screen.getByText("Pulsa «Reintentar».")).toBeInTheDocument();
+    expect(screen.getByText("Pulsa «Reintentar» o elige otra IA.")).toBeInTheDocument();
+    // The learner can still pick another provider instead of being stuck on «Reintentar».
+    expect(screen.getByRole("button", { name: /Mi API key/ })).toBeInTheDocument();
   });
 
   it("shows the effective user provider confirmed by the server", async () => {
@@ -422,13 +434,48 @@ describe("HomePage", () => {
     expect(screen.getByRole("button", { name: /Otro/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("hands over to the getting-started checklist once there is a ready plan", async () => {
-    // No session completed yet: otherwise the checklist has nothing left to guide.
-    mockApi({ plans: [{ ...readyPlan, sessions: [readyPlan.sessions[1]] }], documents: [indexedDocument] });
+  it("shows quick actions and keeps the assistant folded until asked for", async () => {
+    mockApi({
+      plans: [readyPlan],
+      documents: [indexedDocument],
+      dashboard: { ...emptyDashboard, upcoming_reviews: [{ next_review_date: "2000-01-01", count: 4 }] },
+    });
     renderHome();
 
-    const checklist = await screen.findByRole("region", { name: "Primeros pasos" });
-    expect(checklist).toHaveTextContent("de 5 completados");
+    const actions = await screen.findByRole("navigation", { name: "Accesos rápidos" });
+    expect(within(actions).getByRole("link", { name: "Nueva meta" })).toHaveAttribute("href", "/goals?nueva=1");
+    expect(within(actions).getByRole("link", { name: "Subir material" })).toHaveAttribute("href", "/documents");
+    expect(within(actions).getByRole("link", { name: "Repasar 4 tarjetas" })).toHaveAttribute("href", "/practica");
+    expect(screen.queryByRole("region", { name: "Primeros pasos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Prepara tu plan de estudio" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(actions).getByRole("button", { name: "Nuevo plan" }));
+    expect(await screen.findByRole("heading", { name: "Prepara tu plan de estudio" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(screen.queryByRole("heading", { name: "Prepara tu plan de estudio" })).not.toBeInTheDocument();
+  });
+
+  it("offers the material of the last plan and jumps to the goal step", async () => {
+    mockApi({ plans: [readyPlan], documents: [indexedDocument] });
+    renderHome();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Preparar otro plan" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Usar el material de «Plan de algoritmos»" }));
+    expect(await screen.findByRole("heading", { name: "Paso 2 de 4: Elige tu meta" })).toBeInTheDocument();
+  });
+
+  it("shows the exam countdown of the focused plan's goal", async () => {
+    const exam = new Date();
+    exam.setDate(exam.getDate() + 6);
+    const key = `${exam.getFullYear()}-${String(exam.getMonth() + 1).padStart(2, "0")}-${String(exam.getDate()).padStart(2, "0")}`;
+    mockApi({ plans: [readyPlan] });
+    vi.spyOn(api, "listGoals").mockResolvedValue([
+      { id: 3, goal_type: "EXAM", title: "Parcial", description: "", exam_date: key, created_at: "2026-10-15T09:00:00Z" },
+    ]);
+    renderHome();
+
+    expect(await screen.findAllByText(/Examen en 6 días/)).not.toHaveLength(0);
   });
 
   it("puts the next real session first for a returning learner, without redirecting", async () => {
@@ -448,14 +495,12 @@ describe("HomePage", () => {
       /Estudio.*25 min.*Receso.*5 min.*Test.*Resultado/,
     );
 
-    expect(screen.getByRole("img", { name: "Sesiones completadas: 50%" })).toBeInTheDocument();
-    const progress = screen.getByRole("region", { name: "Progreso general" });
-    expect(within(progress).getByText("Tarjetas por repasar hoy").closest("div")?.parentElement).toHaveTextContent("3");
-
-    const pareto = screen.getByRole("region", { name: "Enfoque Pareto (80/20)" });
-    expect(pareto).toHaveTextContent(/Grafos.*95%.*Árboles.*72%/);
-    expect(pareto).not.toHaveTextContent("Historia");
-    expect(pareto).toHaveTextContent(/heurística/);
+    const pulse = screen.getByRole("region", { name: "Tu progreso" });
+    expect(pulse).toHaveTextContent("Sesiones1/2");
+    expect(pulse).toHaveTextContent("Por repasar hoy3");
+    expect(pulse).toHaveTextContent(/Grafos 95%, Árboles 72%/);
+    expect(pulse).not.toHaveTextContent("Historia");
+    expect(within(pulse).getByRole("link", { name: "Ver temas clave" })).toHaveAttribute("href", "/temas");
 
     expect(screen.getByTestId("location")).toHaveTextContent("/inicio");
   });
@@ -467,6 +512,7 @@ describe("HomePage", () => {
       goal_type: "EXAM",
       title: "Aprobar el examen del curso",
       description: "",
+      exam_date: null,
       created_at: "2026-10-16T09:00:00Z",
     });
     const generatePlan = vi
@@ -509,6 +555,7 @@ describe("HomePage", () => {
       goal_type: "MEMORIZATION",
       title: "Preparar entrevistas técnicas",
       description: "",
+      exam_date: null,
       created_at: "2026-10-16T09:00:00Z",
     });
     const generatePlan = vi

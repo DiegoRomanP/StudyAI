@@ -14,6 +14,7 @@ import { useDemoAccepted } from "../../hooks/useDemoAccepted";
 import {
   KEY_SOURCES,
   KEY_STEPS,
+  isAgentCli,
   OLLAMA_COMMANDS,
   OLLAMA_DOWNLOAD_URL,
   OLLAMA_NOTES,
@@ -82,7 +83,7 @@ export function useAiReadiness(): AiReadiness {
   };
 }
 
-type Path = "free" | "key" | "ollama";
+type Path = "free" | "key" | "ollama" | "terminal";
 
 /**
  * Step "Elige tu IA" of the setup wizard: the included free AI (a few uses per day), the
@@ -109,18 +110,24 @@ export function AiStep() {
   const freeAi = readFreeAi(runtimeQuery.data);
   const freeActive = resolved.kind === "env" && resolved.bundled;
   const usingOwn = resolved.kind === "user";
+  const cliProviders = (catalog ?? []).filter(isAgentCli);
+  const usingCli = usingOwn && cliProviders.some((entry) => entry.provider === resolved.provider);
   const activePath: Path | null = freeActive
     ? "free"
     : usingOwn
       ? resolved.provider === "OLLAMA"
         ? "ollama"
-        : "key"
+        : usingCli
+          ? "terminal"
+          : "key"
       : null;
   const path: Path = chosenPath ?? activePath ?? (freeAi ? "free" : "key");
 
   const keyProviders = (catalog ?? []).filter((entry) => entry.requires_api_key);
-  const providerKey = selectedProvider ?? (usingOwn && resolved.provider !== "OLLAMA" ? resolved.provider : null);
+  const providerKey =
+    selectedProvider ?? (usingOwn && resolved.provider !== "OLLAMA" ? resolved.provider : null);
   const selectedEntry = keyProviders.find((entry) => entry.provider === providerKey);
+  const selectedCli = cliProviders.find((entry) => entry.provider === providerKey);
   const ollamaEntry = (catalog ?? []).find((entry) => entry.provider === "OLLAMA");
 
   function credentialFor(entry: ProviderCatalogEntry) {
@@ -131,36 +138,40 @@ export function AiStep() {
     return <Spinner label="Consultando el proveedor de IA…" />;
   }
 
-  if (readiness.status === "unknown") {
-    return (
-      <div className="flex flex-col items-start gap-2 text-sm text-state-warning sm:flex-row sm:items-center">
-        <span className="inline-flex items-center gap-2">
-          <TriangleAlert aria-hidden="true" className="h-4 w-4" />
-          No pudimos comprobar tu IA.
-        </span>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            void catalogQuery.refetch();
-            void runtimeQuery.refetch();
-          }}
-        >
-          Reintentar
-        </Button>
-      </div>
-    );
-  }
+  // Can't confirm the current AI: let the learner retry *or* pick another provider below.
+  const unknownBanner = readiness.status === "unknown" && (
+    <div className="flex flex-col items-start gap-2 text-sm text-state-warning sm:flex-row sm:items-center">
+      <span className="inline-flex items-center gap-2">
+        <TriangleAlert aria-hidden="true" className="h-4 w-4" />
+        No pudimos comprobar tu IA.
+      </span>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={() => {
+          void catalogQuery.refetch();
+          void runtimeQuery.refetch();
+        }}
+      >
+        Reintentar
+      </Button>
+      <span className="text-text-muted">O elige otra IA aquí abajo.</span>
+    </div>
+  );
 
   const inUse = (value: Path) => (activePath === value && readiness.status === "ready" ? " (en uso)" : "");
   const options: { value: Path; label: string }[] = [
     ...(freeAi ? [{ value: "free" as const, label: `Gratis · ${freeAi.limit} al día${inUse("free")}` }] : []),
     { value: "key", label: `Mi API key${inUse("key")}` },
     { value: "ollama", label: `En local (Ollama)${inUse("ollama")}` },
+    ...(cliProviders.length > 0
+      ? [{ value: "terminal" as const, label: `Mi suscripción (terminal)${inUse("terminal")}` }]
+      : []),
   ];
 
   return (
     <div className="space-y-4">
+      {unknownBanner}
       {readiness.status === "ready" && !readiness.bundled && (
         <p aria-live="polite" className="text-sm text-text-muted">
           <span className="font-medium text-text-primary">{readiness.title}</span> · {readiness.detail}
@@ -292,6 +303,35 @@ export function AiStep() {
                 variant="compact"
               />
             </div>
+          )}
+        </div>
+      )}
+
+      {path === "terminal" && (
+        <div className="space-y-3 rounded-surface border border-line bg-surface-subtle/50 p-3">
+          <p className="text-sm text-text-muted">
+            StudyAI usa la herramienta que ya tienes en este equipo con tu sesión iniciada: tu suscripción
+            (Claude, ChatGPT, OpenCode Go) o sus modelos gratuitos.
+          </p>
+          <SegmentedControl
+            appearance="chips"
+            label="Herramientas de terminal"
+            value={selectedCli?.provider ?? ""}
+            onChange={(value) => setSelectedProvider(value === "" ? null : (value as ProviderCatalogEntry["provider"]))}
+            options={cliProviders.map((entry) => ({
+              value: entry.provider as string,
+              label: `${entry.label}${confirmedProvider === entry.provider ? " (activo)" : entry.installed ? "" : " (no instalada)"}`,
+            }))}
+          />
+          {selectedCli && (
+            <ProviderSetup
+              key={selectedCli.provider}
+              catalogEntry={selectedCli}
+              credential={credentialFor(selectedCli)}
+              isRuntimeActive={confirmedProvider === selectedCli.provider}
+              refreshCredentials={credentialsQuery.refetch}
+              variant="compact"
+            />
           )}
         </div>
       )}

@@ -169,3 +169,16 @@ export function rankTopics(topics: PlanTopicDTO[] | undefined): RankedTopic[] {
       relevancePercent: Math.round(Math.min(1, Math.max(0, topic.relevance)) * 100),
     }));
 }
+
+/** "Examen en N días" from a date-only string (compared as calendar days, no timezone shift); past dates give null. */
+export function examCountdown(examDate: string | null | undefined, today = new Date()): string | null {
+  if (!examDate) return null;
+  const toUtcDay = (key: string) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return Date.UTC(y, m - 1, d) / 86_400_000;
+  };
+  const days = toUtcDay(examDate) - toUtcDay(toDateKey(today));
+  if (Number.isNaN(days) || days < 0) return null;
+  if (days === 0) return "Examen hoy";
+  return days === 1 ? "Examen mañana" : `Examen en ${days} días`;
+}

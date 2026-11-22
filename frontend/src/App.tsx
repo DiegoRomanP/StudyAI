@@ -2,9 +2,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Outlet, Route, Routes, useMatch } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
+import { PageSkeleton } from "./components/PageSkeleton";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import { StudyStreakCard } from "./components/home/HomeCards";
-import { Spinner } from "./components/ui";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
@@ -24,7 +24,7 @@ const PracticePage = lazy(() => import("./pages/PracticePage").then((module) => 
 const SessionPage = lazy(() => import("./pages/SessionPage").then((module) => ({ default: module.SessionPage })));
 
 function Lazy({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<Spinner label="Cargando…" />}>{children}</Suspense>;
+  return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>;
 }
 
 // SaaS has no bring-your-own-key page: the backend answers 404 there, so the UI does too.

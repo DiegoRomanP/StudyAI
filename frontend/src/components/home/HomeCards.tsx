@@ -1,14 +1,15 @@
 import {
   ArrowRight,
   BookOpen,
-  CircleCheck,
-  CircleDashed,
   Coffee,
+  FileUp,
   Flame,
   ListChecks,
   Play,
+  Plus,
   RotateCcw,
   Sun,
+  Target,
   Trophy,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -23,11 +24,10 @@ import {
   sessionProgress,
   suggestedSessionDate,
   toDateKey,
-  upcomingReviewCount,
   type SessionProgress,
 } from "../../lib/studyProgress";
 import { HelpTerm } from "../help/HelpTerm";
-import { Badge, ButtonLink, Card, IconTile, ProgressRing, StepChain } from "../ui";
+import { Badge, Button, ButtonLink, Card, IconTile, Skeleton, StepChain } from "../ui";
 
 const BREAK_MINUTES = 5;
 
@@ -41,7 +41,15 @@ function formatSuggestedDay(date: Date | null) {
 }
 
 /** "Sesión de hoy": the next pending session and the real steps it will take. */
-export function TodaySessionCard({ plan, session }: { plan: PlanDTO; session: SessionSummaryDTO }) {
+export function TodaySessionCard({
+  plan,
+  session,
+  examLabel,
+}: {
+  plan: PlanDTO;
+  session: SessionSummaryDTO;
+  examLabel?: string | null;
+}) {
   const suggested = formatSuggestedDay(suggestedSessionDate(plan, session));
   return (
     <section aria-labelledby="today-session-title">
@@ -60,6 +68,7 @@ export function TodaySessionCard({ plan, session }: { plan: PlanDTO; session: Se
               <p className="mt-0.5 text-xs text-text-muted">
                 {plan.title}
                 {suggested ? ` · ${suggested}` : ""}
+                {examLabel ? ` · ${examLabel}` : ""}
               </p>
             </div>
           </div>
@@ -83,7 +92,7 @@ export function TodaySessionCard({ plan, session }: { plan: PlanDTO; session: Se
 }
 
 /** Shown when every session of the ready plans is completed. */
-export function AllSessionsDoneCard({ plan }: { plan: PlanDTO }) {
+export function AllSessionsDoneCard({ plan, onNewPlan }: { plan: PlanDTO; onNewPlan: () => void }) {
   return (
     <section aria-labelledby="all-done-title">
       <Card variant="elevated" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -99,6 +108,10 @@ export function AllSessionsDoneCard({ plan }: { plan: PlanDTO }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={onNewPlan}>
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            Preparar plan nuevo
+          </Button>
           <ButtonLink to="/dashboard" variant="secondary">
             Ver estadísticas
           </ButtonLink>
@@ -111,105 +124,77 @@ export function AllSessionsDoneCard({ plan }: { plan: PlanDTO }) {
   );
 }
 
-export function ProgressOverviewCard({
+/** Secondary shortcuts under the main action: Inicio is where you start, not a page to read. */
+export function QuickActions({ dueReviews, onNewPlan }: { dueReviews: number; onNewPlan: () => void }) {
+  return (
+    <nav aria-label="Accesos rápidos" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      <Button type="button" variant="secondary" onClick={onNewPlan}>
+        <Plus aria-hidden="true" className="h-4 w-4" />
+        Nuevo plan
+      </Button>
+      <ButtonLink to="/goals?nueva=1" variant="secondary">
+        <Target aria-hidden="true" className="h-4 w-4" />
+        Nueva meta
+      </ButtonLink>
+      <ButtonLink to="/documents" variant="secondary">
+        <FileUp aria-hidden="true" className="h-4 w-4" />
+        Subir material
+      </ButtonLink>
+      {dueReviews > 0 && (
+        <ButtonLink to="/practica" variant="secondary">
+          <RotateCcw aria-hidden="true" className="h-4 w-4" />
+          Repasar {dueReviews} {dueReviews === 1 ? "tarjeta" : "tarjetas"}
+        </ButtonLink>
+      )}
+    </nav>
+  );
+}
+
+/** One compact strip: progress numbers plus the three prioritized topics. */
+export function StudyPulse({
   progress,
   dashboard,
+  plan,
+  examLabel,
 }: {
   progress: SessionProgress;
   dashboard: DashboardDTO | undefined;
+  plan: PlanDTO;
+  examLabel: string | null;
 }) {
   const due = dueReviewCount(dashboard);
-  const scheduled = upcomingReviewCount(dashboard);
   const streak = quizStreakDays(dashboard);
+  const topics = rankTopics(plan.topics).filter((topic) => topic.selected).slice(0, 3);
   return (
-    <section aria-labelledby="progress-title">
-      <Card className="h-full space-y-4">
-        <h2 id="progress-title" className="font-display text-lg font-semibold text-text-primary">
-          Progreso general
-        </h2>
-        <div className="flex flex-col items-center gap-5 sm:flex-row">
-          <ProgressRing value={progress.percent} label="Sesiones completadas" caption="Sesiones completadas" />
-          <dl className="grid w-full gap-3 text-sm">
-            <ProgressRow icon={CircleCheck} label="Completadas" value={progress.completed} />
-            <ProgressRow icon={CircleDashed} label="Pendientes" value={progress.pending} />
-            <ProgressRow
-              icon={RotateCcw}
-              label="Tarjetas por repasar hoy"
-              value={due}
-              hint={scheduled > due ? `${scheduled} próximas programadas` : undefined}
-            />
-            <ProgressRow icon={Flame} label="Racha de días con test" value={streak} />
-          </dl>
-        </div>
+    <section aria-label="Tu progreso">
+      <Card className="space-y-3">
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <PulseItem label="Sesiones" value={`${progress.completed}/${progress.total}`} />
+          <PulseItem label="Por repasar hoy" value={String(due)} />
+          <PulseItem label="Racha" value={streak === 1 ? "1 día" : `${streak} días`} />
+          {examLabel && <PulseItem label="Examen" value={examLabel.replace(/^Examen /, "")} />}
+        </dl>
+        {topics.length > 0 && (
+          <p className="text-sm text-text-muted">
+            <HelpTerm term="relevancia">Prioridad</HelpTerm>:{" "}
+            {topics.map((topic) => `${topic.name} ${topic.relevancePercent}%`).join(", ")}.{" "}
+            <Link to="/temas" className="inline-flex min-h-11 items-center gap-1 text-action hover:underline">
+              Ver temas clave
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </Link>
+          </p>
+        )}
       </Card>
     </section>
   );
 }
 
-function ProgressRow({
-  icon: Icon,
-  label,
-  value,
-  hint,
-}: {
-  icon: typeof Flame;
-  label: string;
-  value: number;
-  hint?: string;
-}) {
+function PulseItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <Icon aria-hidden="true" className="h-5 w-5 shrink-0 text-action-hover" strokeWidth={1.8} />
-      <div className="min-w-0 flex-1">
-        <dt className="text-text-muted">{label}</dt>
-        {hint && <p className="text-xs text-text-muted">{hint}</p>}
-      </div>
+    <div className="flex items-baseline gap-2">
+      <dt className="text-text-muted">{label}</dt>
       <dd className="font-display text-lg font-semibold text-text-primary">{value}</dd>
     </div>
-  );
-}
-
-/** "Enfoque Pareto": the AI's relevance estimate for the plan's prioritized topics. */
-export function ParetoFocusCard({ plan, limit = 5 }: { plan: PlanDTO; limit?: number }) {
-  const topics = rankTopics(plan.topics).filter((topic) => topic.selected).slice(0, limit);
-  return (
-    <section aria-labelledby="pareto-title">
-      <Card className="h-full space-y-4">
-        <div>
-          <h2 id="pareto-title" className="font-display text-lg font-semibold text-text-primary">
-            Enfoque Pareto (80/20)
-          </h2>
-          <p className="mt-0.5 text-sm text-text-muted">
-            <HelpTerm term="relevancia">Relevancia</HelpTerm> estimada por la IA para tu material. Es una
-            heurística, no una garantía.
-          </p>
-        </div>
-        {topics.length === 0 ? (
-          <p className="text-sm text-text-muted">Este plan no tiene temas priorizados.</p>
-        ) : (
-          <ul className="space-y-3">
-            {topics.map((topic) => (
-              <li key={topic.id} className="space-y-1">
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate text-text-primary">{topic.name}</span>
-                  <span className="shrink-0 font-medium text-text-muted">{topic.relevancePercent}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-surface-muted" aria-hidden="true">
-                  <div className="h-full rounded-full bg-flow" style={{ width: `${topic.relevancePercent}%` }} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Link
-          to={`/plan/${plan.id}`}
-          className="inline-flex min-h-11 items-center gap-1.5 text-sm text-action hover:underline"
-        >
-          Ver el plan completo
-          <ArrowRight aria-hidden="true" className="h-4 w-4" />
-        </Link>
-      </Card>
-    </section>
   );
 }
 
@@ -243,7 +228,7 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
             <li key={plan.id}>
               <Link
                 to={`/plan/${plan.id}`}
-                className="flex h-full flex-col gap-2 rounded-surface border border-line bg-surface-paper p-4 transition-colors hover:border-line-strong motion-reduce:transition-none"
+                className="flex h-full flex-col gap-2 rounded-surface border border-line bg-surface-paper p-4 hover:border-line-strong transition-interactive duration-micro ease-flow motion-safe:active:scale-press active:duration-press"
               >
                 <span className="line-clamp-2 font-medium text-text-primary">{plan.title}</span>
                 <span className="mt-auto flex items-center justify-between gap-2 text-xs text-text-muted">
@@ -268,7 +253,7 @@ export function RecentPlans({ plans, limit = 3 }: { plans: PlanDTO[]; limit?: nu
 /** Sidebar card: consecutive days with a graded quiz, from the dashboard scores. */
 export function StudyStreakCard() {
   const { data } = useDashboard();
-  if (!data) return null;
+  if (!data) return <Skeleton height={62} />;
   const streak = quizStreakDays(data);
   return (
     <div className="flex items-center gap-3 rounded-surface border border-line bg-surface-subtle/70 p-3">
