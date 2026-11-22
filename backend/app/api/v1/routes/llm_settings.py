@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_self_hosted
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.llm.providers_catalog import PROVIDER_CATALOG
+from app.llm.harness.provider import HarnessDefinition
+from app.llm.provider_registry import PROVIDER_REGISTRY
 from app.models.llm_credential import LLMProviderName
 from app.models.user import User
 from app.schemas.llm_settings import (
@@ -35,24 +36,31 @@ router = APIRouter(prefix="/llm-settings", tags=["llm-settings"])
 
 @router.get("/catalog", response_model=list[ProviderCatalogEntry])
 def get_provider_catalog() -> list[ProviderCatalogEntry]:
-    return [
-        ProviderCatalogEntry(
-            provider=meta.provider,
-            label=meta.label,
-            requires_model_selection=meta.requires_model_selection,
-            default_model=meta.default_model,
-            default_base_url=meta.default_base_url,
-            common_models=[
-                ModelOptionResponse(id=m.id, free=m.free) for m in meta.common_models
-            ],
-            key_placeholder=meta.key_placeholder,
-            requires_api_key=meta.requires_api_key,
-            supports_model_discovery=meta.supports_model_discovery,
-            supports_custom_base_url=meta.supports_custom_base_url,
-            allows_custom_model=meta.allows_custom_model,
+    entries = []
+    for definition in PROVIDER_REGISTRY.values():
+        is_harness = isinstance(definition, HarnessDefinition)
+        if is_harness and get_settings().is_saas:
+            continue  # agent CLIs use the operator's personal login
+        meta = definition.meta
+        entries.append(
+            ProviderCatalogEntry(
+                provider=meta.provider,
+                label=meta.label,
+                requires_model_selection=meta.requires_model_selection,
+                default_model=meta.default_model,
+                default_base_url=meta.default_base_url,
+                common_models=[
+                    ModelOptionResponse(id=m.id, free=m.free) for m in meta.common_models
+                ],
+                key_placeholder=meta.key_placeholder,
+                requires_api_key=meta.requires_api_key,
+                supports_model_discovery=meta.supports_model_discovery,
+                supports_custom_base_url=meta.supports_custom_base_url,
+                allows_custom_model=meta.allows_custom_model,
+                installed=definition.installed() if is_harness else None,
+            )
         )
-        for meta in PROVIDER_CATALOG.values()
-    ]
+    return entries
 
 
 @router.get("/runtime", response_model=LLMRuntimeResponse)

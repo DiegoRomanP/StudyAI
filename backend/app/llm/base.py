@@ -20,6 +20,11 @@ from app.llm.usage import LLMUsage
 class LLMProvider(ABC):
     # Local and mock providers do not need cloud rate-limit pacing.
     requires_request_pacing = True
+    # Whether ``complete`` reads ``context["image_paths"]`` (local PNG files) as vision input.
+    supports_images = False
+    # Whether v2 lessons may ask this provider for SVG drawings and document figures
+    # (longer output; only offered where it costs no per-token money).
+    rich_content = False
 
     @abstractmethod
     def complete(

@@ -25,6 +25,11 @@ class LLMProviderName(str, enum.Enum):
     OLLAMA = "OLLAMA"
     GEMINI = "GEMINI"
     DEEPSEEK = "DEEPSEEK"
+    # Agent CLIs on the backend host (self-hosted only).
+    CLAUDE_CODE = "CLAUDE_CODE"
+    OPENCODE = "OPENCODE"
+    PI = "PI"
+    CODEX = "CODEX"
 
 
 # Providers that were offered once and removed; their stored credentials are

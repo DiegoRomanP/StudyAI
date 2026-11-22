@@ -112,6 +112,15 @@ class Settings(BaseSettings):
     OLLAMA_TIMEOUT_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
     OLLAMA_TOTAL_BUDGET_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
     OLLAMA_MAX_RETRIES: int = Field(default=1, ge=1)
+    # Agent CLIs (Claude Code, OpenCode, Pi, Codex) launched on the backend host
+    # with the operator's own login. A name is looked up on PATH; an absolute path also works.
+    CLAUDE_CODE_BIN: str = "claude"
+    OPENCODE_BIN: str = "opencode"
+    PI_BIN: str = "pi"
+    CODEX_BIN: str = "codex"
+    HARNESS_TIMEOUT_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
+    HARNESS_TEST_TIMEOUT_SECONDS: float = Field(default=90.0, gt=0, allow_inf_nan=False)
+    HARNESS_DISCOVERY_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, allow_inf_nan=False)
 
     # --- Persistence ---------------------------------------------------------
     DATABASE_URL: str = f"sqlite:///{(BACKEND_DIR / 'studyai.db').as_posix()}"
@@ -123,6 +132,8 @@ class Settings(BaseSettings):
     # --- Storage / uploads ---------------------------------------------------
     UPLOAD_DIR: str = (STORAGE_DIR / "uploads").as_posix()
     MAX_UPLOAD_MB: int = 25
+    # Figures kept (and described by a vision-capable AI) per PDF; the rest are dropped.
+    PDF_MAX_IMAGES: int = Field(default=20, ge=0)
 
     # --- App -----------------------------------------------------------------
     APP_ENV: str = "development"
