@@ -3,6 +3,8 @@
 # These are large (sentence-transformers pulls in torch). The app auto-detects
 # them and switches from the fallbacks to the real implementations.
 pymupdf>=1.24
+# PDF -> Markdown (tables, headings) with each figure saved apart; falls back to plain text.
+pymupdf4llm>=0.2
 langchain-text-splitters>=0.2
 sentence-transformers>=3.0
 chromadb>=0.5

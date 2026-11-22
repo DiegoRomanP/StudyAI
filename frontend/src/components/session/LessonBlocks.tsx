@@ -1,11 +1,14 @@
 import type {
   BloomLevel,
   DiagramStimulus,
+  FigureStimulus,
   GraphStimulus,
   LearningResponseV2,
   LessonStimulus,
   PedagogySnapshot,
+  SvgStimulus,
 } from "../../api/adaptiveLearning";
+import { apiClient } from "../../api/client";
 import { Badge, Card } from "../ui";
 import { SafeMarkdown } from "./SafeMarkdown";
 
@@ -103,6 +106,44 @@ function DiagramDescription({ stimulus }: { stimulus: DiagramStimulus }) {
   );
 }
 
+/** UTF-8 safe base64 for a data: URI. */
+function toBase64(text: string): string {
+  let binary = "";
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+// Inside <img> an SVG never runs scripts or loads anything: a second line of defence
+// behind the server-side allowlist. Never inject it as markup.
+export function SvgFigure({ stimulus }: { stimulus: SvgStimulus }) {
+  return (
+    <figure className="space-y-2">
+      <img
+        src={`data:image/svg+xml;base64,${toBase64(stimulus.svg)}`}
+        alt={stimulus.text_alternative}
+        className="mx-auto max-h-[28rem] w-full rounded-control bg-white object-contain p-2"
+      />
+      <figcaption className="text-sm text-text-muted">{stimulus.text_alternative}</figcaption>
+    </figure>
+  );
+}
+
+// The URL is built here from a numeric ID, never taken from the LLM.
+export function DocumentFigure({ stimulus }: { stimulus: FigureStimulus }) {
+  const src = `${apiClient.defaults.baseURL ?? ""}/documents/figures/${Number(stimulus.asset_id)}`;
+  return (
+    <figure className="space-y-2">
+      <img
+        src={src}
+        alt={stimulus.text_alternative}
+        loading="lazy"
+        className="mx-auto max-h-[28rem] w-full rounded-control bg-white object-contain"
+      />
+      <figcaption className="text-sm text-text-muted">{stimulus.text_alternative}</figcaption>
+    </figure>
+  );
+}
+
 export function StimulusCard({ stimulus }: { stimulus: LessonStimulus }) {
   return (
     <Card className="space-y-3 bg-surface-subtle" aria-label={`Estímulo: ${stimulus.title}`}>
@@ -112,6 +153,10 @@ export function StimulusCard({ stimulus }: { stimulus: LessonStimulus }) {
         <GraphTable stimulus={stimulus} />
       ) : stimulus.kind === "diagram" ? (
         <DiagramDescription stimulus={stimulus} />
+      ) : stimulus.kind === "svg" ? (
+        <SvgFigure stimulus={stimulus} />
+      ) : stimulus.kind === "figure" ? (
+        <DocumentFigure stimulus={stimulus} />
       ) : (
         <div className="prose-study max-w-none">
           <SafeMarkdown>{stimulus.body_markdown}</SafeMarkdown>

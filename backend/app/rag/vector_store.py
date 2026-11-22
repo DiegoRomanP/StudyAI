@@ -2,7 +2,8 @@
 
 Primary backend: persistent ChromaDB. Fallback: a small in-memory cosine store
 (pure Python, JSON-persisted) so retrieval works without ChromaDB installed.
-Both expose the same interface, so callers never branch on the backend.
+With ``VECTOR_BACKEND=pgvector`` and a Postgres ``DATABASE_URL`` (SaaS), chunks live in
+the database instead. All expose the same interface, so callers never branch on the backend.
 """
 
 from __future__ import annotations
@@ -32,6 +33,13 @@ class VectorStore:
         self._init_backend()
 
     def _init_backend(self) -> None:
+        if get_settings().VECTOR_BACKEND == "pgvector":
+            try:
+                self._fallback = _PgVectorStore()  # same interface as _InMemoryStore
+                logger.info("Using pgvector vector store")
+                return
+            except Exception as exc:  # noqa: BLE001 - degrade like the other backends
+                logger.warning("pgvector unavailable (%s); using the default vector store.", exc)
         try:
             import chromadb
 
@@ -148,6 +156,102 @@ class _InMemoryStore:
             item for item in self._items if item["metadata"].get("document_id") != document_id
         ]
         self._flush()
+
+
+class _PgVectorStore:
+    """Chunks and embeddings in Postgres with the pgvector extension (no Python package needed).
+
+    shortcut: no ANN index and an untyped ``vector`` column (dimension depends on the embedder);
+    a filtered sequential scan is fine for a beta, add HNSW with a fixed dimension when it grows.
+    """
+
+    # DDL once per process: a VectorStore is built per request, and ALTER TABLE takes an exclusive lock.
+    _schema_ready = False
+
+    def __init__(self) -> None:
+        from sqlalchemy import text
+
+        from app.db.session import engine
+
+        if engine.dialect.name != "postgresql":
+            raise RuntimeError("VECTOR_BACKEND=pgvector needs a Postgres DATABASE_URL")
+        self._engine = engine
+        self._text = text
+        if not _PgVectorStore._schema_ready:
+            self._ensure_schema()
+            _PgVectorStore._schema_ready = True
+
+    def _ensure_schema(self) -> None:
+        text = self._text
+        with self._engine.begin() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS document_chunks ("
+                    "id TEXT PRIMARY KEY, document_id INTEGER NOT NULL, chunk_index INTEGER NOT NULL, "
+                    "text TEXT NOT NULL, metadata JSONB NOT NULL, embedding vector NOT NULL)"
+                )
+            )
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_document_chunks_document_id ON document_chunks (document_id)")
+            )
+            conn.execute(text("ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY"))  # see init_db
+
+    def add(
+        self,
+        ids: list[str],
+        chunks: list[str],
+        embeddings: list[list[float]],
+        metadatas: list[dict],
+    ) -> None:
+        rows = [
+            {
+                "id": id_,
+                "document_id": meta["document_id"],
+                "chunk_index": meta["chunk_index"],
+                "text": text_,
+                "metadata": json.dumps(meta),
+                "embedding": _vector_literal(emb),
+            }
+            for id_, text_, emb, meta in zip(ids, chunks, embeddings, metadatas)
+        ]
+        with self._engine.begin() as conn:
+            # Re-indexing a document replaces its old chunks, like ChromaDB's upsert.
+            conn.execute(
+                self._text("DELETE FROM document_chunks WHERE document_id = :d AND NOT (id = ANY(:ids))"),
+                {"d": rows[0]["document_id"], "ids": ids},
+            )
+            conn.execute(
+                self._text(
+                    "INSERT INTO document_chunks (id, document_id, chunk_index, text, metadata, embedding) "
+                    "VALUES (:id, :document_id, :chunk_index, :text, CAST(:metadata AS JSONB), CAST(:embedding AS vector)) "
+                    "ON CONFLICT (id) DO UPDATE SET text = EXCLUDED.text, metadata = EXCLUDED.metadata, "
+                    "embedding = EXCLUDED.embedding"
+                ),
+                rows,
+            )
+
+    def query(
+        self, embedding: list[float], top_k: int, filter_document_ids: list[int] | None
+    ) -> list[dict]:
+        where = "WHERE document_id = ANY(:ids) " if filter_document_ids else ""
+        with self._engine.connect() as conn:
+            result = conn.execute(
+                self._text(
+                    "SELECT text, metadata, embedding <=> CAST(:q AS vector) AS distance "
+                    f"FROM document_chunks {where}ORDER BY distance LIMIT :k"
+                ),
+                {"q": _vector_literal(embedding), "k": top_k, "ids": list(filter_document_ids or [])},
+            )
+            return [{"text": r.text, "metadata": r.metadata, "distance": float(r.distance)} for r in result]
+
+    def delete_by_document_id(self, document_id: int) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(self._text("DELETE FROM document_chunks WHERE document_id = :d"), {"d": document_id})
+
+
+def _vector_literal(embedding: list[float]) -> str:
+    return "[" + ",".join(repr(float(x)) for x in embedding) + "]"
 
 
 def _cosine(a: list[float], b: list[float]) -> float:

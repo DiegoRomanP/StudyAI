@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.models.document import Document, DocumentStatus
 from app.processors.factory import SUPPORTED_EXTENSIONS
 from app.processors.pipeline import IngestionPipeline
+from app.services.document_asset_service import FigureDescriber, assets_dir, remove_document_assets
 from app.rag.vector_store import VectorStore
 from app.repositories.document_repository import DocumentRepository
 from app.db.session import SessionLocal
@@ -50,6 +51,11 @@ class DocumentService:
         with open(storage_path, "wb") as fh:
             fh.write(content)
 
+        # Postgres enforces VARCHAR(512); keep the extension visible when trimming.
+        max_len = Document.__table__.c.filename.type.length
+        if len(filename) > max_len:
+            suffix = Path(filename).suffix[:16]
+            filename = filename[: max_len - len(suffix)] + suffix
         document = Document(
             user_id=user_id,
             filename=filename,
@@ -89,6 +95,7 @@ class DocumentService:
         except Exception:  # noqa: BLE001 - cleanup must not block deletion
             logger.warning("Could not remove vectors for document %s", document_id, exc_info=True)
 
+        remove_document_assets(self.db, document_id)
         self.repo.delete(document)
 
 
@@ -105,14 +112,29 @@ def index_document_task(document_id: int) -> None:
         if document is None:
             logger.warning("index_document_task: document %s not found", document_id)
             return
+        llm = None
         try:
+            if document.file_type == "pdf":
+                from app.llm.factory import resolve_llm_provider  # avoid import cycle
+
+                # Only a vision-capable provider (the agent CLIs) describes figures.
+                llm = resolve_llm_provider(db, document.user_id).provider
+            folder = assets_dir(document.id)
+            folder.mkdir(parents=True, exist_ok=True)
             pipeline = IngestionPipeline()
-            pipeline.run(document.id, document.storage_path, document.file_type)
+            pipeline.run(
+                document.id, document.storage_path, document.file_type,
+                assets_dir=str(folder), describe=FigureDescriber(db, document.id, llm),
+            )
             document.status = DocumentStatus.INDEXED
         except Exception as exc:  # noqa: BLE001 - record failure, don't crash
             logger.exception("Failed to index document %s", document_id)
+            db.rollback()  # a failed flush in the Describe step would block saving the status
             document.status = DocumentStatus.FAILED
             document.error_message = str(exc)[:1000]
+        finally:
+            if llm is not None:
+                llm.close()
         repo.save(document)
     finally:
         db.close()

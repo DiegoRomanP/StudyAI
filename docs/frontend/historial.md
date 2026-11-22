@@ -2,7 +2,7 @@
 
 > Resumen de la integración del nuevo frontend (septiembre–octubre 2026). Sustituye a
 > `Plan-New-Frontend.md`, `fronted-design.md`, `frontend-integration/*` (salvo la guía viva de QA, que quedó
-> en `docs/qa-aislado.md`), sus capturas de evidencia y `QA-OnboardingUX-2026-10-18.md`. Los textos
+> en `docs/frontend/qa/qa-aislado.md`), sus capturas de evidencia y `QA-OnboardingUX-2026-10-18.md`. Los textos
 > originales siguen en el historial de git. Estado operativo actual: `docs/AGENTS_STATUS.md`, `CLAUDE.md`
 > («Frontend») y el código.
 
@@ -24,7 +24,7 @@ oscuro «flow» del plan ODD `studyai-fluid-learning` y el mockup `images/Estudi
 |---|---|---|
 | A01 | Inventario de Penpot (54 boards) y matriz de trazabilidad. Revisión: «CAMBIOS REQUERIDOS»; nunca se aprobó formalmente | — |
 | A02 | Línea base técnica y funcional con evidencia reproducible | `cc3f115` |
-| A03 | Entorno aislado de QA (Playwright + runner), guía en `docs/qa-aislado.md` | `46bebfa` |
+| A03 | Entorno aislado de QA (Playwright + runner), guía en `docs/frontend/qa/qa-aislado.md` | `46bebfa` |
 | A04 | Smoke HTTP con Bruno (`frontend/bruno/smoke/`) | `0e01e89` |
 | A05 | Tokens y componentes base (Penpot no tenía biblioteca de tokens; contrastes calculados) | `c703f8f` |
 | A06 | Navegación responsive, 404, validación de IDs, títulos y foco | `58e3a97` |

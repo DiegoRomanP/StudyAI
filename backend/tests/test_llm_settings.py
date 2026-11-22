@@ -82,7 +82,7 @@ def _verify(client: TestClient, provider: str, revision: int) -> dict:
     return response.json()["credential"]
 
 
-def test_catalog_lists_all_seven_providers(client: TestClient):
+def test_catalog_lists_every_provider(client: TestClient):
     response = client.get("/llm-settings/catalog")
     assert response.status_code == 200
     assert {entry["provider"] for entry in response.json()} == {
@@ -93,6 +93,10 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "NVIDIA",
         "OLLAMA",
         "GEMINI",
+        "CLAUDE_CODE",
+        "OPENCODE",
+        "PI",
+        "CODEX",
     }
     capabilities = {entry["provider"]: entry["supports_custom_base_url"] for entry in response.json()}
     assert capabilities == {
@@ -103,6 +107,10 @@ def test_catalog_lists_all_seven_providers(client: TestClient):
         "NVIDIA": False,
         "OLLAMA": False,
         "GEMINI": False,
+        "CLAUDE_CODE": False,
+        "OPENCODE": False,
+        "PI": False,
+        "CODEX": False,
     }
     custom_models = {entry["provider"]: entry["allows_custom_model"] for entry in response.json()}
     assert custom_models["NVIDIA"] is False
@@ -676,6 +684,27 @@ def test_revisioned_requests_reject_unknown_fields(client: TestClient):
         "/llm-settings/NVIDIA/activate",
         json={"expected_revision": revision, "model": "ignored"},
     ).status_code == 422
+
+
+def test_agent_cli_is_keyless_and_reports_whether_it_is_installed(client: TestClient, monkeypatch):
+    import shutil
+
+    monkeypatch.setattr(shutil, "which", lambda binary: None if binary == "codex" else f"/usr/bin/{binary}")
+    entries = {entry["provider"]: entry for entry in client.get("/llm-settings/catalog").json()}
+    assert entries["CLAUDE_CODE"]["installed"] is True
+    assert entries["CODEX"]["installed"] is False
+    assert entries["OPENAI"]["installed"] is None
+    assert entries["CLAUDE_CODE"]["requires_api_key"] is False
+
+    credential = client.put("/llm-settings/CLAUDE_CODE", json={}).json()
+    assert credential["masked_api_key"] == ""
+    assert client.patch(
+        "/llm-settings/CLAUDE_CODE/model",
+        json={"model": "--dangerously-skip-permissions", "expected_revision": credential["config_revision"]},
+    ).status_code == 400
+    draft = _save_draft(client, "CLAUDE_CODE", credential["config_revision"], "sonnet")
+    assert _verify(client, "CLAUDE_CODE", draft["config_revision"])["is_verified"] is True
+    client.delete("/llm-settings/CLAUDE_CODE")
 
 
 def test_ollama_remains_keyless_but_requires_a_verified_installed_model(client: TestClient):

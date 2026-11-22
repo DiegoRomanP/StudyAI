@@ -65,7 +65,7 @@ export function useProviderSetup({
   const modelOptions = useMemo(
     () =>
       catalogEntry.supports_model_discovery
-        ? (discoveredModels.data ?? []).map((model) => ({ id: model.id, free: true }))
+        ? (discoveredModels.data ?? []).map((model) => ({ id: model.id, free: Boolean(model.free) }))
         : catalogEntry.common_models,
     [catalogEntry.common_models, catalogEntry.supports_model_discovery, discoveredModels.data],
   );

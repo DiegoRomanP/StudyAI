@@ -1,278 +1,43 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { CalendarDays, ChevronRight, Trash2 } from "lucide-react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { getApiErrorMessage } from "../api/errors";
-import type { AdaptivePlanOptions, AcademicProfileHint, PlanDTO } from "../api/types";
+import type { PlanDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
-import { PageGuide } from "../components/help/PageGuide";
-import { Alert, Badge, Button, ButtonLink, Card, Select, Skeleton } from "../components/ui";
-import { DocumentPicker } from "../components/documents/DocumentPicker";
-import { PedagogySelector } from "../components/plan/PedagogySelector";
-import {
-  getDocumentsListSnapshot,
-  useDeletePlan,
-  useDocuments,
-  useGeneratePlan,
-  useGoals,
-  usePlans,
-} from "../hooks/queries";
+import { PageHeader, Badge, Button, ButtonLink, Card, Skeleton } from "../components/ui";
+import { useDeletePlan, usePlans } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
-import { planRequestFingerprint, useIdempotencyKey } from "../lib/idempotency";
 import { sessionProgress } from "../lib/studyProgress";
 
 const STATUS = {
   PROCESSING: { label: "Generando", color: "amber" },
-  READY: { label: "Listo", color: "green" },
   FAILED: { label: "Incompleto", color: "red" },
 } as const;
 
 export function PlanPage() {
-  const goalsQuery = useGoals();
-  const goals = goalsQuery.data;
-  const documentsQuery = useDocuments();
-  const { data: documents } = documentsQuery;
   const plansQuery = usePlans();
   const plans = plansQuery.data;
-  const generate = useGeneratePlan();
-  const requestKey = useIdempotencyKey();
-  const generating = useRef(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(plans);
-
-  const [goalId, setGoalId] = useState<number | "">("");
-  const [adaptiveTeachingEnabled, setAdaptiveTeachingEnabled] = useState(false);
-  const [profileHint, setProfileHint] = useState<AcademicProfileHint>("auto");
   const [searchParams] = useSearchParams();
   const requestedGoal = Number(searchParams.get("meta"));
-  const appliedRequestedGoal = useRef(false);
 
-  // "/plan?meta=ID" (e.g. right after saving a goal) preselects that goal once it exists.
-  useEffect(() => {
-    if (appliedRequestedGoal.current || !goals) return;
-    appliedRequestedGoal.current = true;
-    if (goals.some((goal) => goal.id === requestedGoal)) setGoalId(requestedGoal);
-  }, [goals, requestedGoal]);
-  const [selectedDocs, setSelectedDocs] = useState<number[]>([]);
-  const indexedDocumentIds = new Set(
-    (documents ?? [])
-      .filter((document) => document.status === "INDEXED")
-      .map((document) => document.id),
-  );
-  const selectedIndexedDocumentIds = selectedDocs.filter((id) => indexedDocumentIds.has(id));
-  const documentsAreReliable =
-    documents !== undefined &&
-    documentsQuery.status === "success" &&
-    getDocumentsListSnapshot(queryClient).isConfirmedByGet;
-  const canGeneratePlan =
-    goalId !== "" &&
-    !generate.isPending &&
-    documentsAreReliable &&
-    selectedIndexedDocumentIds.length > 0;
-  const needsGoalChoice = goalId === "" && (goals ?? []).length > 0;
-  const showsDocumentReason = !documentsAreReliable || selectedIndexedDocumentIds.length === 0;
-  const hasRequirements = needsGoalChoice || showsDocumentReason;
-
-  async function handleGenerate() {
-    if (goalId === "") return;
-
-    const latestDocumentList = getDocumentsListSnapshot(queryClient);
-    const latestDocuments = latestDocumentList.documents;
-    const latestListIsReliable = latestDocumentList.isConfirmedByGet;
-    const currentIndexedDocumentIds = new Set(
-      (latestDocuments ?? [])
-        .filter((document) => document.status === "INDEXED")
-        .map((document) => document.id),
-    );
-    const documentIds = selectedDocs.filter((id) => currentIndexedDocumentIds.has(id));
-    if (documentIds.length !== selectedDocs.length) {
-      setSelectedDocs(documentIds);
-    }
-    if (!latestListIsReliable || documentIds.length === 0) return;
-    if (generating.current) return;
-
-    generating.current = true;
-    setGenerateError(null);
-    try {
-      const pedagogy: AdaptivePlanOptions | undefined = adaptiveTeachingEnabled
-        ? { content_version: 2, profile_hint: profileHint }
-        : undefined;
-      const selectedGoal = (goals ?? []).find((goal) => goal.id === Number(goalId));
-      const fingerprint = pedagogy
-        ? planRequestFingerprint(Number(goalId), documentIds, {
-            pedagogy,
-            goalType: selectedGoal?.goal_type,
-          })
-        : planRequestFingerprint(Number(goalId), documentIds);
-      const res = await generate.mutateAsync({
-        goalId: Number(goalId),
-        documentIds,
-        // Retries of the same goal, documents, and pedagogy replay the original request.
-        idempotencyKey: requestKey.keyFor(fingerprint),
-        ...(pedagogy ? { pedagogy } : {}),
-      });
-      requestKey.reset();
-      navigate(`/plan/${res.id}`);
-    } catch (error: unknown) {
-      setGenerateError(getApiErrorMessage(error, "No se pudo iniciar la generación del plan."));
-    } finally {
-      generating.current = false;
-    }
-  }
+  // Old "/plan?meta=ID" links now live in the assistant on Inicio.
+  if (requestedGoal > 0) return <Navigate replace to={`/inicio?meta=${requestedGoal}#preparar-plan`} />;
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="font-display text-2xl font-bold sm:text-3xl">Plan de estudio</h1>
-        <p className="text-text-muted">
-          Genera un plan a partir de una meta y tus documentos. ¿Primera vez? En{" "}
-          <Link className="text-action underline" to="/inicio#preparar-plan">
-            Inicio
-          </Link>{" "}
-          lo haces todo de una vez.
-        </p>
-      </header>
-
-      <PageGuide id="plan" />
-
-      <Card className="space-y-4">
-        <h2 className="text-lg font-semibold">Nuevo plan</h2>
-
-        <div className="space-y-2">
-          <Select
-            id="plan-goal"
-            label="Meta"
-            value={goalId}
-            onChange={(e) => {
-              setGoalId(e.target.value === "" ? "" : Number(e.target.value));
-              setGenerateError(null);
-            }}
-            disabled={goalsQuery.isError && !goals}
-          >
-            <option value="">Selecciona una meta…</option>
-            {(goals ?? []).map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.title}
-              </option>
-            ))}
-          </Select>
-          {goalsQuery.isError ? (
-            <Alert tone="error">
-              <p>No se pudieron cargar tus metas.</p>
-              <div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void goalsQuery.refetch()}
-                  disabled={goalsQuery.isFetching}
-                >
-                  Reintentar carga de metas
-                </Button>
-              </div>
-            </Alert>
-          ) : goalsQuery.isSuccess && (goals ?? []).length === 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm text-state-warning">
-                Necesitas una meta. Créala en Metas o hazlo todo de una vez en Inicio.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <ButtonLink to="/goals" variant="secondary">
-                  Crear una meta
-                </ButtonLink>
-                <ButtonLink to="/inicio#preparar-plan" variant="secondary">
-                  Hacerlo desde Inicio
-                </ButtonLink>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <PedagogySelector
-          enabled={adaptiveTeachingEnabled}
-          profileHint={profileHint}
-          onEnabledChange={(enabled) => {
-            setAdaptiveTeachingEnabled(enabled);
-            setGenerateError(null);
-          }}
-          onProfileChange={(profile) => {
-            setProfileHint(profile);
-            setGenerateError(null);
-          }}
-          idPrefix="plan-pedagogy"
-        />
-
-        <DocumentPicker
-          documents={documents ?? []}
-          selectedDocumentIds={selectedDocs}
-          onSelectionChange={(ids) => {
-            setSelectedDocs(ids);
-            setGenerateError(null);
-          }}
-          showEmptyState={documentsAreReliable && indexedDocumentIds.size === 0}
-          emptyState={
-            <p>
-              Aún no tienes documentos listos. Sube apuntes en{" "}
-              <Link className="underline" to="/documents">Recursos</Link>.
-            </p>
-          }
-        />
-
-        <div className="space-y-2">
-          <Button
-            onClick={handleGenerate}
-            disabled={!canGeneratePlan}
-            aria-describedby={!canGeneratePlan && hasRequirements ? "plan-requirements" : undefined}
-          >
-            {generate.isPending ? "Iniciando…" : "Generar plan"}
-          </Button>
-          {generateError && (
-            <Alert tone="error">
-              <p>{generateError}</p>
-              <p>Puedes volver a intentarlo: no se creará un plan duplicado.</p>
-            </Alert>
-          )}
-          {hasRequirements && (
-            <div id="plan-requirements" className="space-y-2">
-              {needsGoalChoice && (
-                <p role="status" className="text-sm text-state-warning">
-                  Elige una meta.
-                </p>
-              )}
-              {!documentsAreReliable ? (
-                <div className="space-y-2">
-                  <p
-                    role={documentsQuery.isError ? "alert" : "status"}
-                    className="text-sm text-state-warning"
-                  >
-                    {documentsQuery.isError
-                      ? "No se puede verificar la lista de documentos. Reintenta antes de generar el plan."
-                      : "Cargando y verificando la lista de documentos…"}
-                  </p>
-                  {documentsQuery.isError && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => void documentsQuery.refetch()}
-                      disabled={documentsQuery.isFetching}
-                    >
-                      {documentsQuery.isFetching ? "Reintentando…" : "Reintentar carga de documentos"}
-                    </Button>
-                  )}
-                </div>
-              ) : selectedIndexedDocumentIds.length === 0 ? (
-                <p role="status" className="text-sm text-state-warning">
-                  {(documents ?? []).some((document) => document.status === "INDEXED")
-                    ? "Marca al menos un documento listo para usar."
-                    : "Necesitas al menos un documento listo para usar."}
-                </p>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </Card>
+      <PageHeader
+        icon={CalendarDays}
+        title="Plan de estudio"
+        help="plan"
+        actions={
+          <ButtonLink to="/inicio#preparar-plan" variant="secondary">
+            + Nuevo plan
+          </ButtonLink>
+        }
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Tus planes</h2>
@@ -282,7 +47,13 @@ export function PlanPage() {
           isError={plansQuery.isError}
           isFetching={plansQuery.isFetching}
           isEmpty={(items) => items.length === 0}
-          loading={<Skeleton height={72} />}
+          loading={
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} height={72} />
+              ))}
+            </div>
+          }
           loadingLabel="Cargando planes"
           empty={
             <EmptyState
@@ -324,7 +95,7 @@ export function PlanPage() {
 function PlanRow({ plan }: { plan: PlanDTO }) {
   const deletePlan = useDeletePlan();
   const [error, setError] = useState<string | null>(null);
-  const meta = STATUS[plan.status];
+  const meta = plan.status === "READY" ? null : STATUS[plan.status];
   // Reviews are extra sessions: they never count as plan progress.
   const progress = sessionProgress([plan]);
 
@@ -342,30 +113,57 @@ function PlanRow({ plan }: { plan: PlanDTO }) {
     }
   }
 
+  const ratio = progress.total > 0 ? progress.completed / progress.total : 0;
+  const circ = 2 * Math.PI * 9;
+
   return (
     <Card className="space-y-1">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Link to={`/plan/${plan.id}`} className="min-w-0 flex-1">
-          <p className="truncate font-medium text-text-primary hover:text-action">{plan.title}</p>
-          <p className="text-xs text-text-muted">
-            {plan.status === "READY"
-              ? `${progress.completed} de ${progress.total} sesiones completadas`
-              : plan.status === "PROCESSING"
-                ? "Generando…"
-                : "Continuar generación"}
-          </p>
+      <div className="flex items-center justify-between gap-3">
+        <Link to={`/plan/${plan.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-text-primary hover:text-action">{plan.title}</p>
+            {plan.status !== "READY" && (
+              <p className="text-xs text-text-muted">
+                {plan.status === "PROCESSING" ? "Generando…" : "Continuar generación"}
+              </p>
+            )}
+          </div>
+          {plan.status === "READY" && (
+            <span className="flex shrink-0 items-center gap-2 text-sm text-text-muted">
+              <svg viewBox="0 0 24 24" className="h-6 w-6 -rotate-90" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="rgb(var(--color-surface-muted))" strokeWidth="3" />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  fill="none"
+                  stroke="#5178FF"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={circ}
+                  strokeDashoffset={circ * (1 - ratio)}
+                />
+              </svg>
+              <span aria-hidden="true">
+                {progress.completed}/{progress.total}
+              </span>
+              <span className="sr-only">
+                {progress.completed} de {progress.total} sesiones completadas
+              </span>
+            </span>
+          )}
+          {meta && <Badge color={meta.color}>{meta.label}</Badge>}
+          <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-text-muted" />
         </Link>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-          <Badge color={meta.color}>{meta.label}</Badge>
-          <Button
-            variant="danger"
-            className="px-2.5 py-1 text-xs"
-            onClick={handleDelete}
-            disabled={deletePlan.isPending}
-          >
-            {deletePlan.isPending ? "Eliminando..." : "Eliminar"}
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          aria-label={`Eliminar «${plan.title}»`}
+          className="hover:!bg-state-error-subtle hover:!text-state-error"
+          onClick={handleDelete}
+          disabled={deletePlan.isPending}
+        >
+          <Trash2 aria-hidden="true" className="h-4 w-4" />
+        </Button>
       </div>
       {error && <p role="alert" className="text-xs text-state-error">{error}</p>}
     </Card>

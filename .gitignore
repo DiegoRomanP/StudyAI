@@ -50,3 +50,6 @@ htmlcov/
 .pi/
 images/
 plans/
+
+# Visual brainstorming mockups
+.superpowers/

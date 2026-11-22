@@ -10,6 +10,12 @@ import type { LLMRuntimeDTO, PlanDTO, QuizDTO, SessionDetailDTO } from "../api/t
 import { SessionPage } from "../pages/SessionPage";
 import { makeSessionDetail } from "../test/fixtures";
 
+// The mixed order has its own test (lib/shuffle.test.ts); these flows assert the server order.
+vi.mock("../lib/shuffle", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/shuffle")>()),
+  seededShuffle: <T,>(items: readonly T[]) => [...items],
+}));
+
 const ALWAYS_KEY = "studyai.onboarding.reinforce.always";
 
 const review: SessionDetailDTO = makeSessionDetail({

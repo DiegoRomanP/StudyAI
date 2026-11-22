@@ -42,9 +42,9 @@ def test_exam_score_without_usable_answers_is_none(detail):
     assert exam_score(detail) is None
 
 
-def test_failed_questions_use_the_passing_threshold():
-    detail = {"1": _mc(False), "2": _mc(True), "3": _fc(2), "4": _fc(3)}
-    assert failed_question_ids(detail) == {1, 3}
+def test_failed_questions_use_the_review_threshold():
+    detail = {"1": _mc(False), "2": _mc(True), "3": _fc(2), "4": _fc(3), "5": _fc(4)}
+    assert failed_question_ids(detail) == {1, 3, 4}
 
 
 def test_first_perfect_exam_gives_mastery_08_and_box_1():
@@ -131,3 +131,25 @@ def test_worked_example_table_5_3():
     # variant: reviewed early (box stays where it was, 1 → +3 days)
     early = update_topic(0.8, 1, 1.0, promote_allowed=False, ladder=LADDER)
     assert early == (0.92, 1) and review_interval_days(early[1], LADDER) == 3
+
+
+def test_failed_adaptive_keys_include_cards_rated_under_four():
+    from app.algorithms.adaptive_route import failed_adaptive_keys
+
+    detail = {
+        "_meta": {"type": "_meta", "schema_version": 2},
+        "legacy:1": {"type": "flashcard", "objective": False, "quality": 3},
+        "legacy:2": {"type": "flashcard", "objective": False, "quality": 4},
+        "a": {"type": "true_false", "objective": True, "correct": False},
+        "b": {"type": "true_false", "objective": True, "correct": True},
+    }
+    assert failed_adaptive_keys(detail) == {"legacy:1", "a"}
+
+
+def test_v2_score_falls_back_to_cards_when_no_objective_items():
+    detail = {
+        "_meta": {"type": "_meta", "schema_version": 2},
+        "legacy:1": {"type": "flashcard", "objective": False, "quality": 5},
+        "legacy:2": {"type": "flashcard", "objective": False, "quality": 2},
+    }
+    assert exam_score(detail) == 0.5

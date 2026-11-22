@@ -54,6 +54,7 @@ from app.llm.prompts import (
 from app.services.adaptive_content_builder import build_adaptive_session_content
 from app.services.session_content_builder import build_session_content
 from app.models.document import DocumentStatus
+from app.models.assistant_message import AssistantMessage
 from app.models.flashcard import FlashcardReview
 from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
@@ -62,6 +63,7 @@ from app.models.session import Session as StudySession, SessionKind
 from app.models.session import SessionMaterial
 from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.goal_repository import GoalRepository
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
@@ -91,8 +93,8 @@ class PlanService:
         subject_hint: str | None = None,
         profile_hint: str | None = None,
     ) -> tuple[Plan, bool]:
-        goal = self.db.get(Goal, goal_id)
-        if goal is None or goal.user_id != user_id:
+        goal = GoalRepository(self.db).find_active_owned(user_id, goal_id)
+        if goal is None:  # a deleted goal keeps its plans but takes no new ones
             raise NotFoundError("Meta no encontrada.")
 
         document_ids = list(dict.fromkeys(document_ids))
@@ -131,7 +133,7 @@ class PlanService:
         plan = Plan(
             user_id=user_id,
             goal_id=goal_id,
-            title=f"Plan: {goal.title}",
+            title=f"Plan: {goal.title}"[:255],  # goal titles may use all 255 chars
             status=PlanStatus.PROCESSING,
             document_ids=list(document_ids),
             content_version=content_version,
@@ -315,6 +317,8 @@ class PlanService:
             self.db.execute(
                 delete(FlashcardReview).where(FlashcardReview.question_id.in_(question_ids))
             )
+        # Same reason: assistant messages only hold the plan id, nothing cascades to them.
+        self.db.execute(delete(AssistantMessage).where(AssistantMessage.plan_id == plan.id))
         self.repo.delete(plan)
 
 
@@ -668,7 +672,8 @@ class _Generator:
             or stored_snapshot.model_dump(mode="json") != snapshot.model_dump(mode="json")
             or len(session.quiz.questions) != config.flashcards
             or len(flashcards) != config.flashcards
-            or len(draft.adaptive_assessment.questions) != config.multiple_choice
+            # The builder publishes up to the strategy's count after dropping invalid questions.
+            or not 1 <= len(draft.adaptive_assessment.questions) <= config.multiple_choice
             or any(
                 not mapped_flashcards.get(f"legacy:{question.id}")
                 or not set(mapped_flashcards[f"legacy:{question.id}"]).issubset(objective_ids)
@@ -807,20 +812,13 @@ class _Generator:
     @staticmethod
     def _snapshot_topic_pedagogy(plan: Plan, item: dict) -> PedagogySnapshot:
         objectives_data = item.get("objectives")
-        if not isinstance(objectives_data, list) or not 1 <= len(objectives_data) <= 3:
+        if not isinstance(objectives_data, list) or not objectives_data:
             raise LLMError(
                 "El proveedor de IA devolvió un tema adaptativo con objetivos inválidos.",
                 code="LLM_INVALID_RESPONSE",
             )
 
         try:
-            objectives = [
-                LearningObjective.model_validate(objective)
-                for objective in objectives_data
-            ]
-            objective_ids = [objective.id for objective in objectives]
-            if len(objective_ids) != len(set(objective_ids)):
-                raise ValueError("Learning objective identifiers must be unique per topic.")
             candidate = item.get("topic_profile")
             if (
                 not isinstance(candidate, str)
@@ -830,6 +828,18 @@ class _Generator:
             profile = resolve_profile(
                 _explicit_profile_hint(plan), candidate
             )
+            # A model often picks a Bloom level the profile lacks or adds a fourth
+            # objective; both degrade (to the prompt's "understand" default, to 3)
+            # instead of failing the whole plan.
+            objectives = []
+            for objective in objectives_data[:3]:
+                fields = dict(objective)  # TypeError for a non-object objective
+                if fields.get("bloom_target") not in profile.bloom_levels:
+                    fields["bloom_target"] = "understand"
+                objectives.append(LearningObjective.model_validate(fields))
+            objective_ids = [objective.id for objective in objectives]
+            if len(objective_ids) != len(set(objective_ids)):
+                raise ValueError("Learning objective identifiers must be unique per topic.")
             return snapshot_profile(profile, objectives)
         except (PydanticValidationError, TypeError, ValueError) as exc:
             raise LLMError(
@@ -986,7 +996,7 @@ class _Generator:
             kind="session_content",
             system=adaptive_session_content.SYSTEM,
             prompt=adaptive_session_content.build_adaptive_session_prompt(
-                topic_name, goal_text, sources, config, snapshot
+                topic_name, goal_text, sources, config, snapshot, rich_content=self.llm.rich_content
             ),
             context={
                 "content_version": 2,

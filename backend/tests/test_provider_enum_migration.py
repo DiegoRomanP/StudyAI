@@ -61,11 +61,16 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "_ensure_plan_error_message_column",
         "_ensure_plan_idempotency_columns",
         "_ensure_plan_generation_columns",
+        "_ensure_free_ai_assistant_column",
+        "_ensure_goal_deleted_at_column",
+        "_ensure_goal_exam_date_column",
         "_purge_retired_provider_credentials",
         "_ensure_llm_verification_columns",
         "_ensure_adaptive_route_columns",
         "_ensure_adaptive_content_columns",
         "_seed_default_user",
+        "sync_id_sequences",
+        "_enable_row_level_security",
     ):
         monkeypatch.setattr(init_db_module, name, lambda: None)
 
@@ -76,6 +81,10 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "begin",
         "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'GEMINI'",
         "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'DEEPSEEK'",
+        "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'CLAUDE_CODE'",
+        "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'OPENCODE'",
+        "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'PI'",
+        "ALTER TYPE llmprovidername ADD VALUE IF NOT EXISTS 'CODEX'",
         "commit",
     ]
 

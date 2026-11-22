@@ -23,7 +23,8 @@ import type { DashboardDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
 import { HelpTerm } from "../components/help/HelpTerm";
-import { Button, ButtonLink, Card, IconTile, SegmentedControl, Skeleton, StatTile } from "../components/ui";
+import { HelpTip } from "../components/help/HelpTip";
+import { PageHeader, Button, ButtonLink, Card, SegmentedControl, Skeleton, StatTile } from "../components/ui";
 import { useDashboard, usePlans } from "../hooks/queries";
 import { findNextSession, parseApiDate, quizStreakDays } from "../lib/studyProgress";
 import { accuracyTrend, averageScore, scoresInRange, type StatsRange } from "../lib/studyStats";
@@ -60,18 +61,9 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex items-start gap-3">
-          <IconTile icon={ChartColumn} className="h-11 w-11" />
-          <div>
-            <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Estadísticas</h1>
-            <p className="mt-1 text-text-muted">
-              Tu progreso en los tests y tus próximos <HelpTerm term="repaso">repasos</HelpTerm>.
-            </p>
-          </div>
-        </div>
-        {showRange && (
-          <SegmentedControl
+      <PageHeader icon={ChartColumn} title="Estadísticas" help="estadisticas"
+          actions={showRange && (
+            <SegmentedControl
             label="Periodo"
             value={range}
             onChange={setRange}
@@ -81,14 +73,23 @@ export function DashboardPage() {
               { value: "all", label: "Todo" },
             ]}
           />
-        )}
-      </header>
+          )}
+        />
       <AsyncState
         data={data}
         isLoading={isPending}
         isError={isError}
         isFetching={isFetching}
-        loading={<Skeleton height={256} />}
+        loading={
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} height={88} />
+              ))}
+            </div>
+            <Skeleton height={256} />
+          </div>
+        }
         loadingLabel="Cargando progreso"
         empty={null}
         onRetry={() => void refetch()}
@@ -156,9 +157,7 @@ function DashboardContent({
           label={<HelpTerm term="precision">Precisión media</HelpTerm>}
           value={average === null ? "—" : `${average}%`}
           hint={
-            trend === null ? (
-              "en preguntas de opción múltiple"
-            ) : (
+            trend === null ? undefined : (
               <span className="inline-flex items-center gap-1">
                 {trend >= 0 ? (
                   <TrendingUp aria-hidden="true" className="h-3.5 w-3.5 text-state-success" />
@@ -176,14 +175,12 @@ function DashboardContent({
           tone="warning"
           label="Racha actual"
           value={`${streak} ${streak === 1 ? "día" : "días"}`}
-          hint="días seguidos con test"
         />
         <StatTile
           icon={CircleCheckBig}
           tone="success"
           label="Sesiones completadas"
           value={data.sessions_completed}
-          hint="en total"
         />
       </section>
 
@@ -265,8 +262,7 @@ function DashboardContent({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
-          <h2 className="font-display text-lg font-semibold text-text-primary">Temas más débiles</h2>
-          <p className="mb-3 text-xs text-text-muted">Según todo tu historial de tests.</p>
+          <h2 className="mb-3 font-display text-lg font-semibold text-text-primary">Temas más débiles</h2>
           {data.weak_topics.length === 0 ? (
             <p className="text-sm text-text-muted">Aparecerán cuando respondas preguntas de opción múltiple.</p>
           ) : (
@@ -293,10 +289,8 @@ function DashboardContent({
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold text-text-primary">
             <CalendarClock aria-hidden="true" className="h-5 w-5 text-action-hover" />
             Próximas revisiones
+            <HelpTip label="Próximas revisiones">Las tarjetas que te toca repasar cada día.</HelpTip>
           </h2>
-          <p className="-mt-2 mb-3 text-xs text-text-muted">
-            Las <HelpTerm term="flashcard">tarjetas</HelpTerm> que te toca repasar cada día.
-          </p>
           {data.upcoming_reviews.length === 0 ? (
             <p className="text-sm text-text-muted">Al completar una sesión programaremos tus repasos aquí.</p>
           ) : (

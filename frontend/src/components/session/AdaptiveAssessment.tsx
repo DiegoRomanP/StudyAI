@@ -12,10 +12,14 @@ import type {
   MinuteRange,
   PedagogySnapshot,
 } from "../../api/adaptiveLearning";
+import { useEnterAnimation } from "../motion/useEnterAnimation";
 import { Alert, Badge, Button, Card, Spinner } from "../ui";
+import { EnterOnMount } from "./SessionSkeleton";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { StimulusCard } from "./LessonBlocks";
 import { AdaptiveAssessmentResult } from "./AdaptiveAssessmentResult";
+import { ReportAssistantQuestion } from "./AssistantPanel";
+import { seededShuffle } from "../../lib/shuffle";
 
 type QuestionDraft = {
   selectedOption?: string;
@@ -160,7 +164,18 @@ export function AdaptiveAssessment({
   const [reloadPending, setReloadPending] = useState(false);
   const submittingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const questions = currentAssessment.questions;
+  const questionRef = useRef<HTMLElement>(null);
+  const prevIndex = useRef(0);
+  const direction = currentIndex < prevIndex.current ? "back" : "forward";
+  useEffect(() => {
+    prevIndex.current = currentIndex;
+  }, [currentIndex]);
+  // Sin `key` nuevo: no se remonta la pregunta, solo se anima su entrada.
+  useEnterAnimation(questionRef, "stepForward", currentIndex, { skipFirst: true, direction });
+  const questions = useMemo(
+    () => seededShuffle(currentAssessment.questions, `${currentAssessment.quiz_id}:${currentAssessment.revision}`),
+    [currentAssessment],
+  );
   const question = questions[currentIndex];
   const questionDraft = drafts[question?.question_id] ?? {};
   const currentAnswer = question ? answerFor(question, questionDraft) : null;
@@ -272,7 +287,9 @@ export function AdaptiveAssessment({
           <div className="space-y-4">
             <div role="status" aria-live="polite" className="rounded-control border border-line bg-surface-subtle p-4">
               {questionDraft.revealed ? (
-                <div className="prose-study max-w-none"><SafeMarkdown>{question.flashcard_answer}</SafeMarkdown></div>
+                <EnterOnMount preset="reveal" className="block">
+                  <div className="prose-study max-w-none"><SafeMarkdown>{question.flashcard_answer}</SafeMarkdown></div>
+                </EnterOnMount>
               ) : <p>Revela la respuesta cuando estés listo.</p>}
             </div>
             <Button
@@ -529,6 +546,7 @@ export function AdaptiveAssessment({
 
   return (
     <section className="space-y-4" aria-labelledby="adaptive-assessment-title" aria-busy={submitting}>
+      <ReportAssistantQuestion id={question?.question_id} />
       <Card className="space-y-5">
         <header>
           <h2 id="adaptive-assessment-title" className="font-display text-xl font-semibold text-text-primary">
@@ -551,7 +569,7 @@ export function AdaptiveAssessment({
           </Alert>
         )}
 
-        <section aria-labelledby={`adaptive-question-title-${question.question_id}`} className="space-y-4">
+        <section ref={questionRef} aria-labelledby={`adaptive-question-title-${question.question_id}`} className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3
               ref={headingRef}

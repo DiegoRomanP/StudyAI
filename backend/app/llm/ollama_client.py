@@ -15,6 +15,8 @@ class OllamaModel:
     size_bytes: int | None
     parameter_size: str | None
     context_length: int | None
+    # Shared with the agent CLIs' model discovery (OpenCode's free models).
+    free: bool = False
 
 
 class OllamaClient:

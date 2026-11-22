@@ -18,3 +18,5 @@ class FreeAiUsage(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     usage_date: Mapped[date] = mapped_column(Date, nullable=False)
     uses: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Study assistant messages: their own, larger daily limit (one message = one small call).
+    assistant_uses: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

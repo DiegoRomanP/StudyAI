@@ -101,6 +101,8 @@ class ProviderCatalogEntry(BaseModel):
     supports_model_discovery: bool
     supports_custom_base_url: bool
     allows_custom_model: bool
+    # Agent CLIs only: whether the binary is on the server's PATH (None for API providers).
+    installed: bool | None = None
 
 
 class OllamaModelResponse(BaseModel):
@@ -108,6 +110,7 @@ class OllamaModelResponse(BaseModel):
     size_bytes: int | None
     parameter_size: str | None
     context_length: int | None
+    free: bool = False
 
 
 class LLMConnectionTestResponse(BaseModel):

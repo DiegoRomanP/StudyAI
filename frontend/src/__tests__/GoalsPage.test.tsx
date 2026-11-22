@@ -115,16 +115,16 @@ describe("GoalsPage", () => {
     goalHooks.createGoal.mockResolvedValue({ id: 12 });
     renderPage();
 
-    expect(screen.getByRole("region", { name: PAGE_GUIDES.metas.title })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Ayuda: ${PAGE_GUIDES.metas.title}` })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Universidad/i }));
-    expect(screen.getByRole("combobox", { name: "Tipo de estudio" })).toHaveAccessibleDescription(
+    expect(screen.getByRole("button", { name: "Ayuda: Tipo de estudio" })).toHaveAccessibleDescription(
       /7 de 10/,
     );
     fireEvent.click(screen.getByRole("button", { name: "Guardar meta" }));
 
     expect(await screen.findByRole("link", { name: "Generar un plan con esta meta" })).toHaveAttribute(
       "href",
-      "/plan?meta=12",
+      "/inicio?meta=12#preparar-plan",
     );
   });
 
@@ -158,9 +158,9 @@ describe("GoalsPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: /Editar/ }));
     const titleFields = screen.getAllByRole("textbox", { name: "Título" });
-    fireEvent.change(titleFields[1], { target: { value: "Botánica urbana" } });
+    fireEvent.change(titleFields[0], { target: { value: "Botánica urbana" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() =>
@@ -170,11 +170,12 @@ describe("GoalsPage", () => {
           goal_type: "LEARNING",
           title: "Botánica urbana",
           description: "Plantas locales",
+          exam_date: null,
         },
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    fireEvent.click(screen.getByRole("button", { name: /Eliminar/ }));
     await waitFor(() => expect(goalHooks.deleteGoal).toHaveBeenCalledWith(4));
   });
 
@@ -206,7 +207,7 @@ describe("GoalsPage", () => {
     });
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: /Editar/ }));
     const titleFields = screen.getAllByRole("textbox", { name: "Título" });
     const editTitle = titleFields[titleFields.length - 1];
     expect(editTitle).toHaveAttribute("maxLength", "255");

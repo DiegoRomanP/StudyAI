@@ -75,6 +75,17 @@ def _take(client: TestClient, session_id: int, mode: str) -> dict:
     return quiz
 
 
+def _take_missing_last_mc(client: TestClient, session_id: int) -> dict:
+    """Everything right except the last multiple choice: a good exam that still leaves one point."""
+    quiz = client.get(f"/quizzes/{session_id}").json()
+    answers = _answers(quiz, "good")
+    last_mc = next(a for a in reversed(answers) if "selected_option" in a)
+    question = next(q for q in quiz["questions"] if q["id"] == last_mc["question_id"])
+    last_mc["selected_option"] = next(o for o in question["options"] if o != question["answer"])
+    assert client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers}).status_code == 200
+    return question
+
+
 def _refresh(client: TestClient, plan: dict) -> dict:
     return client.get(f"/plans/{plan['id']}").json()
 
@@ -90,7 +101,7 @@ def _reviews(plan: dict, topic_id: int, status: str = "PENDING") -> list[dict]:
     ]
 
 
-def test_perfect_new_exam_schedules_review_in_three_days(client, today, created_plans):
+def test_perfect_new_exam_needs_no_review(client, today, created_plans):
     plan = _plan(client, created_plans, "Ruta examen perfecto")
     first = plan["sessions"][0]
 
@@ -100,13 +111,41 @@ def test_perfect_new_exam_schedules_review_in_three_days(client, today, created_
     topic = _topic(plan, first["topic_id"])
     assert topic["mastery"] == 0.8
     assert topic["review_box"] == 1
-    assert topic["mastery_state"] == "EN_PROGRESO"
+    assert _reviews(plan, first["topic_id"]) == []
+
+
+def test_right_choices_and_cards_rated_four_need_no_review(client, today, created_plans):
+    plan = _plan(client, created_plans, "Ruta tarjetas en cuatro")
+    first = plan["sessions"][0]
+    quiz = client.get(f"/quizzes/{first['id']}").json()
+    answers = [
+        {"question_id": q["id"], "quality": 4} if q["question_type"] == "FLASHCARD"
+        else {"question_id": q["id"], "selected_option": q["answer"]}
+        for q in quiz["questions"]
+    ]
+    assert client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers}).status_code == 200
+
+    assert _reviews(_refresh(client, plan), first["topic_id"]) == []
+
+
+def test_card_rated_three_is_the_only_point_reviewed(client, today, created_plans):
+    plan = _plan(client, created_plans, "Ruta tarjeta en tres")
+    first = plan["sessions"][0]
+    quiz = client.get(f"/quizzes/{first['id']}").json()
+    card = next(q for q in quiz["questions"] if q["question_type"] == "FLASHCARD")
+    answers = _answers(quiz, "good")
+    next(a for a in answers if a["question_id"] == card["id"])["quality"] = 3
+    assert client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers}).status_code == 200
+
+    plan = _refresh(client, plan)
     [review] = _reviews(plan, first["topic_id"])
     assert review["scheduled_date"] == (D0 + timedelta(days=3)).isoformat()
     assert review["order_index"] > max(s["order_index"] for s in plan["sessions"] if s["kind"] == "NEW")
     detail = client.get(f"/sessions/{review['id']}").json()
-    assert detail["review_points"] == []
+    assert detail["review_points"] == [{"prompt": card["prompt"], "answer": card["answer"]}]
     assert detail["material"]["content_markdown"]
+    copied = client.get(f"/quizzes/{review['id']}").json()
+    assert [q["prompt"] for q in copied["questions"]] == [card["prompt"]]
 
 
 def test_failed_exam_lists_points_and_puts_failed_questions_first(client, today, created_plans):
@@ -143,64 +182,59 @@ def test_failed_exam_lists_points_and_puts_failed_questions_first(client, today,
     assert sources == {q["prompt"]: q["id"] for q in quiz["questions"]}
 
 
-def test_only_failed_questions_are_listed_and_come_first(client, today, created_plans):
+def test_only_failed_questions_are_listed_and_copied(client, today, created_plans):
     plan = _plan(client, created_plans, "Ruta fallo parcial")
     first = plan["sessions"][0]
-    quiz = client.get(f"/quizzes/{first['id']}").json()
-    answers = _answers(quiz, "good")
-    last_mc = next(a for a in reversed(answers) if "selected_option" in a)
-    question = next(q for q in quiz["questions"] if q["id"] == last_mc["question_id"])
-    last_mc["selected_option"] = next(o for o in question["options"] if o != question["answer"])
-    assert client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers}).status_code == 200
+    question = _take_missing_last_mc(client, first["id"])
 
     plan = _refresh(client, plan)
     [review] = _reviews(plan, first["topic_id"])
     detail = client.get(f"/sessions/{review['id']}").json()
     assert detail["review_points"] == [{"prompt": question["prompt"], "answer": question["answer"]}]
     copied = client.get(f"/quizzes/{review['id']}").json()
-    assert copied["questions"][0]["prompt"] == question["prompt"]
-    assert len(copied["questions"]) == len(quiz["questions"])
+    assert [q["prompt"] for q in copied["questions"]] == [question["prompt"]]
 
 
-def test_three_good_spaced_exams_master_topic_and_stop_reviews(client, today, created_plans):
+def test_review_answered_on_time_climbs_and_closes_the_route(client, today, created_plans):
     plan = _plan(client, created_plans, "Ruta dominio")
     first = plan["sessions"][0]
     topic_id = first["topic_id"]
 
-    _take(client, first["id"], "good")
-    for expected_box, expected_days in ((1, 3), (2, 7)):
-        plan = _refresh(client, plan)
-        assert _topic(plan, topic_id)["review_box"] == expected_box
-        [review] = _reviews(plan, topic_id)
-        today["day"] = date.fromisoformat(review["scheduled_date"])
-        _take(client, review["id"], "good")
-        next_box = expected_box + 1
-        plan = _refresh(client, plan)
-        assert _topic(plan, topic_id)["review_box"] == next_box
-        if next_box < 3:
-            [following] = _reviews(plan, topic_id)
-            assert following["scheduled_date"] == (today["day"] + timedelta(days=expected_days + 4)).isoformat()
+    _take_missing_last_mc(client, first["id"])
+    plan = _refresh(client, plan)
+    assert _topic(plan, topic_id)["review_box"] == 1
+    [review] = _reviews(plan, topic_id)
+    today["day"] = date.fromisoformat(review["scheduled_date"])
+    _take(client, review["id"], "good")
 
-    assert _topic(plan, topic_id)["mastery_state"] == "DOMINADO"
+    plan = _refresh(client, plan)
+    assert _topic(plan, topic_id)["review_box"] == 2
     assert _reviews(plan, topic_id) == []
 
 
 def test_early_review_updates_mastery_without_promotion(client, today, created_plans):
     plan = _plan(client, created_plans, "Ruta repaso temprano")
     first = plan["sessions"][0]
-    _take(client, first["id"], "good")
+    _take_missing_last_mc(client, first["id"])
     plan = _refresh(client, plan)
     [review] = _reviews(plan, first["topic_id"])
+    before = _topic(plan, first["topic_id"])["mastery"]
 
     today["day"] = D0 + timedelta(days=1)  # before the review's date
-    _take(client, review["id"], "good")
+    _take(client, review["id"], "bad")
     plan = _refresh(client, plan)
 
     topic = _topic(plan, first["topic_id"])
-    assert topic["mastery"] == 0.92
-    assert topic["review_box"] == 1
+    assert topic["mastery"] < before
+    assert topic["review_box"] == 0
     [following] = _reviews(plan, first["topic_id"])
-    assert following["scheduled_date"] == (today["day"] + timedelta(days=3)).isoformat()
+    assert following["scheduled_date"] == (today["day"] + timedelta(days=1)).isoformat()
+
+    today["day"] = date.fromisoformat(following["scheduled_date"]) - timedelta(days=1)
+    _take(client, following["id"], "good")
+    plan = _refresh(client, plan)
+    assert _topic(plan, first["topic_id"])["review_box"] == 0  # early: mastery moves, the box does not
+    assert _reviews(plan, first["topic_id"]) == []
 
 
 def test_retake_of_completed_session_does_not_touch_route(client, today, created_plans):
@@ -256,7 +290,6 @@ def test_legacy_plan_resolves_topic_by_name_or_skips(client, today, created_plan
 
     assert _topic(after, named["topic_id"])["mastery"] == 0.8
     assert _topic(after, orphan["topic_id"])["mastery"] is None
-    assert len(_reviews(after, named["topic_id"])) == 1
     with SessionLocal() as db:
         assert db.get(StudySession, named["id"]).topic_id == named["topic_id"]
 
@@ -269,7 +302,7 @@ def test_handler_failure_keeps_result_and_leaves_no_partial_review(client, today
     plan = _plan(client, created_plans, "Ruta fallo del handler")
     first = plan["sessions"][0]
 
-    _take(client, first["id"], "good")
+    _take(client, first["id"], "bad")
     after = _refresh(client, plan)
 
     with SessionLocal() as db:
@@ -285,7 +318,7 @@ def test_double_registration_updates_topic_once(client, today, created_plans):
     plan = _plan(client, created_plans, "Ruta doble registro")
     first = plan["sessions"][0]
 
-    _take(client, first["id"], "good")
+    _take_missing_last_mc(client, first["id"])
     after = _refresh(client, plan)
 
     assert _topic(after, first["topic_id"])["review_box"] == 1
@@ -312,11 +345,8 @@ def test_rating_a_copied_card_updates_the_original_card_schedule(client, today, 
     first = plan["sessions"][0]
     quiz = client.get(f"/quizzes/{first['id']}").json()
     card = next(q for q in quiz["questions"] if q["question_type"] == "FLASHCARD")
-    answers = [
-        {"question_id": q["id"], "quality": 4} if q["question_type"] == "FLASHCARD"
-        else {"question_id": q["id"], "selected_option": q["answer"]}
-        for q in quiz["questions"]
-    ]
+    answers = _answers(quiz, "good")
+    next(a for a in answers if a["question_id"] == card["id"])["quality"] = 3  # passes SM-2, still reviewed
     client.post(f"/quizzes/{quiz['id']}/submit", json={"answers": answers})
 
     plan = _refresh(client, plan)

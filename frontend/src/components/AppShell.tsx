@@ -8,6 +8,7 @@ import {
   FolderOpen,
   House,
   KeyRound,
+  MessageCircleQuestion,
   Target,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { Link, matchPath, useLocation } from "react-router-dom";
 
 import { LogoMark } from "./brand/Logo";
 import { PageTransition } from "./motion/PageTransition";
+import { useEnterAnimation } from "./motion/useEnterAnimation";
 
 export const APP_HOME_PATH = "/inicio";
 
@@ -45,6 +47,7 @@ export const NAVIGATION: NavigationItem[] = [
   },
   { to: "/practica", label: "Práctica", icon: ClipboardCheck, primary: true, title: "Práctica" },
   { to: "/temas", label: "Temas clave", shortLabel: "Temas", icon: ChartNoAxesColumnDecreasing, title: "Temas clave" },
+  { to: "/preguntas", label: "Mis preguntas", shortLabel: "Preguntas", icon: MessageCircleQuestion, title: "Mis preguntas" },
   { to: "/documents", label: "Recursos", icon: FolderOpen, title: "Recursos" },
   { to: "/goals", label: "Metas", icon: Target, title: "Metas" },
   { to: "/settings", label: "Conectar IA", icon: KeyRound, title: "Conectar IA" },
@@ -96,7 +99,7 @@ function NavigationLinks({
             to={item.to}
             onClick={() => onNavigate?.(item.to)}
             aria-current={isActive ? "page" : undefined}
-            className={`flex min-h-11 items-center gap-3 rounded-control px-3 py-2 text-sm font-medium transition-colors duration-[var(--motion-micro)] motion-reduce:transition-none ${
+            className={`flex min-h-11 items-center gap-3 rounded-control px-3 py-2 text-sm font-medium transition-colors duration-micro motion-reduce:transition-none ${
               isActive
                 ? "bg-action-subtle text-text-primary ring-1 ring-inset ring-action-hover/40"
                 : "text-text-muted hover:bg-surface-subtle hover:text-text-primary"
@@ -134,6 +137,8 @@ export function AppShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const moreSheetRef = useRef<HTMLElement>(null);
+  useEnterAnimation(moreSheetRef, "pop", mobileMenuOpen, { skipFirst: true });
   const previousPathname = useRef(pathname);
   const activeOverflowItem = overflowNavigation.find((item) =>
     isNavigationItemActive(item, pathname),
@@ -226,7 +231,7 @@ export function AppShell({
                 key={item.to}
                 to={item.to}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-control px-0.5 text-[0.6875rem] font-medium leading-3 transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-control px-0.5 text-[0.6875rem] font-medium leading-3 transition-colors duration-micro motion-reduce:transition-none ${
                   isActive
                     ? "bg-action-subtle text-text-primary"
                     : "text-text-muted hover:bg-surface-subtle hover:text-text-primary"
@@ -251,7 +256,7 @@ export function AppShell({
               aria-controls="mobile-overflow-navigation"
               aria-current={activeOverflowItem ? "page" : undefined}
               onClick={() => setMobileMenuOpen((open) => !open)}
-              className={`flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-control px-0.5 text-[0.6875rem] font-medium leading-3 transition-colors motion-reduce:transition-none ${
+              className={`flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-control px-0.5 text-[0.6875rem] font-medium leading-3 transition-colors duration-micro motion-reduce:transition-none ${
                 activeOverflowItem
                   ? "bg-action-subtle text-text-primary"
                   : "text-text-muted hover:bg-surface-subtle hover:text-text-primary"
@@ -264,10 +269,11 @@ export function AppShell({
           </div>
         </nav>
         <nav
+          ref={moreSheetRef}
           id="mobile-overflow-navigation"
           aria-label="Más destinos"
           hidden={!mobileMenuOpen}
-          className={`absolute bottom-full right-1 mb-2 w-60 gap-1 rounded-surface border border-line bg-surface-elevated p-2 shadow-flow ${
+          className={`absolute bottom-full right-1 mb-2 origin-bottom-right w-60 gap-1 rounded-surface border border-line bg-surface-elevated p-2 shadow-flow ${
             mobileMenuOpen ? "grid" : "hidden"
           }`}
         >

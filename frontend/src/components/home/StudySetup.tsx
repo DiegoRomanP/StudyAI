@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -11,16 +11,18 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import type { AcademicProfileHint, GoalType } from "../../api/types";
 import {
   getDocumentsListSnapshot,
   useDocuments,
   useGoals,
+  usePlans,
   useLlmRuntime,
   useUploadDocument,
 } from "../../hooks/queries";
+import { parseApiDate } from "../../lib/studyProgress";
 import { useAppConfig } from "../../hooks/useAppConfig";
 import { useStudyStart, type StudyStartInput } from "../../hooks/useStudyStart";
 import {
@@ -29,6 +31,7 @@ import {
   type GoalTemplate,
 } from "../../lib/goalTemplates";
 import { DocumentPicker } from "../documents/DocumentPicker";
+import { useEnterAnimation } from "../motion/useEnterAnimation";
 import { generationLabel } from "../plan/GenerationProgress";
 import { ACADEMIC_PROFILE_OPTIONS, PedagogySelector } from "../plan/PedagogySelector";
 import { DocumentUpload } from "../documents/DocumentUpload";
@@ -63,13 +66,21 @@ const STEPS: { id: StepId; label: string; title: string; icon: typeof FileUp }[]
  * Coordination (writes, retries, recovery) lives in useStudyStart; this component only
  * collects the selection and explains what is missing.
  */
-export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
+export function StudySetup({
+  headingLevel = 2,
+  onClose,
+}: {
+  headingLevel?: 2 | 3;
+  /** Folds the assistant; only offered while no plan is being generated. */
+  onClose?: () => void;
+}) {
   const queryClient = useQueryClient();
   const documentsQuery = useDocuments();
   const documents = documentsQuery.data;
   const upload = useUploadDocument();
   const goalsQuery = useGoals();
   const goals = goalsQuery.data ?? [];
+  const plans = usePlans().data;
   const ai = useAiReadiness();
   const { isSaas } = useAppConfig();
   const study = useStudyStart();
@@ -85,7 +96,20 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   const [goalType, setGoalType] = useState<GoalType>("LEARNING");
   const [title, setTitle] = useState("");
   const [adaptiveTeachingEnabled, setAdaptiveTeachingEnabled] = useState(false);
+  const [examDate, setExamDate] = useState("");
   const [profileHint, setProfileHint] = useState<AcademicProfileHint>("auto");
+
+  // "?meta=ID" (after saving a goal) preselects that goal, once.
+  const [searchParams] = useSearchParams();
+  const presetGoalId = Number(searchParams.get("meta"));
+  const presetApplied = useRef(false);
+  useEffect(() => {
+    if (presetApplied.current || !presetGoalId || !goalsQuery.data) return;
+    if (!goalsQuery.data.some((goal) => goal.id === presetGoalId)) return;
+    presetApplied.current = true;
+    setGoalMode("existing");
+    setExistingGoalId(presetGoalId);
+  }, [presetGoalId, goalsQuery.data]);
 
   // Planes recién terminados aparecen en el resto de Inicio (read-only refetch).
   useEffect(() => {
@@ -102,6 +126,11 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
     (documents ?? []).filter((document) => document.status === "INDEXED").map((document) => document.id),
   );
   const selectedIndexed = selectedDocs.filter((id) => indexedIds.has(id));
+  // Most recent plan whose documents are still indexed: offer its material in one click.
+  const lastPlan = [...(plans ?? [])]
+    .sort((a, b) => (parseApiDate(b.created_at)?.getTime() ?? 0) - (parseApiDate(a.created_at)?.getTime() ?? 0) || b.id - a.id)
+    .find((plan) => plan.document_ids.some((id) => indexedIds.has(id)));
+  const reusableIds = lastPlan?.document_ids.filter((id) => indexedIds.has(id)) ?? [];
 
   const goalReady = goalMode === "existing" ? existingGoalId !== "" : title.trim().length > 0;
 
@@ -128,7 +157,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
         : ai.status === "pending"
           ? "Consultando el proveedor de IA…"
           : ai.status === "unknown"
-            ? "Pulsa «Reintentar»."
+            ? "Pulsa «Reintentar» o elige otra IA."
             : ai.status === "needs-setup" && ai.freeLimit !== undefined
               ? `Hoy usaste tus ${ai.freeLimit} usos gratis. Conecta tu IA.`
               : "Falta elegir una IA.",
@@ -145,6 +174,12 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
   const reachable = firstPending === -1 ? last : firstPending;
   const active = Math.min(stepIndex, reachable);
   const step = steps[active];
+  const prevActive = useRef(active);
+  const direction = active < prevActive.current ? "back" : "forward";
+  useEffect(() => {
+    prevActive.current = active;
+  }, [active]);
+  useEnterAnimation(stepRef, "stepForward", active, { skipFirst: true, direction });
 
   // Keyboard and screen-reader users land on the new step's heading, not on a vanished button.
   useEffect(() => {
@@ -174,7 +209,15 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
       goal:
         goalMode === "existing" && existingGoalId !== ""
           ? { kind: "existing", goalId: existingGoalId }
-          : { kind: "template", payload: { goal_type: goalType, title: title.trim(), description: "" } },
+          : {
+              kind: "template",
+              payload: {
+                goal_type: goalType,
+                title: title.trim(),
+                description: "",
+                ...(examDate ? { exam_date: examDate } : {}),
+              },
+            },
       documentIds: selectedIndexed,
       ...(adaptiveTeachingEnabled
         ? {
@@ -199,7 +242,12 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
     <Card variant="glass" className="space-y-5">
       <div className="flex items-center gap-3">
         <IconTile icon={Sparkles} className="h-11 w-11" />
-        <Heading className="font-display text-xl font-semibold text-text-primary">Prepara tu plan de estudio</Heading>
+        <Heading className="min-w-0 flex-1 font-display text-xl font-semibold text-text-primary">Prepara tu plan de estudio</Heading>
+        {onClose && !flowActive && (
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cerrar
+          </Button>
+        )}
       </div>
 
       {!flowActive && (
@@ -218,7 +266,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                 <>
                   <span
                     aria-hidden="true"
-                    className={`block h-1 rounded-full ${
+                    className={`block h-1 rounded-full transition-colors duration-micro ${
                       current ? "bg-action-hover" : done ? "bg-state-success" : "bg-line"
                     }`}
                   />
@@ -281,6 +329,18 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                   documents={documents ?? []}
                   documentsError={documentsQuery.isError}
                 />
+                {lastPlan && documentsReliable && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setSelectedDocs(reusableIds);
+                      goTo(1);
+                    }}
+                  >
+                    Usar el material de «{lastPlan.title}»
+                  </Button>
+                )}
                 <DocumentPicker
                   documents={documents ?? []}
                   selectedDocumentIds={selectedDocs}
@@ -367,6 +427,13 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                         ))}
                       </Select>
                     </div>
+                    <Input
+                      id="study-goal-exam-date"
+                      type="date"
+                      label="Fecha del examen (opcional)"
+                      value={examDate}
+                      onChange={(event) => setExamDate(event.target.value)}
+                    />
                   </div>
                 )}
                 <PedagogySelector
@@ -396,7 +463,7 @@ export function StudySetup({ headingLevel = 2 }: { headingLevel?: 2 | 3 }) {
                         ? `${savedGoal.title} · ${GOAL_TYPE_LABELS[savedGoal.goal_type]}`
                         : "—"
                       : title.trim()
-                        ? `${title.trim()} · ${GOAL_TYPE_LABELS[goalType]}`
+                        ? `${title.trim()} · ${GOAL_TYPE_LABELS[goalType]}${examDate ? ` · examen ${examDate}` : ""}`
                         : "—"
                   }
                   onChange={() => goTo(1)}
@@ -529,6 +596,13 @@ function StepTitle({
   );
 }
 
+/** Status alerts enter with `reveal` when their phase starts (they mount once per phase). */
+function EnterBox({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEnterAnimation(ref, "reveal");
+  return <div ref={ref}>{children}</div>;
+}
+
 function StudyStatus({
   study,
   onRetry,
@@ -565,7 +639,7 @@ function StudyStatus({
         </div>
       )}
       {study.phase === "ready" && study.plan && (
-        <Alert tone="success" title="¡Tu plan está listo!">
+        <EnterBox><Alert tone="success" title="¡Tu plan está listo!">
           <p>
             {study.plan.title} · {study.plan.sessions.length}{" "}
             {study.plan.sessions.length === 1 ? "sesión" : "sesiones"}
@@ -584,10 +658,10 @@ function StudyStatus({
               Preparar otro plan
             </Button>
           </div>
-        </Alert>
+        </Alert></EnterBox>
       )}
       {study.phase === "error" && study.error && (
-        <Alert tone="error" title="No se pudo preparar tu plan">
+        <EnterBox><Alert tone="error" title="No se pudo preparar tu plan">
           <p>{study.error}</p>
           <div className="flex flex-wrap gap-2">
             {study.planLoadFailed ? (
@@ -629,10 +703,10 @@ function StudyStatus({
               </Link>
             </p>
           )}
-        </Alert>
+        </Alert></EnterBox>
       )}
       {study.phase === "uncertain" && study.error && (
-        <Alert tone="warning" title="Resultado sin confirmar">
+        <EnterBox><Alert tone="warning" title="Resultado sin confirmar">
           <p>{study.error}</p>
           {study.uncertainStage === "plan" ? (
             <div>
@@ -651,7 +725,7 @@ function StudyStatus({
               </Button>
             </div>
           )}
-        </Alert>
+        </Alert></EnterBox>
       )}
     </div>
   );

@@ -6,7 +6,8 @@
 - There is no root package manager setup; run backend and frontend commands from their own directories.
 - The backend entrypoint is `backend/main.py`; it exposes `app` and starts database initialization during FastAPI lifespan.
 - Routes live in `backend/app/api/v1/routes/` but are mounted at root paths such as `/documents` and `/plans`, not under `/api/v1`.
-- Read `CLAUDE.md` for longer notes, but prefer current code, tests, and executable configuration when prose conflicts.
+- Read `CLAUDE.md` (rules) and `docs/README.md` (map of all documentation by backend/frontend feature); prefer current code, tests, and executable configuration when prose conflicts.
+- Strict per-path rules live in `.claude/rules/` (architecture, data, LLM, colors, UI); plans are written agentic and saved in `plans/` (see `.claude/skills/studyai-plan/SKILL.md`).
 
 ## Commands
 
@@ -78,6 +79,6 @@ npm run build
 ## Sources Of Truth
 
 - Use FastAPI `/openapi.json` and `/docs` as the runtime API contract; keep `docs/api_contract.yaml` synchronized.
-- `README.md`, `CLAUDE.md`, and `docs/api_contract.yaml` describe the current product and runtime contract.
+- `README.md`, `docs/` (index `docs/README.md`), and `docs/api_contract.yaml` describe the current product and runtime contract.
 - `docs/AGENTS_STATUS.md` is the current phase/status summary.
-- `studyai_multiagent_plan.md`, `docs/HISTORIAL-producto-backend.md` and `docs/HISTORIAL-frontend.md` preserve historical planning context; use their current-status banners and the executable code/tests over any old task prompt or line reference.
+- `studyai_multiagent_plan.md`, `docs/backend/historial.md` and `docs/frontend/historial.md` preserve historical planning context; use their current-status banners and the executable code/tests over any old task prompt or line reference.

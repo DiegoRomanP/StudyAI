@@ -25,6 +25,8 @@ interface DocumentUploadProps {
   headingLevel?: 2 | 3 | 4 | 5;
   /** Drop the "Subir documentos" heading when the caller's own title already says it. */
   hideHeading?: boolean;
+  /** Shorter single-row dropzone, for when the caller already lists documents. */
+  compact?: boolean;
 }
 
 function getUploadFeedback(
@@ -69,6 +71,7 @@ export function DocumentUpload({
   documentsError = false,
   headingLevel = 2,
   hideHeading = false,
+  compact = false,
 }: DocumentUploadProps) {
   const Heading = `h${headingLevel}` as const;
   const id = useId();
@@ -205,11 +208,15 @@ export function DocumentUpload({
         />
         <label
           htmlFor={inputId}
-          className={`flex min-h-48 flex-col items-center justify-center gap-2 p-8 text-center ${
+          className={`flex items-center justify-center text-center ${
+            compact
+              ? "min-h-24 flex-row flex-wrap gap-x-3 gap-y-1 px-4 py-3"
+              : "min-h-48 flex-col gap-2 p-8"
+          } ${
             isUploading ? "cursor-not-allowed" : "cursor-pointer"
           }`}
         >
-          <FileUp aria-hidden="true" className="h-8 w-8 text-action-hover" />
+          <FileUp aria-hidden="true" className={`${compact ? "h-6 w-6" : "h-8 w-8"} text-action-hover`} />
           <span className="text-lg font-semibold text-text-primary">Arrastra tus archivos aquí</span>
           <span className="text-sm font-medium text-action">o haz clic para elegirlos</span>
           <span id={helpId} className="text-sm text-text-muted">

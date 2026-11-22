@@ -19,6 +19,8 @@ OUTPUT_BUDGETS: dict[str, int] = {
     "topic_analysis": 2048,
     "session_plan": 1024,
     "session_content": 4096,
+    "assistant_chat": 1024,
+    "image_description": 512,
 }
 MAX_OUTPUT_BUDGET = 8192
 

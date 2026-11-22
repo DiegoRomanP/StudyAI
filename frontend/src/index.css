@@ -7,6 +7,8 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-bottom: 0;
+  /* Reserve the scrollbar's space so content never jumps sideways when a page grows past the screen. */
+  scrollbar-gutter: stable;
 }
 
 @media (max-width: 767px) {
@@ -80,4 +82,13 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Esqueleto con retardo: no destella en respuestas rápidas. Va tras la regla de reduced-motion
+   (que no se toca); ahí la animación queda en 0,01 ms y el esqueleto aparece sin retardo visible. */
+@keyframes skeleton-in {
+  from { opacity: 0; }
+}
+.skeleton-delay {
+  animation: skeleton-in 150ms var(--motion-easing) 150ms both;
 }

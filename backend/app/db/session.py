@@ -16,10 +16,15 @@ _is_sqlite = _settings.DATABASE_URL.startswith("sqlite")
 # waits up to 30 s for another one instead of failing with "database is locked".
 _connect_args = {"check_same_thread": False, "timeout": 30} if _is_sqlite else {}
 
+# Postgres (Supabase session pooler): drop dead pooled connections, stay well under the
+# pooler's per-user connection cap.
+_pool_args = {} if _is_sqlite else {"pool_pre_ping": True, "pool_size": 5, "max_overflow": 5}
+
 engine = create_engine(
     _settings.DATABASE_URL,
     connect_args=_connect_args,
     future=True,
+    **_pool_args,
 )
 
 if _is_sqlite:

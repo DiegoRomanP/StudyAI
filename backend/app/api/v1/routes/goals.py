@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -12,7 +14,6 @@ from app.models.goal import Goal
 from app.models.user import User
 from app.repositories.goal_repository import GoalRepository
 from app.schemas.goal import GoalCreate, GoalResponse, GoalUpdate
-from app.services.plan_service import PlanService
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -29,6 +30,7 @@ def create_goal(
         goal_type=payload.goal_type,
         title=payload.title,
         description=payload.description,
+        exam_date=payload.exam_date,
     )
     return GoalResponse.model_validate(repo.save(goal))
 
@@ -67,6 +69,8 @@ def update_goal(
         goal.title = payload.title
     if payload.description is not None:
         goal.description = payload.description
+    if "exam_date" in payload.model_fields_set:  # explicit null clears it
+        goal.exam_date = payload.exam_date
     return GoalResponse.model_validate(repo.save(goal))
 
 
@@ -77,19 +81,14 @@ def delete_goal(
     user: User = Depends(get_current_user),
 ) -> None:
     goal = _get_owned_goal(db, user.id, goal_id)
-    # A goal's plans reference it by goal_id but nothing cascades that
-    # relationship at the ORM or DB level (see PlanService.delete_plan for
-    # why) — delete them explicitly first so no plan is left pointing at a
-    # goal that no longer exists.
-    plan_service = PlanService(db)
-    for plan in plan_service.repo.list_for_goal(goal.id):
-        plan_service.delete_plan(user.id, plan.id)
-    GoalRepository(db).delete(goal)
+    # Soft delete: the goal disappears from the learner's lists, but its plans,
+    # sessions, results and reviews stay. They are removed only via DELETE /plans/{id}.
+    goal.deleted_at = datetime.now(timezone.utc)
+    GoalRepository(db).save(goal)
 
 
 def _get_owned_goal(db: Session, user_id: int, goal_id: int) -> Goal:
-    repo = GoalRepository(db)
-    goal = repo.find_by_id(goal_id)
-    if goal is None or goal.user_id != user_id:
+    goal = GoalRepository(db).find_active_owned(user_id, goal_id)
+    if goal is None:
         raise NotFoundError("Meta no encontrada.")
     return goal

@@ -10,6 +10,8 @@ import {
 import { api } from "../api/endpoints";
 import { isNotFoundError, isPlanDocumentsUnavailableError } from "../api/errors";
 import type {
+  AssistantAskInput,
+  AssistantHistoryDTO,
   AdaptivePlanOptions,
   DocumentDTO,
   LLMCredentialDTO,
@@ -179,13 +181,8 @@ export function useDeleteGoal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteGoal(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["goals"] });
-      // Deleting a goal cascades to its plans (and their results/reviews) on the backend.
-      qc.invalidateQueries({ queryKey: ["plans"] });
-      qc.invalidateQueries({ queryKey: ["plan"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
+    // A deleted goal keeps its plans and progress, so only the goal list changes.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
   });
 }
 
@@ -478,5 +475,36 @@ export function useProviderModels(provider: LLMProviderKey, enabled: boolean) {
     queryFn: () => api.listProviderModels(provider),
     enabled,
     retry: false,
+  });
+}
+
+/** The study assistant chat of one session. */
+export function useAssistantHistory(sessionId: number | null) {
+  return useQuery({
+    queryKey: ["assistant", sessionId],
+    queryFn: () => api.getAssistantHistory(sessionId as number),
+    enabled: sessionId != null,
+  });
+}
+
+export function useAskAssistant(sessionId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AssistantAskInput) => api.askAssistant(sessionId, input),
+    onSuccess: (reply) => {
+      qc.setQueryData<AssistantHistoryDTO>(["assistant", sessionId], (current) => ({
+        messages: [...(current?.messages ?? []), reply.question, reply.answer],
+        remaining: reply.remaining,
+      }));
+      qc.invalidateQueries({ queryKey: ["assistant-questions"] });
+    },
+  });
+}
+
+/** Every question the learner asked the assistant (Mis preguntas). */
+export function useAssistantQuestions(planId?: number) {
+  return useQuery({
+    queryKey: ["assistant-questions", planId ?? null],
+    queryFn: () => api.listAssistantQuestions(planId),
   });
 }

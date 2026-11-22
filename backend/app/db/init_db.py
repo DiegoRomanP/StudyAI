@@ -24,7 +24,14 @@ from app.models.user import User
 logger = get_logger(__name__)
 
 # Providers registered after the native PostgreSQL enum type was first created.
-_BACKFILLED_PROVIDER_NAMES = (LLMProviderName.GEMINI, LLMProviderName.DEEPSEEK)
+_BACKFILLED_PROVIDER_NAMES = (
+    LLMProviderName.GEMINI,
+    LLMProviderName.DEEPSEEK,
+    LLMProviderName.CLAUDE_CODE,
+    LLMProviderName.OPENCODE,
+    LLMProviderName.PI,
+    LLMProviderName.CODEX,
+)
 
 
 def _ensure_provider_enum_values() -> None:
@@ -83,11 +90,46 @@ def init_db() -> None:
     _ensure_plan_error_message_column()
     _ensure_plan_idempotency_columns()
     _ensure_plan_generation_columns()
+    _ensure_free_ai_assistant_column()
+    _ensure_goal_deleted_at_column()
+    _ensure_goal_exam_date_column()
     _purge_retired_provider_credentials()
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
     _ensure_adaptive_content_columns()
     _seed_default_user()
+    sync_id_sequences()
+    _enable_row_level_security()
+
+
+def _enable_row_level_security() -> None:
+    """Close Supabase's REST API over our tables: RLS with no policies denies its anon and
+    authenticated roles, while the backend connects as the owner and is unaffected."""
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        for table in inspect(engine).get_table_names():
+            conn.execute(text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))
+
+
+def sync_id_sequences() -> None:
+    """Move each Postgres ``id`` sequence past the largest stored id.
+
+    Rows inserted with an explicit id (the seeded demo user, copied data) don't advance
+    the sequence, so the next autoincrement insert would collide with them. SQLite needs nothing.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if "id" not in table.c or not table.c.id.autoincrement:
+                continue
+            sequence = conn.execute(text("SELECT pg_get_serial_sequence(:t, 'id')"), {"t": table.name}).scalar()
+            if sequence:
+                conn.execute(
+                    text(f"SELECT setval(:s, COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM {table.name}"),
+                    {"s": sequence},
+                )
 
 
 def _ensure_document_error_message_column() -> None:
@@ -155,6 +197,18 @@ def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
             if name not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_goal_deleted_at_column() -> None:
+    _add_missing_columns("goals", {"deleted_at": "TIMESTAMP"})
+
+
+def _ensure_goal_exam_date_column() -> None:
+    _add_missing_columns("goals", {"exam_date": "DATE"})
+
+
+def _ensure_free_ai_assistant_column() -> None:
+    _add_missing_columns("free_ai_usage", {"assistant_uses": "INTEGER NOT NULL DEFAULT 0"})
 
 
 def _ensure_plan_generation_columns() -> None:
@@ -270,15 +324,15 @@ def _ensure_llm_verification_columns() -> None:
                 conn.execute(
                     text(
                         "UPDATE llm_credentials "
-                        "SET is_active = 0, verified_revision = NULL, verified_at = NULL, "
+                        "SET is_active = FALSE, verified_revision = NULL, verified_at = NULL, "
                         "verified_fingerprint = NULL WHERE id = :credential_id"
                     ),
                     {"credential_id": credential_id},
                 )
         conn.execute(
             text(
-                "UPDATE llm_credentials SET is_active = 0 WHERE is_active = 1 AND id NOT IN "
-                "(SELECT MAX(id) FROM llm_credentials WHERE is_active = 1 GROUP BY user_id)"
+                "UPDATE llm_credentials SET is_active = FALSE WHERE is_active = TRUE AND id NOT IN "
+                "(SELECT MAX(id) FROM llm_credentials WHERE is_active = TRUE GROUP BY user_id)"
             )
         )
         if engine.dialect.name == "sqlite":

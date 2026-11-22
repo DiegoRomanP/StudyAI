@@ -247,6 +247,7 @@ def _generate_adaptive_content(
         prompt=adaptive_session_content.build_adaptive_session_prompt(
             session.topic_name, goal_text, sources, config, snapshot,
             failed_points=points, previous_lesson=session.material.content_markdown[:4000],
+            rich_content=llm.rich_content,
         ),
         context={
             "content_version": 2,

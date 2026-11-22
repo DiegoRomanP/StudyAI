@@ -425,3 +425,38 @@ describe("ProviderSetup", () => {
     expect(screen.getByText("Primero pulsa «Probar configuración guardada».")).toBeVisible();
   });
 });
+
+describe("ProviderSetup for an agent CLI", () => {
+  const openCode: ProviderCatalogEntry = {
+    provider: "OPENCODE",
+    label: "OpenCode",
+    requires_model_selection: true,
+    default_model: "",
+    default_base_url: null,
+    common_models: [],
+    key_placeholder: "Usa tu sesión de la terminal",
+    requires_api_key: false,
+    supports_model_discovery: true,
+    supports_custom_base_url: false,
+    allows_custom_model: true,
+    installed: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.listProviderModels.mockResolvedValue([
+      { id: "opencode/beam-free", size_bytes: null, parameter_size: null, context_length: null, free: true },
+      { id: "openai/gpt-x", size_bytes: null, parameter_size: null, context_length: null, free: false },
+    ]);
+  });
+
+  it("warns when the CLI is missing, explains the login and marks free models", async () => {
+    renderSetup({ catalogEntry: openCode, credential: undefined });
+
+    expect(screen.getByText(/No está instalada en el equipo/)).toBeInTheDocument();
+    expect(screen.getByText("opencode auth")).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "opencode/beam-free — gratis" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "openai/gpt-x" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Clave de API")).not.toBeInTheDocument();
+  });
+});

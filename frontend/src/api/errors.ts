@@ -31,6 +31,10 @@ const LLM_PROVIDERS = new Set<LLMProviderKey>([
   "NVIDIA",
   "OLLAMA",
   "GEMINI",
+  "CLAUDE_CODE",
+  "OPENCODE",
+  "PI",
+  "CODEX",
 ]);
 
 function isLlmErrorCode(code: unknown): code is LLMProviderErrorCode {

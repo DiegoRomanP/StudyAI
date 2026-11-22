@@ -216,7 +216,7 @@ class LLMSettingsService:
     def list_ollama_models(self, provider: LLMProviderName) -> list[OllamaModel]:
         list_models = getattr(get_provider_definition(provider), "list_models", None)
         if not callable(list_models):
-            raise ValidationError("Solo Ollama permite descubrir modelos instalados.")
+            raise ValidationError("Este proveedor no permite descubrir modelos.")
         return list_models()
 
     def _get_owned(self, user_id: int, provider: LLMProviderName) -> LLMCredential:

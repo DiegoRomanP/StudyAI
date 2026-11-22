@@ -94,7 +94,7 @@ abiertos los puntos 1 (baja), 2 (baja) y 3 (media), ver abajo.
 
 `AnalisisVersionPago.md` proponía separar «inteligencia de la plataforma» (ruta, progreso, SM-2, que debe
 seguir disponible sin créditos) de «generación con IA» (que consume créditos). Esa idea está incorporada en
-`docs/SaaS-Produccion.md` (§3), que es la hoja de ruta vigente.
+`docs/backend/despliegue/saas-produccion.md` (§3), que es la hoja de ruta vigente.
 
 ## Pendientes que sobreviven
 
@@ -110,4 +110,4 @@ seguir disponible sin créditos) de «generación con IA» (que consume crédito
 | Reanudar §9 | Si hay `LLM_TIMEOUT` en la IA gratuita, subir `DEFAULT_AI_READ_TIMEOUT_SECONDS` a 90 y `DEFAULT_AI_TOTAL_BUDGET_SECONDS` a 180 |
 | Enfoque §13 | `weak_topics` del dashboard basado en el dominio por tema; fecha de examen en la meta; preguntas intercaladas; guardar el cronómetro al recargar; preferencia «Siempre» entre dispositivos |
 | Onboarding §10 / QA | Enlaces «¿Dónde obtengo una API key?» por proveedor (hecho en parte en `lib/aiSetupHelp.ts`); FAQ in-app derivable de `glossary.ts`/`pageGuides.ts`; QA H2–H9 (sin verificar si siguen abiertos) de copy/accesibilidad (objetivos táctiles de `HelpTerm`, 8 proveedores desplegados sin recomendación, error de título vacío en Metas sin foco) |
-| Producto | Ocultar respuestas del quiz hasta el envío; rate limiting; auth real (cubierto por `SaaS-Produccion.md`) |
+| Producto | Ocultar respuestas del quiz hasta el envío; rate limiting; auth real (cubierto por `docs/backend/despliegue/saas-produccion.md`) |

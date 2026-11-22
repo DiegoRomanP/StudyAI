@@ -7,6 +7,7 @@ import { clearQuizDraft, useQuizDraftCount } from "../../lib/quizDraft";
 import { sessionState, type SessionState } from "../../lib/sessionState";
 import { parseApiDate, suggestedSessionDate, toDateKey } from "../../lib/studyProgress";
 import { formatTimeAgo } from "../../lib/timeAgo";
+import { HelpTip } from "../help/HelpTip";
 import { Dialog } from "../Dialog";
 import { Badge, Button, SegmentedControl } from "../ui";
 
@@ -43,9 +44,12 @@ export function SessionTimeline({ plan }: { plan: PlanDTO }) {
   return (
     <section aria-labelledby="sessions-title" className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="sessions-title" className="font-display text-lg font-semibold text-text-primary">
-          Sesiones
-        </h2>
+        <div className="flex items-center gap-1">
+          <h2 id="sessions-title" className="font-display text-lg font-semibold text-text-primary">
+            Sesiones
+          </h2>
+          <HelpTip label="Fechas sugeridas">Las fechas de las sesiones son sugeridas.</HelpTip>
+        </div>
         <SegmentedControl
           label="Vista de sesiones"
           value={view}
@@ -84,7 +88,6 @@ export function SessionTimeline({ plan }: { plan: PlanDTO }) {
           ))}
         </ol>
       )}
-      <p className="text-xs text-text-muted">Fechas sugeridas.</p>
     </section>
   );
 }
@@ -118,7 +121,7 @@ function SessionRow({ session, showOrder = false }: { session: SessionSummaryDTO
         type="button"
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        className="block w-full rounded-surface border border-line bg-surface-paper text-left transition-colors hover:border-line-strong hover:bg-surface-subtle motion-reduce:transition-none"
+        className="block w-full rounded-surface border border-line bg-surface-paper text-left hover:border-line-strong hover:bg-surface-subtle transition-interactive duration-micro ease-flow motion-safe:active:scale-press active:duration-press"
       >
         <span className="flex min-h-14 items-center gap-3 px-4 py-3">
           {showOrder ? (

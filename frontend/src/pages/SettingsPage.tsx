@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { KeyRound } from "lucide-react";
+import { ChevronDown, KeyRound, SquareTerminal } from "lucide-react";
 
 import { getApiErrorMessage } from "../api/errors";
 import { getConfirmedRuntimeProvider, LlmRuntimeSummary } from "../components/llm/LlmRuntimeSummary";
 import { EmptyState } from "../components/EmptyState";
-import { HelpTerm } from "../components/help/HelpTerm";
-import { PageGuide } from "../components/help/PageGuide";
+import { HelpTip } from "../components/help/HelpTip";
+import { ProviderIcon } from "../components/llm/ProviderIcon";
 import { ProviderSetup } from "../components/llm/ProviderSetup";
-import { Button, Card, Spinner } from "../components/ui";
+import { isAgentCli } from "../lib/aiSetupHelp";
+import { PageHeader, Button, Card, Skeleton } from "../components/ui";
 import {
   useDeactivateAllLlmCredentials,
   useLlmCredentials,
@@ -18,19 +19,19 @@ import {
 export function SettingsPage() {
   const {
     data: catalog,
-    isLoading: catalogLoading,
+    isPending: catalogLoading,
     error: catalogError,
     refetch: refreshCatalog,
   } = useProviderCatalog();
   const {
     data: credentials,
-    isLoading: credentialsLoading,
+    isPending: credentialsLoading,
     error: credentialsError,
     refetch: refreshCredentials,
   } = useLlmCredentials();
   const {
     data: runtime,
-    isLoading: runtimeLoading,
+    isPending: runtimeLoading,
     isFetching: runtimeFetching,
     error: runtimeError,
     refetch: refreshRuntime,
@@ -51,13 +52,6 @@ export function SettingsPage() {
     isRefreshing: runtimeIsRefreshing,
     error: runtimeError,
   });
-  const providersWithoutKey = catalog
-    ?.filter((entry) => !entry.requires_api_key)
-    .map((entry) => entry.label);
-  const providersWithDiscovery = catalog
-    ?.filter((entry) => entry.supports_model_discovery)
-    .map((entry) => entry.label);
-
   async function handleDeactivateAll() {
     setSettingsActionError(null);
     try {
@@ -82,17 +76,7 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="max-w-reading">
-        <h1 className="font-display text-3xl font-bold text-text-primary">Conectar IA</h1>
-        <p className="mt-2 text-text-muted">
-          Elige qué <HelpTerm term="proveedorIA">IA</HelpTerm> genera tus planes.{" "}
-          <strong className="font-semibold text-text-primary">
-            No necesitas clave para probar StudyAI: el modo demo ya funciona.
-          </strong>
-        </p>
-      </header>
-
-      <PageGuide id="conectar-ia" />
+      <PageHeader icon={KeyRound} title="Conectar IA" help="conectar-ia" />
 
       <LlmRuntimeSummary
         runtime={runtime}
@@ -112,30 +96,79 @@ export function SettingsPage() {
         </Card>
       )}
 
-      <Card className="space-y-2 border-line-strong bg-surface-subtle text-sm text-text-muted">
-        <p>Las claves necesarias se almacenan cifradas en el servidor y no vuelven a mostrarse aquí.</p>
-        {providersWithoutKey && providersWithoutKey.length > 0 && (
-          <p>No requieren clave: {providersWithoutKey.join(", ")}.</p>
-        )}
-        {providersWithDiscovery && providersWithDiscovery.length > 0 && (
-          <p>Modelos disponibles en el servidor: {providersWithDiscovery.join(", ")}.</p>
-        )}
-      </Card>
-
       {isLoading ? (
-        <Spinner label="Cargando proveedores…" />
-      ) : catalog && catalog.length > 0 ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {catalog.map((entry) => (
-            <ProviderSetup
-              key={entry.provider}
-              catalogEntry={entry}
-              credential={credentials?.find((item) => item.provider === entry.provider)}
-              isRuntimeActive={confirmedProvider === entry.provider}
-              refreshCredentials={refreshCredentials}
-              variant="advanced"
-            />
+        <div role="status" aria-label="Cargando proveedores…" aria-busy="true" className="grid gap-8 lg:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton height={28} width="40%" />
+              <Skeleton height={72} />
+              <Skeleton height={72} />
+            </div>
           ))}
+        </div>
+      ) : catalog && catalog.length > 0 ? (
+        <div className="grid gap-8 lg:grid-cols-2 lg:items-start">
+          {[
+            {
+              title: "Terminal",
+              icon: SquareTerminal,
+              help: "Usa tu sesión de Claude, ChatGPT u OpenCode. Solo en local.",
+              agentCli: true,
+            },
+            { title: "Clave de API", icon: KeyRound, help: "Ollama también está en este grupo: corre en tu equipo.", agentCli: false },
+          ].map((group) => {
+            const entries = catalog.filter((entry) => isAgentCli(entry) === group.agentCli);
+            if (entries.length === 0) return null;
+            return (
+              <section key={group.title} aria-label={`Proveedores: ${group.title}`} className="space-y-3">
+                <h2 className="flex items-center gap-2 font-display text-xl font-semibold text-text-primary">
+                  <group.icon aria-hidden="true" className="h-5 w-5 text-text-muted" />
+                  {group.title}
+                  <HelpTip label={`Ayuda sobre ${group.title}`}>{group.help}</HelpTip>
+                </h2>
+                <div className="space-y-2">
+                  {entries.map((entry) => {
+                    const credential = credentials?.find((item) => item.provider === entry.provider);
+                    const active = confirmedProvider === entry.provider;
+                    const status = active
+                      ? { text: "Activo", dot: "bg-state-success" }
+                      : credential?.is_verified
+                        ? { text: "Verificada", dot: "bg-state-correct" }
+                        : credential
+                          ? { text: "Sin verificar", dot: "bg-state-warning" }
+                          : { text: "Sin configurar", dot: "bg-line-strong" };
+                    return (
+                      <details
+                        key={entry.provider}
+                        open={active || (Boolean(credential) && !credential?.is_verified)}
+                        className="group rounded-control border border-line-strong bg-surface-paper"
+                      >
+                        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 font-display text-lg font-semibold text-text-primary [&::-webkit-details-marker]:hidden">
+                          <ProviderIcon provider={entry.provider} />
+                          <span className="min-w-0 flex-1">{entry.label}</span>
+                          <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${status.dot}`} />
+                          {!credential && <span className="sr-only">{status.text}</span>}
+                          <ChevronDown
+                            aria-hidden="true"
+                            className="h-4 w-4 shrink-0 text-text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none"
+                          />
+                        </summary>
+                        <div className="px-4 pb-4">
+                          <ProviderSetup
+                            catalogEntry={entry}
+                            credential={credential}
+                            isRuntimeActive={active}
+                            refreshCredentials={refreshCredentials}
+                            variant="advanced"
+                          />
+                        </div>
+                      </details>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </div>
       ) : (
         <EmptyState

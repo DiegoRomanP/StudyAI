@@ -1,9 +1,11 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Lock, RefreshCw, SquareTerminal, Trash2 } from "lucide-react";
 
 import { getApiErrorMessage } from "../../api/errors";
 import type { LLMCredentialDTO, ProviderCatalogEntry } from "../../api/types";
+import { HelpTip } from "../help/HelpTip";
 import { Badge, Button, Card, Input, Select } from "../ui";
 import { useProviderSetup } from "../../hooks/useProviderSetup";
+import { AGENT_CLI_LOGIN, isAgentCli } from "../../lib/aiSetupHelp";
 
 export type ProviderSetupVariant = "compact" | "advanced";
 
@@ -29,6 +31,7 @@ export function ProviderSetup({
     refreshCredentials,
     startAdvancedExpanded: variant === "advanced",
   });
+  const advanced = variant === "advanced";
   const providerId = catalogEntry.provider.toLowerCase();
   const modelFieldVisible =
     catalogEntry.requires_model_selection && (Boolean(credential) || !catalogEntry.requires_api_key);
@@ -68,31 +71,61 @@ export function ProviderSetup({
       <Card className={variant === "compact" ? "space-y-3 !p-4" : "space-y-4"}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="font-display text-lg font-semibold text-text-primary">{catalogEntry.label}</h2>
+            {!advanced && (
+              <h2 className="font-display text-lg font-semibold text-text-primary">{catalogEntry.label}</h2>
+            )}
+            {/* advanced: name and status live in the SettingsPage <summary> */}
             {credential ? (
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
                 <span className="font-mono text-xs">
-                  {catalogEntry.requires_api_key ? credential.masked_api_key : "Modelo local"}
+                  {catalogEntry.requires_api_key
+                    ? credential.masked_api_key
+                    : isAgentCli(catalogEntry)
+                      ? "Sesión de la terminal"
+                      : "Modelo local"}
                 </span>
-                <Badge color={setup.isVerifiedForDraft ? "green" : "amber"}>
-                  {setup.isVerifiedForDraft ? "Verificada" : "Sin verificar"}
-                </Badge>
+                {advanced ? (
+                  <span className="sr-only">{setup.isVerifiedForDraft ? "Verificada" : "Sin verificar"}</span>
+                ) : (
+                  <Badge color={setup.isVerifiedForDraft ? "green" : "amber"}>
+                    {setup.isVerifiedForDraft ? "Verificada" : "Sin verificar"}
+                  </Badge>
+                )}
               </div>
-            ) : (
+            ) : !advanced ? (
               <p className="mt-1 text-sm text-text-muted">
-                {catalogEntry.requires_api_key ? "Todavía no está configurada" : "Configura un modelo local"}
+                {catalogEntry.requires_api_key
+                  ? "Todavía no está configurada"
+                  : isAgentCli(catalogEntry)
+                    ? "Usa tu suscripción o sus modelos gratuitos"
+                    : "Configura un modelo local"}
+              </p>
+            ) : null}
+            {catalogEntry.installed === false && (
+              <p className="mt-1 text-sm text-state-warning" role="status">
+                No está instalada en el equipo donde corre StudyAI. Instálala e inicia sesión en la terminal.
+              </p>
+            )}
+            {isAgentCli(catalogEntry) && AGENT_CLI_LOGIN[catalogEntry.provider] && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
+                {advanced ? (
+                  <SquareTerminal aria-hidden="true" className="h-4 w-4 shrink-0" />
+                ) : (
+                  <>Inicia sesión una vez en la terminal:</>
+                )}{" "}
+                <code className="font-mono">{AGENT_CLI_LOGIN[catalogEntry.provider]}</code>
               </p>
             )}
           </div>
-          {setup.isActive && <Badge color="green">Activo</Badge>}
+          {setup.isActive && (advanced ? <span className="sr-only">Activo</span> : <Badge color="green">Activo</Badge>)}
         </div>
 
         {setup.showKeyForm && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+          <div className={`grid items-end gap-2 ${advanced ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]"}`}>
             <Input
               id={`provider-${providerId}-api-key`}
               label="Clave de API"
-              hint="Se envía al servidor para almacenarse de forma cifrada; no se vuelve a mostrar."
+              hint={advanced ? undefined : "Se envía al servidor para almacenarse de forma cifrada; no se vuelve a mostrar."}
               type={setup.showKey ? "text" : "password"}
               value={setup.apiKey}
               onChange={(event) => setup.handleApiKeyChange(event.target.value)}
@@ -111,6 +144,14 @@ export function ProviderSetup({
             >
               {setup.showKey ? "Ocultar" : "Mostrar"}
             </Button>
+            {advanced && (
+              <span className="mb-3 flex items-center gap-1 text-text-muted">
+                <Lock aria-hidden="true" className="h-4 w-4" />
+                <HelpTip label="Cifrado de la clave">
+                  Se envía al servidor y se guarda cifrada. No se vuelve a mostrar.
+                </HelpTip>
+              </span>
+            )}
           </div>
         )}
 
@@ -120,7 +161,11 @@ export function ProviderSetup({
               id={`provider-${providerId}-model`}
               label="Modelo"
               hint={
-                catalogEntry.supports_model_discovery
+                advanced
+                  ? undefined
+                  : isAgentCli(catalogEntry)
+                  ? "Modelos que esta herramienta permite usar con tu sesión."
+                  : catalogEntry.supports_model_discovery
                   ? "Elige un modelo disponible en el servidor del proveedor."
                   : "El modelo sugerido viene del catálogo del servidor."
               }
@@ -135,7 +180,7 @@ export function ProviderSetup({
               {setup.modelOptions.map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.id}
-                  {!catalogEntry.supports_model_discovery && model.free ? " — gratis" : ""}
+                  {model.free ? " — gratis" : ""}
                 </option>
               ))}
               {setup.canUseCustomModel && <option value="__custom__">Personalizado…</option>}
@@ -145,7 +190,7 @@ export function ProviderSetup({
               <Input
                 id={`provider-${providerId}-custom-model`}
                 label="ID exacto del modelo"
-                hint="Escribe el identificador tal como lo espera el proveedor."
+                hint={advanced ? undefined : "Escribe el identificador tal como lo espera el proveedor."}
                 value={setup.customModel}
                 onChange={(event) => {
                   setup.setCustomModel(event.target.value);
@@ -158,16 +203,17 @@ export function ProviderSetup({
             {catalogEntry.supports_model_discovery && (
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-text-muted">
                 <span>
-                  {setup.modelOptions.length} modelos disponibles
+                  {advanced ? setup.modelOptions.length : `${setup.modelOptions.length} modelos disponibles`}
                 </span>
                 <Button
                   variant="ghost"
                   type="button"
+                  aria-label={advanced ? "Actualizar modelos" : undefined}
                   className="px-2 py-2 text-action"
                   onClick={() => void setup.refetchDiscoveredModels()}
                   disabled={setup.operationPending || setup.isDiscoveryLoading}
                 >
-                  Actualizar modelos
+                  {advanced ? <RefreshCw aria-hidden="true" className="h-4 w-4" /> : "Actualizar modelos"}
                 </Button>
               </div>
             )}
@@ -342,7 +388,7 @@ export function ProviderSetup({
 
           {credential && catalogEntry.requires_api_key && !setup.changingKey && (
             <Button
-              variant="secondary"
+              variant={advanced ? "ghost" : "secondary"}
               type="button"
               onClick={setup.handleChangeKey}
               disabled={setup.operationPending}
@@ -363,9 +409,23 @@ export function ProviderSetup({
           )}
 
           {credential && (
-            <Button variant="danger" type="button" onClick={setup.handleDelete} disabled={setup.operationPending}>
-              {setup.activeAction === "delete" ? "Eliminando…" : "Eliminar"}
-            </Button>
+            advanced ? (
+              <Button
+                variant="ghost"
+                type="button"
+                aria-label={setup.activeAction === "delete" ? "Eliminando…" : "Eliminar"}
+                title="Eliminar"
+                onClick={setup.handleDelete}
+                disabled={setup.operationPending}
+                className="ml-auto hover:!bg-state-error-subtle hover:!text-state-error focus-visible:!text-state-error"
+              >
+                <Trash2 aria-hidden="true" className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button variant="danger" type="button" onClick={setup.handleDelete} disabled={setup.operationPending}>
+                {setup.activeAction === "delete" ? "Eliminando…" : "Eliminar"}
+              </Button>
+            )
           )}
         </div>
 

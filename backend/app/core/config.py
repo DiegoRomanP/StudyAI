@@ -100,6 +100,8 @@ class Settings(BaseSettings):
     DEFAULT_DEEPSEEK_MODEL: str = "deepseek-flash"
     # Plan generations per learner and day on the included AI; their own key has no limit.
     FREE_AI_DAILY_LIMIT: int = Field(default=3, ge=1)
+    # Study assistant messages per user and UTC day on the free AI (separate from plan uses).
+    FREE_AI_ASSISTANT_DAILY_LIMIT: int = Field(default=20, ge=1)
     # The free tier gets a short leash so a stalled provider fails fast.
     DEFAULT_AI_READ_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0, allow_inf_nan=False)
     DEFAULT_AI_TOTAL_BUDGET_SECONDS: float = Field(default=120.0, gt=0, allow_inf_nan=False)
@@ -110,15 +112,28 @@ class Settings(BaseSettings):
     OLLAMA_TIMEOUT_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
     OLLAMA_TOTAL_BUDGET_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
     OLLAMA_MAX_RETRIES: int = Field(default=1, ge=1)
+    # Agent CLIs (Claude Code, OpenCode, Pi, Codex) launched on the backend host
+    # with the operator's own login. A name is looked up on PATH; an absolute path also works.
+    CLAUDE_CODE_BIN: str = "claude"
+    OPENCODE_BIN: str = "opencode"
+    PI_BIN: str = "pi"
+    CODEX_BIN: str = "codex"
+    HARNESS_TIMEOUT_SECONDS: float = Field(default=600.0, gt=0, allow_inf_nan=False)
+    HARNESS_TEST_TIMEOUT_SECONDS: float = Field(default=90.0, gt=0, allow_inf_nan=False)
+    HARNESS_DISCOVERY_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, allow_inf_nan=False)
 
     # --- Persistence ---------------------------------------------------------
     DATABASE_URL: str = f"sqlite:///{(BACKEND_DIR / 'studyai.db').as_posix()}"
     CHROMA_PERSIST_DIR: str = (STORAGE_DIR / "chroma").as_posix()
+    # "pgvector" keeps chunk embeddings in the Postgres DATABASE_URL (SaaS); "auto" = ChromaDB or in-memory.
+    VECTOR_BACKEND: Literal["auto", "pgvector"] = "auto"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
     # --- Storage / uploads ---------------------------------------------------
     UPLOAD_DIR: str = (STORAGE_DIR / "uploads").as_posix()
     MAX_UPLOAD_MB: int = 25
+    # Figures kept (and described by a vision-capable AI) per PDF; the rest are dropped.
+    PDF_MAX_IMAGES: int = Field(default=20, ge=0)
 
     # --- App -----------------------------------------------------------------
     APP_ENV: str = "development"

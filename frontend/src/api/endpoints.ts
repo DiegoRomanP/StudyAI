@@ -2,6 +2,10 @@ import { apiClient } from "./client";
 import type {
   AdaptivePlanOptions,
   AppConfigDTO,
+  AssistantAskDTO,
+  AssistantAskInput,
+  AssistantHistoryDTO,
+  AssistantQuestionDTO,
   DashboardDTO,
   DocumentDTO,
   GoalCreate,
@@ -99,6 +103,16 @@ export const api = {
     apiClient.post<SessionDetailDTO>(`/sessions/${id}/reinforcement`).then((r) => r.data),
   cancelReinforcement: (id: number) =>
     apiClient.post<SessionDetailDTO>(`/sessions/${id}/reinforcement/cancel`).then((r) => r.data),
+
+  // Study assistant
+  getAssistantHistory: (sessionId: number) =>
+    apiClient.get<AssistantHistoryDTO>(`/sessions/${sessionId}/assistant`).then((r) => r.data),
+  askAssistant: (sessionId: number, input: AssistantAskInput) =>
+    apiClient.post<AssistantAskDTO>(`/sessions/${sessionId}/assistant`, input).then((r) => r.data),
+  listAssistantQuestions: (planId?: number) =>
+    apiClient
+      .get<AssistantQuestionDTO[]>("/assistant/questions", { params: planId ? { plan_id: planId } : {} })
+      .then((r) => r.data),
 
   // Quizzes
   getQuiz: (sessionId: number) =>

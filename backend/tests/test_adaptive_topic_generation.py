@@ -281,7 +281,7 @@ def test_unknown_mixed_and_missing_topic_profiles_use_general_fallback(
     }
 
 
-def test_invalid_bloom_target_fails_generation_before_persisting_topics(
+def test_bloom_target_outside_the_profile_degrades_to_understand(
     client: TestClient, monkeypatch
 ):
     provider = _TopicProvider(
@@ -293,13 +293,14 @@ def test_invalid_bloom_target_fails_generation_before_persisting_topics(
     generated = _generate(client, goal_id)
 
     assert generated["response"].status_code == 202
-    assert client.get(f"/plans/{generated['plan_id']}/status").json()["status"] == "FAILED"
+    assert client.get(f"/plans/{generated['plan_id']}/status").json()["status"] == "READY"
     _, topics = _stored_topics(generated["plan_id"])
-    assert topics == []
-    assert len(provider.topic_prompt) > 0
+    snapshot = PedagogySnapshot.model_validate(topics[0].pedagogy_snapshot)
+    assert snapshot.profile_id == "logical_deductive"
+    assert [objective.bloom_target for objective in snapshot.objectives] == ["understand"]
 
 
-def test_too_many_topic_objectives_fail_generation_before_persisting_topics(
+def test_extra_topic_objectives_are_capped_at_three(
     client: TestClient, monkeypatch
 ):
     topic = _topic("Álgebra", "logical_deductive", "objective-1", "apply")
@@ -319,9 +320,11 @@ def test_too_many_topic_objectives_fail_generation_before_persisting_topics(
     generated = _generate(client, goal_id)
 
     assert generated["response"].status_code == 202
-    assert client.get(f"/plans/{generated['plan_id']}/status").json()["status"] == "FAILED"
     _, topics = _stored_topics(generated["plan_id"])
-    assert topics == []
+    snapshot = PedagogySnapshot.model_validate(topics[0].pedagogy_snapshot)
+    assert [objective.id for objective in snapshot.objectives] == [
+        "objective-0", "objective-1", "objective-2",
+    ]
 
 
 def test_v2_request_identity_freezes_goal_type_and_keeps_v1_hash_unchanged(

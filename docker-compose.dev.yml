@@ -1,0 +1,12 @@
+# Local Postgres + pgvector for running the backend suite against Postgres:
+#   docker compose -f docker-compose.dev.yml up -d db
+#   TEST_DATABASE_URL=postgresql+psycopg://studyai:studyai@localhost:5433/studyai python -m pytest -q
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: studyai
+      POSTGRES_PASSWORD: studyai
+      POSTGRES_DB: studyai
+    ports:
+      - "5433:5432"

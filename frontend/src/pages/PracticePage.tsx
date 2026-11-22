@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { ArrowRight, ClipboardCheck, Eye, Info, ListChecks, RotateCcw, Timer } from "lucide-react";
+import { ArrowRight, CircleCheck, CircleDashed, ClipboardCheck, Eye, Info, ListChecks, RotateCcw, Timer } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { getApiErrorMessage } from "../api/errors";
@@ -7,18 +7,16 @@ import { useLearningMode } from "../hooks/useAdaptiveLearning";
 import type { PlanDTO, QuizQuestionDTO, SessionSummaryDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
-import { HelpTerm } from "../components/help/HelpTerm";
-import { PageGuide } from "../components/help/PageGuide";
 import { ChoiceOptions } from "../components/session/ChoiceOptions";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
+import { SessionSkeleton, StepEnter } from "../components/session/SessionSkeleton";
 import {
-  ActivityIndicator,
   Alert,
   Badge,
   Button,
   ButtonLink,
   Card,
-  IconTile,
+  PageHeader,
   SegmentedControl,
   Select,
   Skeleton,
@@ -100,18 +98,7 @@ export function PracticePage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start gap-3">
-        <IconTile icon={ClipboardCheck} className="h-11 w-11" />
-        <div>
-          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Práctica</h1>
-          <p className="mt-1 max-w-reading text-text-muted">
-            Repasa las preguntas de tus sesiones con respuesta inmediata, o haz el{" "}
-            <HelpTerm term="simulacro" /> para registrar tu resultado.
-          </p>
-        </div>
-      </header>
-
-      <PageGuide id="practica" />
+      <PageHeader icon={ClipboardCheck} title="Práctica" help="practica" />
 
       <SegmentedControl
         label="Modo de práctica"
@@ -129,7 +116,13 @@ export function PracticePage() {
         isError={plansQuery.isError}
         isFetching={plansQuery.isFetching}
         isEmpty={(plans) => readyPlans(plans).length === 0}
-        loading={<Skeleton height={240} />}
+        loading={
+          <div className="space-y-3">
+            <Skeleton height={44} />
+            <Skeleton height={96} />
+            <Skeleton height={96} />
+          </div>
+        }
         loadingLabel="Cargando tus planes"
         empty={
           <Card className="space-y-3">
@@ -149,7 +142,7 @@ export function PracticePage() {
             <div className="space-y-4">
               {ready.length === 1 && (
                 <p className="text-sm text-text-muted">
-                  Practicando con: <span className="font-medium text-text-primary">{plan.title}</span>
+                  Plan: <span className="font-medium text-text-primary">{plan.title}</span>
                 </p>
               )}
               {ready.length > 1 && (
@@ -212,7 +205,7 @@ function QuestionPractice({ plan }: { plan: PlanDTO }) {
         </Alert>
       );
     }
-    return <ActivityIndicator label="Comprobando la versión de la primera sesión…" />;
+    return <SessionSkeleton label="Comprobando la versión de la primera sesión…" lines={1} />;
   }
 
   if (modeQuery.data.content_version === 2) {
@@ -273,7 +266,7 @@ function LegacyQuestionPractice({ plan }: { plan: PlanDTO }) {
       )}
 
       {pending ? (
-        <ActivityIndicator label="Cargando preguntas…" />
+        <SessionSkeleton label="Cargando preguntas…" lines={1} />
       ) : filtered.length === 0 ? (
         !pending &&
         failed.length === 0 && (
@@ -297,25 +290,34 @@ function LegacyQuestionPractice({ plan }: { plan: PlanDTO }) {
   );
 }
 
+/** Row state as an icon (same as SessionTimeline) with the text kept for screen readers. */
+function StatusMark({ done, doneLabel }: { done: boolean; doneLabel: string }) {
+  const Icon = done ? CircleCheck : CircleDashed;
+  return (
+    <>
+      <Icon aria-hidden="true" className={`h-5 w-5 shrink-0 ${done ? "text-state-success" : "text-text-muted"}`} />
+      <span className="sr-only">{done ? doneLabel : "Pendiente"}</span>
+    </>
+  );
+}
+
 function AdaptiveAssessmentList({ sessions }: { sessions: SessionSummaryDTO[] }) {
+  const firstPendingId = sessions.find((session) => session.status !== "COMPLETED")?.id;
   return (
     <div className="space-y-3">
-      <p className="text-sm text-text-muted">
-        Las sesiones de este plan usan evaluaciones adaptativas. Abre una sesión para responderla.
-      </p>
       <ul className="grid grid-cols-1 gap-3">
         {sessions.map((session) => (
           <li key={session.id}>
             <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="break-words font-medium text-text-primary">{session.topic_name}</p>
-                <p className="text-sm text-text-muted">
-                  {session.status === "COMPLETED" ? "Completada · resultado disponible en la sesión" : "Pendiente"}
+                <p className="flex items-center gap-2 break-words font-medium text-text-primary">
+                  <StatusMark done={session.status === "COMPLETED"} doneLabel="Completada" />
+                  {session.topic_name}
                 </p>
               </div>
               <ButtonLink
                 to={`/session/${session.id}?fase=test`}
-                variant={session.status === "COMPLETED" ? "secondary" : "primary"}
+                variant={session.id === firstPendingId ? "primary" : "secondary"}
                 aria-label={`Abrir evaluación de ${session.topic_name}`}
               >
                 Abrir evaluación
@@ -367,6 +369,7 @@ function PracticeRound({ planId, questions }: { planId: number; questions: Pract
   }
 
   return (
+    <StepEnter id={index}>
     <PracticeQuestionCard
       item={questions[index]}
       position={index + 1}
@@ -379,6 +382,7 @@ function PracticeRound({ planId, questions }: { planId: number; questions: Pract
       onNext={() => setIndex((current) => current + 1)}
       nextButton={nextButton}
     />
+    </StepEnter>
   );
 }
 
@@ -499,6 +503,7 @@ function ExamList({ plan }: { plan: PlanDTO }) {
       />
     );
   }
+  const firstPendingId = sessions.find((session) => session.status !== "COMPLETED")?.id;
   return (
     <div className="space-y-3">
       <p className="flex items-start gap-2 text-sm text-text-muted">
@@ -511,14 +516,14 @@ function ExamList({ plan }: { plan: PlanDTO }) {
           <li key={session.id}>
             <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="break-words font-medium text-text-primary">{session.topic_name}</p>
-                <p className="text-sm text-text-muted">
-                  {session.status === "COMPLETED" ? "Completada · un nuevo intento se registra aparte" : "Pendiente"}
+                <p className="flex items-center gap-2 break-words font-medium text-text-primary">
+                  <StatusMark done={session.status === "COMPLETED"} doneLabel="Completada" />
+                  {session.topic_name}
                 </p>
               </div>
               <ButtonLink
                 to={`/session/${session.id}?fase=test`}
-                variant={session.status === "COMPLETED" ? "secondary" : "primary"}
+                variant={session.id === firstPendingId ? "primary" : "secondary"}
                 aria-label={`Hacer el simulacro de ${session.topic_name}`}
               >
                 Hacer el simulacro

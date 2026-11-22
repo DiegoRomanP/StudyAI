@@ -1,23 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { CircleCheck, FileCode, FileText, FolderOpen, Trash2, TriangleAlert } from "lucide-react";
 
 import type { DocumentDTO } from "../api/types";
 import { getApiErrorMessage } from "../api/errors";
 import { EmptyState } from "../components/EmptyState";
-import { PageGuide } from "../components/help/PageGuide";
-import { Alert, Badge, Button, ButtonLink, Card, Spinner } from "../components/ui";
+import { PageHeader, Alert, Button, ButtonLink, Card, Skeleton, Spinner } from "../components/ui";
 import { DocumentUpload } from "../components/documents/DocumentUpload";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
 
-const STATUS_COLORS = {
-  PENDING: "amber",
-  INDEXED: "green",
-  FAILED: "red",
-} as const;
-
 const STATUS_LABELS = {
-  PENDING: "Preparando…",
   INDEXED: "Listo para usar",
   FAILED: "No se pudo leer",
 } as const;
@@ -43,7 +35,7 @@ function useJustIndexed(documents: DocumentDTO[] | undefined) {
 export function DocumentsPage() {
   const {
     data: documents,
-    isLoading,
+    isPending,
     isFetching,
     isError,
     error,
@@ -55,24 +47,18 @@ export function DocumentsPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold">Recursos</h1>
-        <p className="text-text-muted">
-          Tus documentos de estudio (PDF o Markdown). La IA los usa para crear tus planes.
-        </p>
-      </header>
-
-      <PageGuide id="recursos" />
+      <PageHeader icon={FolderOpen} title="Recursos" help="recursos" />
 
       <DocumentUpload
         onUpload={(file) => upload.mutateAsync(file)}
         documents={documents ?? []}
         documentsError={isError}
+        hideHeading
+        compact={(documents ?? []).length > 0}
       />
 
       {justIndexed && (
-        <Alert tone="success" title="Listo. Siguiente: prepara tu plan">
-          <p>Tu documento ya se puede usar. Elige tu meta y genera el plan desde Inicio.</p>
+        <Alert tone="success" title="Documento listo">
           <div>
             <ButtonLink to="/inicio#preparar-plan" variant="secondary">
               Preparar mi plan
@@ -82,7 +68,9 @@ export function DocumentsPage() {
       )}
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Tus documentos</h2>
+        <h2 className="text-lg font-semibold">
+          Tus documentos{documents && documents.length > 0 ? ` · ${documents.length}` : ""}
+        </h2>
         {isError && (
           <div role="alert" className="space-y-2 rounded-surface border border-state-error bg-state-error-subtle p-4 text-sm text-state-error">
             <p>
@@ -100,8 +88,12 @@ export function DocumentsPage() {
             </Button>
           </div>
         )}
-        {isLoading && documents === undefined ? (
-          <Spinner label="Cargando..." />
+        {isPending && documents === undefined && !isError ? (
+          <div role="status" aria-label="Cargando..." aria-busy="true" className="space-y-3">
+            {[0, 1].map((i) => (
+              <Skeleton key={i} height={72} />
+            ))}
+          </div>
         ) : documents && documents.length > 0 ? (
           <>
             <div className="grid min-w-0 grid-cols-1 gap-3">
@@ -124,7 +116,7 @@ export function DocumentsPage() {
           <EmptyState
             icon={FolderOpen}
             title="Aún no tienes documentos"
-            description="Sube tus apuntes, un temario o un libro en PDF o Markdown. Es lo primero que necesita la IA para preparar tu plan."
+            description="Sube un PDF o Markdown para empezar."
           />
         ) : null}
       </section>
@@ -149,30 +141,47 @@ function DocumentRow({ doc }: { doc: DocumentDTO }) {
     }
   }
 
+  const Icon = doc.file_type === "md" ? FileCode : FileText;
+  const size =
+    doc.file_size >= 1024 * 1024
+      ? `${(doc.file_size / 1024 / 1024).toFixed(1)} MB`
+      : `${(doc.file_size / 1024).toFixed(1)} KB`;
+
   return (
-    <Card className="flex items-center justify-between">
-      <div className="min-w-0">
-        <p className="truncate font-medium text-text-primary">{doc.filename}</p>
-        <p className="text-xs text-text-muted">
-          {(doc.file_size / 1024).toFixed(1)} KB · .{doc.file_type}
-        </p>
-        {doc.status === "FAILED" && doc.error_message && (
-          <p className="mt-1 text-xs text-state-error">{doc.error_message}</p>
-        )}
-        {error && <p className="mt-1 text-xs text-state-error">{error}</p>}
+    <Card className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <Icon aria-hidden="true" className="h-5 w-5 shrink-0 text-text-muted" />
+        <div className="min-w-0">
+          <p className="truncate font-medium text-text-primary">{doc.filename}</p>
+          <p className="text-xs text-text-muted">{size}</p>
+          {doc.status === "FAILED" && doc.error_message && (
+            <p className="mt-1 text-xs text-state-error">{doc.error_message}</p>
+          )}
+          {error && <p className="mt-1 text-xs text-state-error">{error}</p>}
+        </div>
       </div>
-      <div className="flex items-center gap-3">
-        {doc.status === "PENDING" && <Spinner />}
-        <Badge color={STATUS_COLORS[doc.status]}>
-          {STATUS_LABELS[doc.status]}
-        </Badge>
+      <div className="flex items-center gap-1">
+        {doc.status === "PENDING" && <Spinner label="Preparando…" />}
+        {doc.status === "INDEXED" && (
+          <>
+            <CircleCheck aria-hidden="true" className="h-5 w-5 text-state-correct" />
+            <span className="sr-only">{STATUS_LABELS.INDEXED}</span>
+          </>
+        )}
+        {doc.status === "FAILED" && (
+          <span className="inline-flex items-center gap-1 text-xs text-state-error">
+            <TriangleAlert aria-hidden="true" className="h-4 w-4" />
+            {STATUS_LABELS.FAILED}
+          </span>
+        )}
         <Button
-          variant="danger"
-          className="px-2.5 py-1 text-xs"
+          variant="ghost"
+          aria-label={`Eliminar «${doc.filename}»`}
+          className="hover:!bg-state-error-subtle hover:!text-state-error"
           onClick={handleDelete}
           disabled={deleteDocument.isPending}
         >
-          {deleteDocument.isPending ? "Eliminando..." : "Eliminar"}
+          <Trash2 aria-hidden="true" className="h-4 w-4" />
         </Button>
       </div>
     </Card>

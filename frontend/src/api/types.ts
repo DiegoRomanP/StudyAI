@@ -31,6 +31,7 @@ export interface GoalDTO {
   goal_type: GoalType;
   title: string;
   description: string;
+  exam_date?: string | null;
   created_at: string;
 }
 
@@ -38,12 +39,14 @@ export interface GoalCreate {
   goal_type: GoalType;
   title: string;
   description: string;
+  exam_date?: string | null;
 }
 
 export interface GoalUpdate {
   goal_type?: GoalType;
   title?: string;
   description?: string;
+  exam_date?: string | null;
 }
 
 export type SessionKind = "NEW" | "REVIEW";
@@ -195,7 +198,11 @@ export type LLMProviderKey =
   | "OPENROUTER"
   | "NVIDIA"
   | "OLLAMA"
-  | "GEMINI";
+  | "GEMINI"
+  | "CLAUDE_CODE"
+  | "OPENCODE"
+  | "PI"
+  | "CODEX";
 
 export interface ModelOption {
   id: string;
@@ -215,6 +222,8 @@ export interface ProviderCatalogEntry {
   supports_model_discovery: boolean;
   supports_custom_base_url: boolean;
   allows_custom_model: boolean;
+  // Agent CLIs only (Claude Code, OpenCode, Pi, Codex): whether the server has the binary.
+  installed?: boolean | null;
 }
 
 export interface LLMCredentialDTO {
@@ -317,4 +326,46 @@ export interface OllamaModel {
   size_bytes: number | null;
   parameter_size: string | null;
   context_length: number | null;
+  free?: boolean;
+}
+
+// Study assistant
+export type AssistantMode = "STUDY" | "EXAM";
+
+export interface AssistantMessageDTO {
+  id: number;
+  role: "USER" | "ASSISTANT";
+  mode: AssistantMode;
+  content: string;
+  created_at: string;
+}
+
+export interface AssistantHistoryDTO {
+  messages: AssistantMessageDTO[];
+  /** Free-AI messages left today; null with the learner's own AI. */
+  remaining: number | null;
+}
+
+export interface AssistantAskInput {
+  message: string;
+  mode: AssistantMode;
+  question_id?: string | null;
+}
+
+export interface AssistantAskDTO {
+  question: AssistantMessageDTO;
+  answer: AssistantMessageDTO;
+  remaining: number | null;
+}
+
+export interface AssistantQuestionDTO {
+  id: number;
+  plan_id: number;
+  plan_title: string;
+  session_id: number;
+  topic_name: string;
+  mode: AssistantMode;
+  question: string;
+  answer: string;
+  created_at: string;
 }

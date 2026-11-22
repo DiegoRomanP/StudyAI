@@ -47,10 +47,22 @@ def utc_today() -> date:
     return datetime.now(timezone.utc).date()
 
 
+_ASSISTANT_LIMIT_MESSAGE = (
+    "Ya usaste tus {limit} mensajes gratis del asistente de hoy. Conecta tu propia IA en "
+    "«Conectar IA» o vuelve mañana."
+)
+
+
 class FreeAiQuota:
-    def __init__(self, db: Session) -> None:
+    """Plan/reinforcement uses by default; ``assistant=True`` counts study-assistant messages."""
+
+    def __init__(self, db: Session, *, assistant: bool = False) -> None:
         self.db = db
-        self.limit = get_settings().FREE_AI_DAILY_LIMIT
+        settings = get_settings()
+        self.limit = settings.FREE_AI_ASSISTANT_DAILY_LIMIT if assistant else settings.FREE_AI_DAILY_LIMIT
+        self._column = FreeAiUsage.assistant_uses if assistant else FreeAiUsage.uses
+        self._message = _ASSISTANT_LIMIT_MESSAGE if assistant else _LIMIT_MESSAGE
+        self._code = "FREE_AI_ASSISTANT_LIMIT" if assistant else "FREE_AI_DAILY_LIMIT"
 
     def _row(self, user_id: int) -> FreeAiUsage | None:
         return self.db.scalar(
@@ -61,7 +73,7 @@ class FreeAiQuota:
 
     def status(self, user_id: int) -> FreeAiStatus:
         row = self._row(user_id)
-        return FreeAiStatus(limit=self.limit, used=row.uses if row else 0)
+        return FreeAiStatus(limit=self.limit, used=getattr(row, self._column.key) if row else 0)
 
     def consume(self, user_id: int) -> date:
         """Spend one use or raise ``DailyLimitError``; returns the UTC day it was spent on.
@@ -80,13 +92,13 @@ class FreeAiQuota:
             .where(
                 FreeAiUsage.user_id == user_id,
                 FreeAiUsage.usage_date == today,
-                FreeAiUsage.uses < self.limit,
+                self._column < self.limit,
             )
-            .values(uses=FreeAiUsage.uses + 1)
+            .values({self._column: self._column + 1})
         )
         self.db.commit()
         if spent.rowcount == 0:
-            raise DailyLimitError(_LIMIT_MESSAGE.format(limit=self.limit), code="FREE_AI_DAILY_LIMIT")
+            raise DailyLimitError(self._message.format(limit=self.limit), code=self._code)
         return today
 
     def refund(self, user_id: int, day: date | None = None) -> None:
@@ -96,8 +108,8 @@ class FreeAiQuota:
             .where(
                 FreeAiUsage.user_id == user_id,
                 FreeAiUsage.usage_date == (day or utc_today()),
-                FreeAiUsage.uses > 0,
+                self._column > 0,
             )
-            .values(uses=FreeAiUsage.uses - 1)
+            .values({self._column: self._column - 1})
         )
         self.db.commit()

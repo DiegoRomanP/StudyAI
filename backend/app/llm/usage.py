@@ -10,7 +10,7 @@ from dataclasses import dataclass
 class LLMUsage:
     provider: str
     model: str
-    input_tokens: int
+    input_tokens: int  # every prompt token, cached ones included (cost_usd subtracts the cache)
     output_tokens: int
     cached_input_tokens: int = 0
 

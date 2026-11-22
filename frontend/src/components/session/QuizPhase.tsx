@@ -6,10 +6,13 @@ import { getApiErrorMessage } from "../../api/errors";
 import type { QuizAnswer, QuizQuestionDTO, QuizResultDTO } from "../../api/types";
 import { useQuiz, useSubmitQuiz } from "../../hooks/queries";
 import { clearQuizDraft, readQuizDraft, writeQuizDraft } from "../../lib/quizDraft";
+import { seededShuffle, shuffle } from "../../lib/shuffle";
 import { EmptyState } from "../EmptyState";
-import { Alert, Badge, Button, ButtonLink, Card, ProgressBar, Spinner } from "../ui";
+import { Alert, Badge, Button, ButtonLink, Card, ProgressBar } from "../ui";
+import { ReportAssistantQuestion } from "./AssistantPanel";
 import { ChoiceOptions } from "./ChoiceOptions";
 import { SafeMarkdown } from "./SafeMarkdown";
+import { EnterOnMount, SessionSkeleton, StepEnter } from "./SessionSkeleton";
 
 /** Short visible labels for the 0–5 recall scale; the long ones name each button. */
 export const QUALITY_SHORT_LABELS = ["Nada", "Me sonaba", "Casi", "Con esfuerzo", "Con dudas", "Perfecto"];
@@ -22,16 +25,6 @@ const QUALITY_LABELS = [
   "la recordé con dudas",
   "la recordé perfectamente",
 ];
-
-/** Fisher-Yates on a copy. */
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 export function QuizPhase({
   sessionId,
@@ -93,7 +86,7 @@ export function QuizPhase({
     );
   }
 
-  if (isLoading || !quiz) return <Spinner label="Cargando quiz…" />;
+  if (isLoading || !quiz) return <SessionSkeleton label="Cargando quiz…" />;
   if (quiz.questions.length === 0) {
     return (
       <EmptyState
@@ -115,7 +108,8 @@ export function QuizPhase({
         .filter((item): item is QuizQuestionDTO => item !== undefined)
     : null;
   // A saved order that no longer matches the quiz (replaced by a reinforcement) is ignored.
-  const questions = shuffled && shuffled.length === quiz.questions.length ? shuffled : quiz.questions;
+  const questions =
+    shuffled && shuffled.length === quiz.questions.length ? shuffled : seededShuffle(quiz.questions, quiz.id);
   const firstUnanswered = questions.findIndex((item) => answers[item.id] === undefined);
   const position = index ?? (firstUnanswered === -1 ? questions.length - 1 : firstUnanswered);
   const question = questions[Math.min(position, questions.length - 1)];
@@ -143,7 +137,7 @@ export function QuizPhase({
     writeQuizDraft(sessionId, {
       quizId: quiz!.id,
       answers: updated,
-      order: questions === quiz!.questions ? null : questions.map((item) => item.id),
+      order: questions === shuffled ? questions.map((item) => item.id) : null,
     });
   }
 
@@ -180,6 +174,7 @@ export function QuizPhase({
 
   return (
     <div className="space-y-4">
+      <ReportAssistantQuestion id={question.id} />
       <ProgressBar value={(answeredCount / questions.length) * 100} label="Preguntas respondidas" />
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-text-muted">
@@ -194,6 +189,7 @@ export function QuizPhase({
 
       {outdated !== null && <Alert tone="warning">{outdated}</Alert>}
 
+      <StepEnter id={question.id}>
       {question.question_type === "FLASHCARD" ? (
         <FlashCard
           key={question.id}
@@ -209,6 +205,7 @@ export function QuizPhase({
           onSelect={(option) => record({ question_id: question.id, selected_option: option })}
         />
       )}
+      </StepEnter>
 
       {submitError !== null && (
         <Alert tone="error">
@@ -259,9 +256,11 @@ function FlashCard({
         {/* A stable control name; the revealed answer is announced from its own live region. */}
         <div id={answerId} role="status" aria-label="Respuesta" className="w-full">
           {flipped && (
-            <p className="border-t border-line pt-3 text-lg font-medium text-action-hover">
-              {question.answer}
-            </p>
+            <EnterOnMount preset="reveal" className="block">
+              <p className="border-t border-line pt-3 text-lg font-medium text-action-hover">
+                {question.answer}
+              </p>
+            </EnterOnMount>
           )}
         </div>
       </div>
@@ -290,7 +289,7 @@ function FlashCard({
                 aria-pressed={rated === quality}
                 aria-label={`Calidad ${quality}: ${label}`}
                 onClick={() => onRate(quality)}
-                className={`flex min-h-11 items-center justify-center gap-2 rounded-control px-3 py-2 text-sm transition-colors motion-reduce:transition-none ${
+                className={`flex min-h-11 items-center justify-center gap-2 rounded-control px-3 py-2 text-sm transition-[color,background-color,transform] duration-micro motion-safe:active:scale-press active:duration-press motion-reduce:transition-none ${
                   rated === quality
                     ? "bg-action-fill text-text-on-action"
                     : "bg-surface-muted text-text-muted hover:bg-surface-action-subtle hover:text-text-primary"

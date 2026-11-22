@@ -38,7 +38,7 @@
   --font-size-caption: 0.75rem;
   --line-height-ui: 1.5;
   --line-height-reading: 1.65;
-  --measure-reading: 70ch;
+  --measure-reading: 62ch;
 
   --space-study-1: 0.5rem;
   --space-study-2: 0.75rem;
@@ -62,4 +62,12 @@
   --motion-card: 320ms;
   --motion-page: 420ms;
   --motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-press: 120ms;
+  --motion-route: 180ms;
+  --motion-step: 200ms;
+  --motion-overlay: 220ms;
+  --motion-phase: 260ms;
+  --motion-sheet: 320ms;
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }

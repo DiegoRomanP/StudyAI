@@ -2,9 +2,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Outlet, Route, Routes, useMatch } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
+import { PageSkeleton } from "./components/PageSkeleton";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
 import { StudyStreakCard } from "./components/home/HomeCards";
-import { Spinner } from "./components/ui";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { DocumentsPage } from "./pages/DocumentsPage";
 import { GoalsPage } from "./pages/GoalsPage";
@@ -19,11 +19,12 @@ import { TopicsPage } from "./pages/TopicsPage";
 // Heavy routes load on demand: Recharts (Estadísticas), Markdown (Sesión/Práctica), the demo.
 const DashboardPage = lazy(() => import("./pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const DemoPage = lazy(() => import("./pages/DemoPage").then((module) => ({ default: module.DemoPage })));
+const QuestionsPage = lazy(() => import("./pages/QuestionsPage").then((module) => ({ default: module.QuestionsPage })));
 const PracticePage = lazy(() => import("./pages/PracticePage").then((module) => ({ default: module.PracticePage })));
 const SessionPage = lazy(() => import("./pages/SessionPage").then((module) => ({ default: module.SessionPage })));
 
 function Lazy({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<Spinner label="Cargando…" />}>{children}</Suspense>;
+  return <Suspense fallback={<PageSkeleton />}>{children}</Suspense>;
 }
 
 // SaaS has no bring-your-own-key page: the backend answers 404 there, so the UI does too.
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="/inicio" element={<HomePage />} />
         <Route path="/practica" element={<PracticePage />} />
         <Route path="/temas" element={<TopicsPage />} />
+        <Route path="/preguntas" element={<QuestionsPage />} />
         <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/plan" element={<PlanPage />} />
