@@ -1,7 +1,9 @@
 import { Check } from "lucide-react";
+import { useRef } from "react";
 
 import type { GenerationStage, PlanDTO } from "../../api/types";
 import { HelpTerm } from "../help/HelpTerm";
+import { useEnterAnimation } from "../motion/useEnterAnimation";
 import { ActivityIndicator, ProgressBar } from "../ui";
 
 type Progress = Pick<PlanDTO, "progress_stage" | "progress_done" | "progress_total">;
@@ -19,6 +21,17 @@ export function generationLabel(plan: Progress): string {
   return "Analizando tu material…";
 }
 
+/** Check of a finished stage: pops in when it appears (it mounts once, as the stage completes). */
+function PopCheck() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEnterAnimation(ref, "pop");
+  return (
+    <span ref={ref} className="flex">
+      <Check className="h-4 w-4 text-state-success" />
+    </span>
+  );
+}
+
 export function GenerationProgress({
   stage,
   done,
@@ -29,6 +42,8 @@ export function GenerationProgress({
   total: number;
 }) {
   const current = STAGE_ORDER.indexOf(stage ?? "TOPICS");
+  const labelRef = useRef<HTMLDivElement>(null);
+  useEnterAnimation(labelRef, "reveal", stage, { skipFirst: true });
   const steps = [
     "Leer tu material y detectar los temas",
     <>
@@ -39,7 +54,9 @@ export function GenerationProgress({
 
   return (
     <div className="space-y-4">
-      <ActivityIndicator label={generationLabel({ progress_stage: stage, progress_done: done, progress_total: total })} />
+      <div ref={labelRef}>
+        <ActivityIndicator label={generationLabel({ progress_stage: stage, progress_done: done, progress_total: total })} />
+      </div>
       {/* Only real data draws a bar: there is no percentage before the sessions exist. */}
       {stage === "CONTENT" && total > 0 && (
         <ProgressBar value={Math.round((done / total) * 100)} label="Sesiones preparadas" />
@@ -59,7 +76,7 @@ export function GenerationProgress({
             >
               <span aria-hidden="true" className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
                 {index < current ? (
-                  <Check className="h-4 w-4 text-state-success" />
+                  <PopCheck />
                 ) : (
                   <span
                     className={`h-2 w-2 rounded-full ${index === current ? "bg-action" : "bg-line"}`}

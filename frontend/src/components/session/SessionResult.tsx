@@ -5,6 +5,7 @@ import type { MasteryState, PlanTopicDTO, QuizResultDTO, SessionSummaryDTO } fro
 import { parseApiDate } from "../../lib/studyProgress";
 import { youtubeSearchUrl } from "../../lib/youtube";
 import { Badge, ButtonLink, Card } from "../ui";
+import { EnterOnMount } from "./SessionSkeleton";
 
 export function countRatedFlashcards(result: QuizResultDTO): number {
   return Object.values(result.detail).filter((entry) => entry.type === "flashcard").length;
@@ -63,7 +64,9 @@ export function SessionResult({
         </h2>
         {hasScore && (
           <div className="space-y-1">
-            <p className="font-display text-5xl font-bold text-action-hover">{result.score}%</p>
+            <EnterOnMount preset="pop" className="block origin-center">
+              <p className="font-display text-5xl font-bold text-action-hover">{result.score}%</p>
+            </EnterOnMount>
             <p className="text-sm text-text-muted">
               {result.correct} de {result.total} correctas
             </p>

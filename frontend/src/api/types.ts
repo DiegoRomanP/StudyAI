@@ -31,6 +31,7 @@ export interface GoalDTO {
   goal_type: GoalType;
   title: string;
   description: string;
+  exam_date?: string | null;
   created_at: string;
 }
 
@@ -38,12 +39,14 @@ export interface GoalCreate {
   goal_type: GoalType;
   title: string;
   description: string;
+  exam_date?: string | null;
 }
 
 export interface GoalUpdate {
   goal_type?: GoalType;
   title?: string;
   description?: string;
+  exam_date?: string | null;
 }
 
 export type SessionKind = "NEW" | "REVIEW";
@@ -195,7 +198,11 @@ export type LLMProviderKey =
   | "OPENROUTER"
   | "NVIDIA"
   | "OLLAMA"
-  | "GEMINI";
+  | "GEMINI"
+  | "CLAUDE_CODE"
+  | "OPENCODE"
+  | "PI"
+  | "CODEX";
 
 export interface ModelOption {
   id: string;
@@ -215,6 +222,8 @@ export interface ProviderCatalogEntry {
   supports_model_discovery: boolean;
   supports_custom_base_url: boolean;
   allows_custom_model: boolean;
+  // Agent CLIs only (Claude Code, OpenCode, Pi, Codex): whether the server has the binary.
+  installed?: boolean | null;
 }
 
 export interface LLMCredentialDTO {
@@ -317,6 +326,7 @@ export interface OllamaModel {
   size_bytes: number | null;
   parameter_size: string | null;
   context_length: number | null;
+  free?: boolean;
 }
 
 // Study assistant

@@ -102,7 +102,29 @@ export interface LongTextStimulus extends StimulusBase {
   body_markdown: string;
 }
 
-export type LessonStimulus = DiagramStimulus | GraphStimulus | CaseStimulus | LongTextStimulus;
+/** A drawing written by the AI. The server stores it already sanitized (allowlisted SVG). */
+export interface SvgStimulus extends StimulusBase {
+  kind: "svg";
+  origin: "generated_example";
+  svg: string;
+  text_alternative: string;
+}
+
+/** A figure extracted from the learner's own document, served by its ID. */
+export interface FigureStimulus extends StimulusBase {
+  kind: "figure";
+  origin: "derived";
+  asset_id: number;
+  text_alternative: string;
+}
+
+export type LessonStimulus =
+  | DiagramStimulus
+  | GraphStimulus
+  | CaseStimulus
+  | LongTextStimulus
+  | SvgStimulus
+  | FigureStimulus;
 
 export interface LearningResponseV2 {
   session_id: number;

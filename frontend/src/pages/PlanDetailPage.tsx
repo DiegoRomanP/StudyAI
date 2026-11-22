@@ -1,11 +1,10 @@
-import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Coffee, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, Play } from "lucide-react";
 import { type ReactNode, useId, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getApiErrorMessage, isNotFoundError } from "../api/errors";
 import type { PlanDTO } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
-import { HelpTerm } from "../components/help/HelpTerm";
 import { GenerationProgress } from "../components/plan/GenerationProgress";
 import { SessionTimeline } from "../components/plan/SessionTimeline";
 import {
@@ -14,9 +13,9 @@ import {
   Button,
   ButtonLink,
   Card,
+  PageHeader,
   ProgressBar,
-  Spinner,
-  StepChain,
+  Skeleton,
 } from "../components/ui";
 import { useLlmRuntime, usePlan, useResumePlan } from "../hooks/queries";
 import { parsePositiveSafeRouteId } from "../lib/routeIds";
@@ -73,7 +72,15 @@ export function PlanDetailPage() {
     );
   }
 
-  if (isLoading || !plan) return <Spinner label="Cargando plan…" />;
+  if (isLoading || !plan) return (
+      <div role="status" aria-label="Cargando plan…" aria-busy="true" className="space-y-4">
+        <Skeleton height={36} width="50%" />
+        <Skeleton height={120} />
+        <Skeleton height={72} />
+        <Skeleton height={72} />
+        <Skeleton height={72} />
+      </div>
+    );
 
   const updateError = isError ? (
     <Alert tone="error" title="No se pudo actualizar el plan">
@@ -123,22 +130,7 @@ export function PlanDetailPage() {
       {updateError}
       <div className="space-y-2">
         <BackToPlans />
-        <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">{plan.title}</h1>
-        <p className="max-w-reading text-text-muted">
-          La IA analizó tu material y organizó las sesiones alrededor de los temas que estimó más
-          relevantes.
-        </p>
-        <Badge color="green">Listo · {planned.length} sesiones</Badge>
-        <div className="pt-2">
-          <StepChain
-            label="Cómo es cada sesión"
-            steps={[
-              { label: "Estudio", detail: "Lees el material", icon: BookOpen },
-              { label: "Receso", detail: "5 min", icon: Coffee },
-              { label: "Test", detail: "Preguntas y tarjetas", icon: ClipboardCheck },
-            ]}
-          />
-        </div>
+        <PageHeader icon={CalendarDays} title={plan.title} help="plan-detalle" />
       </div>
 
       <Card variant="elevated" className="space-y-4">
@@ -199,9 +191,6 @@ export function PlanDetailPage() {
             <ArrowRight aria-hidden="true" className="h-4 w-4" />
           </Link>
         </div>
-        <p className="text-sm text-text-muted">
-          El porcentaje es la <HelpTerm term="relevancia">relevancia estimada</HelpTerm> de cada tema.
-        </p>
         {topics.length === 0 ? (
           <p className="text-sm text-text-muted">Este plan no tiene temas priorizados.</p>
         ) : (
@@ -212,7 +201,7 @@ export function PlanDetailPage() {
                 className="rounded-full border border-line bg-action-subtle px-3 py-1 text-sm text-text-primary"
               >
                 {topic.name}
-                <span className="ml-2 text-xs text-text-muted">relevancia estimada {topic.relevancePercent}%</span>
+                <span className="ml-2 text-xs text-text-muted">{topic.relevancePercent} %</span>
               </li>
             ))}
           </ul>

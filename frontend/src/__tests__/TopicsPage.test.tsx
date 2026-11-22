@@ -51,13 +51,15 @@ describe("TopicsPage", () => {
 
     const prioritized = await screen.findByRole("region", { name: "Priorizados" });
     const grafos = within(prioritized).getByRole("heading", { name: "Grafos" }).closest("li")!;
-    expect(grafos).toHaveTextContent("Relevancia estimada95%");
-    expect(grafos).toHaveTextContent("Dificultad estimada: 4 de 5 (5 = más difícil) · 1 sesión");
+    expect(grafos).toHaveTextContent("95 %");
+    expect(within(grafos).getByRole("img", { name: "Dificultad 4 de 5" })).toBeInTheDocument();
+    expect(within(grafos).getByLabelText("1 sesión")).toBeInTheDocument();
+    expect(screen.queryByText("Prioritario")).not.toBeInTheDocument();
+    expect(screen.getByText("Fuera de la selección · 1").closest("details")).not.toHaveAttribute("open");
     expect(within(grafos).getByRole("list", { name: "Subtemas de Grafos" })).toHaveTextContent("BFSDFS");
     expect(screen.getByRole("region", { name: "Fuera de la selección" })).toHaveTextContent("Historia");
-    expect(screen.getByText(/no una\s+garantía/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Temas clave" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: PAGE_GUIDES.temas.title })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Ayuda: ${PAGE_GUIDES.temas.title}` })).toBeInTheDocument();
   });
 
   it("offers a way back to the plan when there is no topic analysis", async () => {

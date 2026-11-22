@@ -181,13 +181,8 @@ export function useDeleteGoal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteGoal(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["goals"] });
-      // Deleting a goal cascades to its plans (and their results/reviews) on the backend.
-      qc.invalidateQueries({ queryKey: ["plans"] });
-      qc.invalidateQueries({ queryKey: ["plan"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-    },
+    // A deleted goal keeps its plans and progress, so only the goal list changes.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals"] }),
   });
 }
 

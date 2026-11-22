@@ -1,12 +1,10 @@
-import { ChartNoAxesColumnDecreasing, Info, SearchX } from "lucide-react";
+import { CalendarDays, ChartNoAxesColumnDecreasing, SearchX } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import type { PlanDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
-import { HelpTerm } from "../components/help/HelpTerm";
-import { PageGuide } from "../components/help/PageGuide";
-import { Alert, Badge, ButtonLink, Card, IconTile, Select, Skeleton } from "../components/ui";
+import { PageHeader, Alert, ButtonLink, Card, Select, Skeleton } from "../components/ui";
 import { usePlans } from "../hooks/queries";
 import { rankTopics, readyPlans } from "../lib/studyProgress";
 
@@ -20,19 +18,7 @@ export function TopicsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start gap-3">
-        <IconTile icon={ChartNoAxesColumnDecreasing} className="h-11 w-11" />
-        <div>
-          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Temas clave</h1>
-          <p className="mt-1 max-w-reading text-text-muted">
-            Los temas de tu material que la IA considera más importantes (
-            <HelpTerm term="temasClave">regla 80/20</HelpTerm>). Los porcentajes son una estimación, no
-            una garantía.
-          </p>
-        </div>
-      </header>
-
-      <PageGuide id="temas" />
+      <PageHeader icon={ChartNoAxesColumnDecreasing} title="Temas clave" help="temas" />
 
       <AsyncState
         data={plansQuery.data}
@@ -40,7 +26,12 @@ export function TopicsPage() {
         isError={plansQuery.isError}
         isFetching={plansQuery.isFetching}
         isEmpty={(plans) => readyPlans(plans).length === 0}
-        loading={<Skeleton height={240} />}
+        loading={
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Skeleton height={240} />
+            <Skeleton height={240} />
+          </div>
+        }
         loadingLabel="Cargando temas"
         empty={
           <Card className="space-y-3">
@@ -112,20 +103,23 @@ function TopicAnalysis({ plan }: { plan: PlanDTO }) {
 
   return (
     <div className="space-y-6">
-      <Card variant="glass" className="flex items-start gap-3 text-sm text-text-muted">
-        <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-action-hover" />
-        <p>
-          <Link to={`/plan/${plan.id}`} className="font-medium text-action hover:underline">
-            {plan.title}
-          </Link>
-          : {prioritized.length} de {topics.length} temas priorizados. La IA estima relevancia y
-          dificultad a partir de tu material; las sesiones se crean sobre los temas priorizados.
-        </p>
-      </Card>
+      <p className="text-sm text-text-muted">
+        <Link to={`/plan/${plan.id}`} className="font-medium text-action hover:underline">
+          {plan.title} →
+        </Link>{" "}
+        · {prioritized.length} de {topics.length} priorizados
+      </p>
 
       <TopicList title="Priorizados" topics={prioritized} sessionCount={sessionCount} highlighted />
       {others.length > 0 && (
-        <TopicList title="Fuera de la selección" topics={others} sessionCount={sessionCount} />
+        <details className="group">
+          <summary className="cursor-pointer font-display text-lg font-semibold text-text-primary">
+            Fuera de la selección · {others.length}
+          </summary>
+          <div className="mt-3">
+            <TopicList title="Fuera de la selección" topics={others} sessionCount={sessionCount} hideTitle />
+          </div>
+        </details>
       )}
     </div>
   );
@@ -136,16 +130,21 @@ function TopicList({
   topics,
   sessionCount,
   highlighted = false,
+  hideTitle = false,
 }: {
   title: string;
   topics: ReturnType<typeof rankTopics>;
   sessionCount: (name: string) => number;
   highlighted?: boolean;
+  hideTitle?: boolean;
 }) {
   const headingId = `topics-${title.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <section aria-labelledby={headingId} className="space-y-3">
-      <h2 id={headingId} className="font-display text-lg font-semibold text-text-primary">
+      <h2
+        id={headingId}
+        className={hideTitle ? "sr-only" : "font-display text-lg font-semibold text-text-primary"}
+      >
         {title}
       </h2>
       <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -154,17 +153,9 @@ function TopicList({
           return (
             <li key={topic.id}>
               <Card className="h-full space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="min-w-0 break-words font-medium text-text-primary">{topic.name}</h3>
-                  {highlighted ? <Badge color="brand">Prioritario</Badge> : <Badge>No priorizado</Badge>}
-                </div>
+                <h3 className="min-w-0 break-words font-medium text-text-primary">{topic.name}</h3>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between text-sm text-text-muted">
-                    <span>
-                      <HelpTerm term="relevancia">Relevancia</HelpTerm> estimada
-                    </span>
-                    <span className="font-medium text-text-primary">{topic.relevancePercent}%</span>
-                  </div>
+                  <div className="text-right text-sm font-medium text-text-primary">{topic.relevancePercent} %</div>
                   <div className="h-2 overflow-hidden rounded-full bg-surface-muted" aria-hidden="true">
                     <div
                       className={`h-full rounded-full ${highlighted ? "bg-flow" : "bg-line-strong"}`}
@@ -172,10 +163,26 @@ function TopicList({
                     />
                   </div>
                 </div>
-                <p className="text-sm text-text-muted">
-                  Dificultad estimada: {topic.difficulty} de 5 (5 = más difícil)
-                  {sessions > 0 && ` · ${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`}
-                </p>
+                <div className="flex items-center justify-between text-sm text-text-muted">
+                  <span role="img" aria-label={`Dificultad ${topic.difficulty} de 5`} className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <span
+                        key={n}
+                        aria-hidden="true"
+                        className={`h-2 w-2 rounded-full ${n <= topic.difficulty ? "bg-text-primary" : "bg-surface-muted"}`}
+                      />
+                    ))}
+                  </span>
+                  {sessions > 0 && (
+                    <span
+                      className="flex items-center gap-1"
+                      aria-label={`${sessions} ${sessions === 1 ? "sesión" : "sesiones"}`}
+                    >
+                      <CalendarDays aria-hidden="true" className="h-4 w-4" />
+                      {sessions}
+                    </span>
+                  )}
+                </div>
                 {topic.subtopics.length > 0 && (
                   <ul aria-label={`Subtemas de ${topic.name}`} className="flex flex-wrap gap-1.5">
                     {topic.subtopics.map((subtopic) => (

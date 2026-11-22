@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -196,11 +196,23 @@ describe("DocumentsPage query failures", () => {
 });
 
 describe("DocumentsPage guidance", () => {
+  it("shows loading, not an empty library, while an offline query is paused", async () => {
+    onlineManager.setOnline(false);
+    try {
+      vi.spyOn(api, "listDocuments").mockResolvedValue([]);
+      renderDocumentsPage();
+      expect(await screen.findByRole("status", { name: "Cargando..." })).toBeInTheDocument();
+      expect(screen.queryByText(/Aún no hay documentos|No tienes documentos/i)).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it("explains an empty library and shows the page guide", async () => {
     vi.spyOn(api, "listDocuments").mockResolvedValue([]);
     renderDocumentsPage();
 
-    expect(screen.getByRole("region", { name: PAGE_GUIDES.recursos.title })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Ayuda: ${PAGE_GUIDES.recursos.title}` })).toBeInTheDocument();
     expect(await screen.findByText("Aún no tienes documentos")).toBeInTheDocument();
   });
 

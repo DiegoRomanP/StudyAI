@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { formatTime, useTimer } from "../../hooks/useTimer";
+import { useEnterAnimation } from "../motion/useEnterAnimation";
 import { Button } from "../ui";
 
 export function StudyPhase({
@@ -34,6 +35,11 @@ export function StudyPhase({
   const withSide = aside !== undefined || preview !== undefined;
   const [started, setStarted] = useState(false);
   const doneRef = useRef<HTMLButtonElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // La intro se desmonta al empezar; cabecera compacta y material entran con `phase`.
+  useEnterAnimation(headerRef, "phase", started, { skipFirst: true });
+  useEnterAnimation(bodyRef, "phase", started, { skipFirst: true });
 
   useEffect(() => {
     if (started) doneRef.current?.focus();
@@ -47,7 +53,8 @@ export function StudyPhase({
   return (
     <div>
       <div
-        className={`sticky top-0 z-10 flex transition-[min-height] duration-[var(--motion-card)] ease-flow ${
+        ref={headerRef}
+        className={`sticky top-0 z-10 flex ${
           started
             ? "min-h-14 flex-row items-center justify-between gap-3 border-b border-line bg-surface-paper/95 backdrop-blur"
             : `${withSide ? "min-h-[60dvh]" : "min-h-[100dvh]"} flex-col items-center justify-center`
@@ -63,8 +70,8 @@ export function StudyPhase({
         <div
           role="timer"
           aria-label="Tiempo restante"
-          className={`origin-center font-mono font-semibold text-action-hover transition-transform duration-[var(--motion-card)] ease-flow ${
-            started ? "scale-100 text-2xl" : "my-12 scale-[2.5] text-3xl"
+          className={`font-mono font-semibold text-action-hover ${
+            started ? "text-2xl" : "my-12 text-5xl"
           }`}
         >
           {formatTime(remaining)}
@@ -98,7 +105,7 @@ export function StudyPhase({
       {!started && preview !== undefined && <div className="mx-auto mt-6 max-w-reading">{preview}</div>}
 
       {started && (
-        <div className="pt-6 transition-opacity duration-[var(--motion-micro)]">
+        <div ref={bodyRef} className="pt-6">
           <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
             <h1 className="text-center text-2xl font-bold">{topic}</h1>
             {badge}

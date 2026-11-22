@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { MessageCircleQuestion, Send, X } from "lucide-react";
 
 import { getApiErrorMessage } from "../../api/errors";
 import type { AssistantMode } from "../../api/types";
+import { useEnterAnimation } from "../motion/useEnterAnimation";
 import { useAskAssistant, useAssistantHistory } from "../../hooks/queries";
 import { Alert, Badge, Button, Spinner } from "../ui";
 import { SafeMarkdown } from "./SafeMarkdown";
@@ -20,6 +21,21 @@ export function useReportAssistantQuestion(questionId: string | number | null | 
 export function ReportAssistantQuestion({ id }: { id: string | number | null | undefined }) {
   useReportAssistantQuestion(id);
   return null;
+}
+
+/** Enters with `reveal` only when it is a new message, not when the history loads. */
+function Entering({ animate, className, children }: { animate: boolean; className?: string; children: ReactNode }) {
+  return animate ? <Animated className={className}>{children}</Animated> : <div className={className}>{children}</div>;
+}
+
+function Animated({ className, children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEnterAnimation(ref, "reveal");
+  return (
+    <div ref={ref} className={className}>
+      {children}
+    </div>
+  );
 }
 
 const MODE_COPY: Record<AssistantMode, { badge: string; hint: string; placeholder: string }> = {
@@ -62,6 +78,18 @@ export function AssistantPanel({
   const remaining = history.data?.remaining ?? null;
   const outOfMessages = remaining === 0;
   const empty = draft.trim() === "";
+
+  const panelRef = useRef<HTMLElement>(null);
+  const panelPreset = useMemo(
+    () => (window.matchMedia?.("(max-width: 767px)")?.matches ? "sheet" : "panel"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open],
+  );
+  useEnterAnimation(panelRef, panelPreset, open);
+  // Ids present when the history first loaded: those are not "new".
+  const initialIds = useRef<Set<number | string> | null>(null);
+  if (history.data && initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
+  if (!open) initialIds.current = null;
 
   const wasOpen = useRef(false);
   useEffect(() => {
@@ -112,6 +140,7 @@ export function AssistantPanel({
 
   return (
     <aside
+      ref={panelRef}
       aria-labelledby={titleId}
       onKeyDown={(event) => event.key === "Escape" && close()}
       className="fixed inset-x-0 bottom-0 z-40 flex max-h-[60dvh] flex-col rounded-t-surface border border-line-strong/60 bg-surface-elevated shadow-flow md:inset-x-auto md:bottom-6 md:right-6 md:top-20 md:max-h-none md:w-[24rem] md:rounded-surface"
@@ -139,18 +168,17 @@ export function AssistantPanel({
         {!history.isLoading && messages.length === 0 && <p className="text-sm text-text-muted">{copy.hint}</p>}
         {messages.map((message) =>
           message.role === "USER" ? (
-            <p
-              key={message.id}
-              className="ml-8 whitespace-pre-wrap rounded-surface bg-surface-subtle p-3 text-sm text-text-primary"
-            >
-              <span className="sr-only">Tú: </span>
-              {message.content}
-            </p>
+            <Entering key={message.id} animate={!initialIds.current?.has(message.id)}>
+              <p className="ml-8 whitespace-pre-wrap rounded-surface bg-surface-subtle p-3 text-sm text-text-primary">
+                <span className="sr-only">Tú: </span>
+                {message.content}
+              </p>
+            </Entering>
           ) : (
-            <div key={message.id} className="prose-study mr-4 text-sm">
+            <Entering key={message.id} animate={!initialIds.current?.has(message.id)} className="prose-study mr-4 text-sm">
               <span className="sr-only">Asistente: </span>
               <SafeMarkdown>{message.content}</SafeMarkdown>
-            </div>
+            </Entering>
           ),
         )}
         {ask.isPending && <Spinner label="El asistente está pensando" />}

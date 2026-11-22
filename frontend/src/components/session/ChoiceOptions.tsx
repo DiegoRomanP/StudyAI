@@ -1,5 +1,7 @@
 import { Check, X } from "lucide-react";
 
+import { EnterOnMount } from "./SessionSkeleton";
+
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 
 /**
@@ -47,11 +49,11 @@ export function ChoiceOptions({
             onClick={() => {
               if (!revealed) onSelect(option);
             }}
-            className={`flex min-h-12 items-center gap-3 rounded-control border px-3 py-2 text-left text-sm transition-colors duration-[var(--motion-micro)] motion-reduce:transition-none aria-disabled:cursor-default ${tone}`}
+            className={`flex min-h-12 items-center gap-3 rounded-control border px-3 py-2 text-left text-sm transition-[color,background-color,border-color,transform] duration-micro motion-safe:active:scale-press active:duration-press motion-reduce:transition-none aria-disabled:cursor-default ${tone}`}
           >
             <span
               aria-hidden="true"
-              className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors duration-micro ${
                 isCorrect
                   ? "bg-state-correct text-text-on-action"
                   : isWrongPick
@@ -65,9 +67,15 @@ export function ChoiceOptions({
             </span>
             <span className="min-w-0 flex-1 break-words">{option}</span>
             {isCorrect && (
-              <Check role="img" aria-label="Respuesta correcta" className="h-4 w-4 shrink-0 text-state-correct" />
+              <EnterOnMount preset="pop" className="inline-flex shrink-0 origin-center">
+                <Check role="img" aria-label="Respuesta correcta" className="h-4 w-4 text-state-correct" />
+              </EnterOnMount>
             )}
-            {isWrongPick && <X role="img" aria-label="Tu respuesta, incorrecta" className="h-4 w-4 shrink-0 text-state-error" />}
+            {isWrongPick && (
+              <EnterOnMount preset="pop" className="inline-flex shrink-0 origin-center">
+                <X role="img" aria-label="Tu respuesta, incorrecta" className="h-4 w-4 text-state-error" />
+              </EnterOnMount>
+            )}
           </button>
         );
       })}

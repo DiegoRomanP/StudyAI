@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "react";
 
 import type { AcademicProfileHint } from "../../api/types";
+import { HelpTip } from "../help/HelpTip";
 import { Select } from "../ui";
 
 export const ACADEMIC_PROFILE_OPTIONS: { value: AcademicProfileHint; label: string }[] = [
@@ -27,12 +28,16 @@ export const ACADEMIC_PROFILE_OPTIONS: { value: AcademicProfileHint; label: stri
   },
 ];
 
+const HINT = "Automático por tema permite usar perfiles distintos según el material.";
+
 interface PedagogySelectorProps {
   enabled: boolean;
   profileHint: AcademicProfileHint;
   onEnabledChange: (enabled: boolean) => void;
   onProfileChange: (profileHint: AcademicProfileHint) => void;
   idPrefix: string;
+  /** No border, visible legend or inline hint (the hint moves to a «?»): for use inside a collapsible. */
+  bare?: boolean;
 }
 
 export function PedagogySelector({
@@ -41,6 +46,7 @@ export function PedagogySelector({
   onEnabledChange,
   onProfileChange,
   idPrefix,
+  bare = false,
 }: PedagogySelectorProps) {
   const checkboxId = `${idPrefix}-enabled`;
   const hintId = `${idPrefix}-hint`;
@@ -51,10 +57,11 @@ export function PedagogySelector({
   }
 
   return (
-    <fieldset className="space-y-2 rounded-surface border border-line p-3">
-      <legend className="px-1 text-sm font-medium text-text-primary">
+    <fieldset className={bare ? "space-y-2" : "space-y-2 rounded-surface border border-line p-3"}>
+      <legend className={bare ? "sr-only" : "px-1 text-sm font-medium text-text-primary"}>
         Enseñanza y evaluación
       </legend>
+      <div className={bare ? "flex items-center gap-1" : undefined}>
       <label htmlFor={checkboxId} className="flex min-h-11 cursor-pointer items-center gap-3">
         <input
           id={checkboxId}
@@ -68,8 +75,10 @@ export function PedagogySelector({
           Adaptar la enseñanza y evaluación al perfil académico
         </span>
       </label>
-      <p id={hintId} className="text-sm text-text-muted">
-        Automático por tema permite usar perfiles distintos según el material.
+      {bare && <HelpTip label="Perfil académico">{HINT}</HelpTip>}
+      </div>
+      <p id={hintId} className={bare ? "sr-only" : "text-sm text-text-muted"}>
+        {HINT}
       </p>
       {enabled && (
         <Select

@@ -4,9 +4,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { AssistantQuestionDTO } from "../api/types";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
-import { PageGuide } from "../components/help/PageGuide";
 import { SafeMarkdown } from "../components/session/SafeMarkdown";
-import { Badge, Button, ButtonLink, Card, IconTile, Select, Skeleton } from "../components/ui";
+import { PageHeader, Badge, Button, ButtonLink, Card, Select, Skeleton } from "../components/ui";
 import { useAssistantQuestions } from "../hooks/queries";
 import { useShowMore } from "../hooks/useShowMore";
 import { parseApiDate } from "../lib/studyProgress";
@@ -20,17 +19,7 @@ export function QuestionsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start gap-3">
-        <IconTile icon={MessageCircleQuestion} className="h-11 w-11" />
-        <div>
-          <h1 className="font-display text-2xl font-bold text-text-primary sm:text-3xl">Mis preguntas</h1>
-          <p className="mt-1 max-w-reading text-text-muted">
-            Las dudas que le hiciste al asistente mientras estudiabas, con su respuesta.
-          </p>
-        </div>
-      </header>
-
-      <PageGuide id="preguntas" />
+      <PageHeader icon={MessageCircleQuestion} title="Mis preguntas" help="preguntas" />
 
       <AsyncState
         data={query.data}
@@ -38,7 +27,13 @@ export function QuestionsPage() {
         isError={query.isError}
         isFetching={query.isFetching}
         isEmpty={(items) => items.length === 0}
-        loading={<Skeleton height={200} />}
+        loading={
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={88} />
+            ))}
+          </div>
+        }
         loadingLabel="Cargando tus preguntas"
         empty={
           <EmptyState

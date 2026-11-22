@@ -124,7 +124,7 @@ describe("cache consistency after writes", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dashboard"] });
   });
 
-  it("refreshes plan details and the dashboard after a goal (and its plans) is deleted", async () => {
+  it("refreshes only the goal list after a goal is deleted, since its plans are kept", async () => {
     api.deleteGoal.mockResolvedValue(undefined);
     const queryClient = createClient();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
@@ -134,8 +134,8 @@ describe("cache consistency after writes", () => {
       await result.current.mutateAsync(3);
     });
 
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["plan"] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["dashboard"] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["goals"] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["plans"] });
   });
 
   it("refreshes the submitted session's status after a quiz", async () => {

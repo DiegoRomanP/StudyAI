@@ -100,7 +100,6 @@ describe("PlanDetailPage", () => {
 
     expect(await screen.findByText("Este plan no tiene sesiones")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Volver a Plan de estudio" })).toHaveAttribute("href", "/plan");
-    expect(screen.getByRole("list", { name: "Cómo es cada sesión" })).toHaveTextContent(/Estudio.*Receso.*Test/);
   });
 
   it("offers the next pending session and lists every session by suggested day or order", async () => {
