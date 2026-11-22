@@ -2,6 +2,7 @@
 const tokenColor = (token) => `rgb(var(${token}) / <alpha-value>)`;
 
 export default {
+  future: { hoverOnlyWhenSupported: true },
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
@@ -83,7 +84,23 @@ export default {
       },
       transitionTimingFunction: {
         flow: "var(--motion-easing)",
+        "in-out": "var(--ease-in-out)",
+        drawer: "var(--ease-drawer)",
       },
+      transitionDuration: {
+        micro: "var(--motion-micro)",
+        press: "var(--motion-press)",
+        route: "var(--motion-route)",
+        step: "var(--motion-step)",
+        overlay: "var(--motion-overlay)",
+        phase: "var(--motion-phase)",
+        sheet: "var(--motion-sheet)",
+      },
+      transitionProperty: {
+        interactive:
+          "color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform",
+      },
+      scale: { press: "0.97" },
     },
   },
   plugins: [],

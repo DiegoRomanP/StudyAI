@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+
+import { useEnterAnimation } from "./motion/useEnterAnimation";
 
 import { ActivityIndicator, Alert, Button } from "./ui";
 
@@ -38,6 +40,9 @@ export function AsyncState<T>({
   children,
 }: AsyncStateProps<T>) {
   const hasData = data !== null && data !== undefined;
+  const dataRef = useRef<HTMLDivElement>(null);
+  // Solo anima la transición «cargando → datos», no los refetch ni un montaje con caché.
+  useEnterAnimation(dataRef, "content", hasData, { skipFirst: true });
 
   if (!hasData) {
     if (isError) {
@@ -67,7 +72,7 @@ export function AsyncState<T>({
 
   if (isError) {
     return (
-      <div className="space-y-3">
+      <div ref={dataRef} className="space-y-3">
         <Alert tone="error">
           <p>{updateErrorMessage}</p>
           <Button type="button" variant="secondary" onClick={onRetry}>
@@ -80,8 +85,13 @@ export function AsyncState<T>({
   }
 
   return (
-    <div className="space-y-3">
-      {isFetching && <ActivityIndicator label={refreshingLabel} />}
+    <div ref={dataRef} className="relative space-y-3">
+      {isFetching && (
+        <ActivityIndicator
+          label={refreshingLabel}
+          className="pointer-events-none absolute right-0 top-0 z-10 rounded-full bg-surface px-3 py-1 shadow-sm"
+        />
+      )}
       {content}
     </div>
   );

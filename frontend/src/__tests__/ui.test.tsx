@@ -11,6 +11,7 @@ import {
   ButtonLink,
   Input,
   OptionCard,
+  PageHeader,
   ProgressRing,
   SegmentedControl,
   Select,
@@ -20,6 +21,7 @@ import {
 } from "../components/ui";
 import { SessionResult } from "../components/session/SessionResult";
 import { makeSessionSummary } from "../test/fixtures";
+import { PAGE_GUIDES } from "../lib/pageGuides";
 
 describe("UI primitives", () => {
   it("associates visible labels and errors with native form controls", () => {
@@ -69,7 +71,7 @@ describe("UI primitives", () => {
     render(<Button>Continuar</Button>);
 
     const button = screen.getByRole("button", { name: "Continuar" });
-    expect(button).toHaveClass("active:scale-[0.985]");
+    expect(button).toHaveClass("active:scale-press", "active:duration-press");
     expect(button).toHaveClass(
       "transition-[color,background-color,border-color,transform,filter]",
       "motion-reduce:transition-none",
@@ -302,5 +304,16 @@ describe("AsyncState", () => {
       "aria-describedby",
       "notes-hint",
     );
+  });
+
+  it("renders PageHeader with title, help and actions", () => {
+    render(
+      <MemoryRouter>
+        <PageHeader icon={Target} title="Metas" help="metas" actions={<button>Nueva</button>} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "Metas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Ayuda: ${PAGE_GUIDES.metas.title}` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nueva" })).toBeInTheDocument();
   });
 });

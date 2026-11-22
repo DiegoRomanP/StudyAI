@@ -1,6 +1,8 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+
+import { useEnterAnimation } from "./motion/useEnterAnimation";
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -25,6 +27,15 @@ export function Dialog({
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  // Bottom sheet on phones, centred pop on desktop; decided once per open.
+  const preset = useMemo(
+    () => (window.matchMedia?.("(max-width: 639px)")?.matches ? "sheet" : "overlay"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open],
+  );
+  useEnterAnimation(backdropRef, "backdrop", open);
+  useEnterAnimation(panelRef, preset, open);
   // Kept in a ref so a new onClose each render does not re-run the open effect.
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -72,7 +83,8 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      ref={backdropRef}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-canvas/70 p-4 sm:items-center"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -83,7 +95,7 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className="w-full max-w-md space-y-4 rounded-surface border border-line-strong/60 bg-surface-elevated p-5 shadow-flow"
+        className="w-full max-w-md origin-center space-y-4 rounded-surface border border-line-strong/60 bg-surface-elevated p-5 shadow-flow"
       >
         <div className="flex items-start justify-between gap-3">
           <h2 id={titleId} className="font-display text-lg font-semibold text-text-primary">

@@ -1,20 +1,16 @@
-import * as m from "motion/react-m";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useEnterAnimation } from "./useEnterAnimation";
 
 /**
- * Quiet fade between routes (S10: alive, never restless). Opacity only, so layout
- * and focus positions are final immediately; MotionConfig at the root disables it
- * for users who prefer reduced motion.
+ * Entrada breve entre rutas (fundido + 4 px). Solo entrada, y no en la primera carga.
+ * Con reduced-motion el hook se queda en un fundido corto.
  */
 export function PageTransition({ routeKey, children }: { routeKey: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEnterAnimation(ref, "route", routeKey, { skipFirst: true });
   return (
-    <m.div
-      key={routeKey}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-    >
+    <div key={routeKey} ref={ref}>
       {children}
-    </m.div>
+    </div>
   );
 }

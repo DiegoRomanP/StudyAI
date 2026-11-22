@@ -12,10 +12,13 @@ import { Check, ChevronRight, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { LinkProps } from "react-router-dom";
 
+import { PageGuide } from "./help/PageGuide";
+import type { GuideId } from "../lib/pageGuides";
+
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const BUTTON_BASE =
-  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold leading-5 transition-[color,background-color,border-color,transform,filter] duration-[var(--motion-micro)] active:scale-[0.985] disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:bg-none disabled:text-text-muted disabled:shadow-none motion-reduce:transition-none motion-reduce:active:scale-100";
+  "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold leading-5 transition-[color,background-color,border-color,transform,filter] duration-micro active:scale-press active:duration-press disabled:cursor-not-allowed disabled:border disabled:border-control disabled:bg-surface-disabled disabled:bg-none disabled:text-text-muted disabled:shadow-none motion-reduce:transition-none motion-reduce:active:scale-100";
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   // Dark text on the flow gradient keeps ≥ 4.5:1 on every stop (see design-tokens test).
@@ -148,7 +151,7 @@ export function Skeleton({
   return (
     <div
       aria-hidden="true"
-      className={`block max-w-full rounded-control bg-surface-muted motion-safe:animate-pulse ${className}`}
+      className={`block max-w-full rounded-control bg-surface-muted skeleton-delay motion-safe:animate-pulse ${className}`}
       style={reservedSize}
     />
   );
@@ -167,8 +170,8 @@ export function ProgressBar({ value, label = "Progreso" }: { value: number; labe
       aria-valuenow={boundedValue}
     >
       <div
-        className="h-full rounded-full bg-flow transition-[width] duration-[var(--motion-card)] ease-flow motion-reduce:transition-none"
-        style={{ width: `${boundedValue}%` }}
+        className="h-full w-full origin-left rounded-full bg-flow transition-transform duration-step ease-in-out motion-reduce:transition-none"
+        style={{ transform: `scaleX(${boundedValue / 100})` }}
       />
     </div>
   );
@@ -362,6 +365,28 @@ export function IconTile({
   );
 }
 
+/** Page title row: [icon] h1 [?] ...... [actions]. No subtitle: help lives behind the «?». */
+export function PageHeader({
+  icon,
+  title,
+  help,
+  actions,
+}: {
+  icon: LucideIcon;
+  title: ReactNode;
+  help?: GuideId;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-center gap-3">
+      <IconTile icon={icon} />
+      <h1 className="font-display text-2xl sm:text-3xl font-bold text-text-primary">{title}</h1>
+      {help && <PageGuide id={help} />}
+      {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
 /** Circular progress with a gradient stroke and an accessible text equivalent. */
 export function ProgressRing({
   value,
@@ -490,7 +515,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(option.value)}
-            className={`min-h-11 rounded-full px-4 text-sm font-medium transition-colors duration-[var(--motion-micro)] motion-reduce:transition-none ${
+            className={`min-h-11 rounded-full px-4 text-sm font-medium transition-interactive duration-micro active:scale-press active:duration-press motion-reduce:transition-none motion-reduce:active:scale-100 ${
               selected
                 ? chips
                   ? "bg-action-fill text-text-on-action"
@@ -530,7 +555,7 @@ export function OptionCard({
       aria-pressed={selected}
       onClick={onSelect}
       disabled={disabled}
-      className={`flex min-h-16 w-full items-center gap-3 rounded-surface border p-3 text-left transition-colors duration-[var(--motion-micro)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none ${
+      className={`flex min-h-16 w-full items-center gap-3 rounded-surface border p-3 text-left transition-interactive duration-micro active:scale-press active:duration-press disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:scale-100 ${
         selected
           ? "border-action-hover bg-action-subtle"
           : "border-line bg-surface-paper hover:border-line-strong hover:bg-surface-subtle"

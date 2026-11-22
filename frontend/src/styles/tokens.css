@@ -62,4 +62,12 @@
   --motion-card: 320ms;
   --motion-page: 420ms;
   --motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-press: 120ms;
+  --motion-route: 180ms;
+  --motion-step: 200ms;
+  --motion-overlay: 220ms;
+  --motion-phase: 260ms;
+  --motion-sheet: 320ms;
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
