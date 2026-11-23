@@ -8,6 +8,7 @@ import {
   FolderOpen,
   House,
   KeyRound,
+  LogOut,
   MessageCircleQuestion,
   Target,
   type LucideIcon,
@@ -15,6 +16,7 @@ import {
 import { Link, matchPath, useLocation } from "react-router-dom";
 
 import { LogoMark } from "./brand/Logo";
+import { Button } from "./ui";
 import { PageTransition } from "./motion/PageTransition";
 import { useEnterAnimation } from "./motion/useEnterAnimation";
 
@@ -79,6 +81,15 @@ function BrandLink({ className }: { className: string }) {
   );
 }
 
+function SignOutButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+  return (
+    <Button type="button" variant="ghost" onClick={onClick} className={className}>
+      <LogOut aria-hidden="true" className="h-4 w-4" />
+      Cerrar sesión
+    </Button>
+  );
+}
+
 function NavigationLinks({
   pathname,
   onNavigate,
@@ -123,12 +134,15 @@ export function AppShell({
   sidebarFooter,
   chrome = "default",
   hideAiSettings = false,
+  onSignOut,
 }: {
   children: ReactNode;
   sidebarFooter?: ReactNode;
   chrome?: "default" | "focus";
   /** SaaS: the learner does not choose or connect an AI, so "Conectar IA" does not exist. */
   hideAiSettings?: boolean;
+  /** Only with a Supabase session: shows «Cerrar sesión». */
+  onSignOut?: () => void;
 }) {
   const navigation = hideAiSettings ? NAVIGATION.filter((item) => item.to !== "/settings") : NAVIGATION;
   const primaryNavigation = navigation.filter((item) => item.primary);
@@ -197,12 +211,16 @@ export function AppShell({
         <nav aria-label="Navegación principal" className="flex flex-col gap-1">
           <NavigationLinks pathname={pathname} items={navigation} />
         </nav>
-        {sidebarFooter && <div className="mt-auto pt-6">{sidebarFooter}</div>}
+        <div className="mt-auto space-y-3 pt-6">
+          {sidebarFooter}
+          {onSignOut && <SignOutButton onClick={onSignOut} className="w-full justify-start" />}
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-line bg-surface-paper/80 px-4 py-2 md:hidden">
+        <header className="flex items-center justify-between border-b border-line bg-surface-paper/80 px-4 py-2 md:hidden">
           <BrandLink className="flex items-center gap-2 rounded-control py-2 text-text-primary" />
+          {onSignOut && <SignOutButton onClick={onSignOut} />}
         </header>
 
         <main
