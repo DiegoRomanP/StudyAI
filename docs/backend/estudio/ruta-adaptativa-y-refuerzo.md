@@ -26,7 +26,8 @@ the pure `app/algorithms/adaptive_route.py` (mastery = moving average, Leitner b
 
 `POST /sessions/{id}/reinforcement`, `.../cancel`; `app/services/reinforcement_service.py`: state machine
 `NONE → PROCESSING → READY|FAILED` via conditional UPDATEs, so a double POST starts one task and spends one
-use. Cuota gratuita: ver [../llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)
+use. Cuota gratuita: ver [../llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md);
+en `saas` cobra 1 crédito por intento (402 sin saldo, el estado vuelve a NONE; ver [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md))
 (**only the background task refunds**). Same `session_content` kind and output budget as plan generation, so
 model routing and the runtime report are unchanged. A reinforcement left PROCESSING by a restart is set to
 FAILED at startup (no refund). V2: ver [../generacion-planes/contenido-adaptativo-v2.md](../generacion-planes/contenido-adaptativo-v2.md).

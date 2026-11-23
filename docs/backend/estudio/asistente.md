@@ -8,6 +8,6 @@
 retrieved chunks plus the last 6 messages. `mode=EXAM` adds the question on screen (prompt and options) but
 **never its answer key**: the model can't leak what it never receives, so a client forcing `mode=STUDY`
 gains nothing. Rows live in `assistant_messages` (no FK to plan or session; `delete_plan` removes them
-explicitly). Cuota gratuita separada (`FREE_AI_ASSISTANT_DAILY_LIMIT`): ver
+explicitly). **Nunca gasta créditos** (tampoco en `saas`). Cuota gratuita separada (`FREE_AI_ASSISTANT_DAILY_LIMIT`): ver
 [../llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md). `GET /assistant/questions`
 feeds «Mis preguntas» (`/preguntas`).

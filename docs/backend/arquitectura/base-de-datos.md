@@ -31,6 +31,7 @@ borra **explícitamente** en el servicio. Casos actuales (mantenlos al tocar bor
 | Un plan | `FlashcardReview` por los ids de pregunta del plan (join `Session`/`Quiz`/`QuizQuestion`) — si no, reseñas huérfanas inflan para siempre los repasos pendientes del dashboard | `PlanService.delete_plan` |
 | Un plan | `assistant_messages` (sin FK a plan ni sesión) | `PlanService.delete_plan` |
 | Un documento | filas `DocumentAsset` y la carpeta `UPLOAD_DIR/assets/{id}` | `delete_document` |
+| Un plan | **nada** del ledger: `credit_ledger` es contable y sobrevive (enlace blando); un reembolso pendiente usa el id capturado por la tarea | `_refund_plan_use` |
 | Una meta | **nada**: es soft delete (ver [generacion-planes/creacion-y-borrado.md](../generacion-planes/creacion-y-borrado.md)) | `GoalRepository` |
 
 `llm_usage` no tiene FK a planes a propósito: sus filas sobreviven a un plan borrado.

@@ -23,7 +23,9 @@ Chunk → Embed → Store (`app/processors/pipeline.py`). Cada paso pesado tiene
   para PDF, UTF-8 válido para `.md`; el nombre se sanea (`sanitize_filename`: sin directorios ni caracteres
   de control, 255 caracteres máx. conservando la extensión). El nombre es solo informativo: el archivo se
   guarda bajo una clave generada. Errores: `ValidationError` (400).
-- Pendiente (E2 del plan): PDF cifrado y `MAX_PDF_PAGES` al procesar.
+- PDF: `inspect_pdf` rechaza el cifrado («El PDF está protegido con contraseña.») y más de `MAX_PDF_PAGES`
+  (200 por defecto, `config.py`) con 400. En `saas`, además, el límite de documentos del nivel (403
+  `PLAN_LIMIT_REACHED`): ver [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md).
 
 ## Figuras del documento
 
