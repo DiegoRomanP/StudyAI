@@ -8,5 +8,9 @@ import { api } from "../api/endpoints";
  */
 export function useAppConfig() {
   const query = useQuery({ queryKey: ["app-config"], queryFn: api.getAppConfig, staleTime: Infinity });
-  return { ...query, isSaas: query.data?.deployment_mode === "saas" };
+  return {
+    ...query,
+    isSaas: query.data?.deployment_mode === "saas",
+    hasLogin: query.data?.auth_mode === "supabase",
+  };
 }

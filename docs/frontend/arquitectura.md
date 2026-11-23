@@ -14,12 +14,29 @@ directamente: usan un hook. Lógica pura en `src/lib/` (con tests).
 
 ## Rutas (`App.tsx`)
 
-Públicas: `/` (landing) y `/demo` (recorrido simulado con datos locales — **nunca importa el cliente de
+Públicas: `/` (landing), `/login`, `/registro`, `/recuperar`, `/restablecer` (ver «Capa de autenticación») y `/demo` (recorrido simulado con datos locales — **nunca importa el cliente de
 API**). Dentro de `AppShell`: `/inicio` (home + asistente de configuración + coordinador «Estudiar»,
 `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` abre el test; se renderiza
 con `AppShell chrome="focus"`: solo `<main>`, sin navegación), `/practica` (práctica de solo lectura; nunca
 escribe), `/temas` («Temas clave»), `/documents` («Recursos»), `/goals`, `/dashboard` («Estadísticas»),
 `/preguntas` («Mis preguntas») y `/settings` («Conectar IA»).
+
+## Capa de autenticación (Supabase)
+
+Solo existe si `GET /config` dice `auth_mode: "supabase"` **y** hay `VITE_SUPABASE_URL` /
+`VITE_SUPABASE_PUBLISHABLE_KEY` (nunca la clave secreta). Sin ellas `lib/supabase.ts` exporta `null` y la
+app se comporta como siempre (demo / autoalojado): `RequireAuth` renderiza al instante y las páginas de login redirigen a `/inicio`.
+
+- `lib/supabase.ts` (cliente o `null`), `hooks/useAuth.ts` (`session`, `user`, `loading`, `signOut`),
+  `components/auth/RequireAuth.tsx` (envuelve `AppLayout`; sin sesión → `/login?next=…`) y
+  `components/auth/AuthLayout.tsx` (marco de las páginas públicas `/login`, `/registro`, `/recuperar`,
+  `/restablecer`). `lib/authErrors.ts`: mensajes en español y `safeNext` (solo rutas internas).
+- **T6**: el interceptor de `apiClient` pide `supabase.auth.getSession()` en **cada** petición y manda
+  `Authorization: Bearer`; el token no se guarda en variables. Un 401 con `AUTH_REQUIRED` /
+  `AUTH_INVALID_TOKEN` redirige a `/login?next=…`.
+- **T7**: `signOut` y el cambio de `user.id` (o el evento `SIGNED_OUT`) ejecutan `queryClient.clear()`.
+- El registro enlaza a `/terminos` y `/privacidad` (páginas pendientes de otra fase). `/demo` sigue sin
+  importar `api/client`. «Cerrar sesión» aparece en `AppShell` (`onSignOut`) solo con sesión.
 
 ## Convenciones que hay que reutilizar
 
