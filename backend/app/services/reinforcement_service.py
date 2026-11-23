@@ -13,7 +13,6 @@ background task, or a double POST can never apply two writes or spend two uses.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -41,7 +40,7 @@ from app.rag.retriever import Retriever
 from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 from app.services.adaptive_content_builder import AdaptiveBuiltContent, build_adaptive_session_content
 from app.services.adaptive_learning_service import AdaptiveLearningService
-from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
+from app.services.ai_charge import AiCharge, charge_reinforcement, refund_charge
 from app.services.session_content_builder import build_session_content
 from app.services.session_service import SessionService
 from app.strategies.base import SessionConfig
@@ -98,7 +97,7 @@ class ReinforcementService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, date | None, str | None]:
+    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, AiCharge | None, str | None]:
         """Return the session and the scheduling details of this specific claim."""
         session = SessionService(self.db).get_session(user_id, session_id)
         if (
@@ -138,9 +137,9 @@ class ReinforcementService:
             raise _NOT_AVAILABLE
 
         try:
-            spent_day = FreeAiQuota(self.db).consume(user_id) if uses_free_ai(self.db, user_id) else None
+            spent = charge_reinforcement(self.db, user_id, session_id)
         except Exception:
-            # No task will run (over the limit, or an unexpected error): release the claim.
+            # No task will run (over the limit / no credits, or an unexpected error): release the claim.
             self.db.rollback()
             try:
                 _set_status(
@@ -151,7 +150,7 @@ class ReinforcementService:
                 logger.warning("Could not release the reinforcement claim of session %s", session_id)
             raise
         self.db.refresh(session)
-        return session, True, spent_day, run_token
+        return session, True, spent, run_token
 
     def cancel(self, user_id: int, session_id: int) -> StudySession:
         """PROCESSING → NONE. The use is not refunded here: only the task does that."""
@@ -164,14 +163,9 @@ class ReinforcementService:
         return session
 
 
-def _refund(db: Session, user_id: int, spent_day: date | None) -> None:
-    """Give the use back on the day it was spent, not on the day the task ends."""
-    if spent_day is None:
-        return
-    try:
-        FreeAiQuota(db).refund(user_id, spent_day)
-    except Exception:  # noqa: BLE001 - bookkeeping must never hide the real outcome
-        logger.warning("Could not refund the free AI use for user %s", user_id)
+def _refund(db: Session, user_id: int, spent: AiCharge | None) -> None:
+    """Give the charge back: the free use on the day it was spent, or the credit it took."""
+    refund_charge(db, user_id, spent)
 
 
 def _claim_publication(db: Session, session_id: int, run_token: str | None) -> bool:
@@ -265,7 +259,7 @@ def _generate_adaptive_content(
 
 
 def generate_reinforcement_task(
-    session_id: int, user_id: int, spent_day: date | None, run_token: str | None = None
+    session_id: int, user_id: int, spent: AiCharge | None, run_token: str | None = None
 ) -> None:
     """Background worker: builds the reinforcement content for one review session."""
     db = SessionLocal()
@@ -273,11 +267,11 @@ def generate_reinforcement_task(
     try:
         session = db.get(StudySession, session_id)
         if session is None:  # the plan was deleted in the meantime
-            _refund(db, user_id, spent_day)
+            _refund(db, user_id, spent)
             return
         plan = db.get(Plan, session.plan_id)
         if plan is None:
-            _refund(db, user_id, spent_day)
+            _refund(db, user_id, spent)
             return
         if plan.content_version == 2 and (
             run_token is None
@@ -285,11 +279,11 @@ def generate_reinforcement_task(
             or session.reinforcement_status != Status.PROCESSING
             or session.status != SessionStatus.PENDING
         ):
-            _refund(db, user_id, spent_day)
+            _refund(db, user_id, spent)
             return
         goal = db.get(Goal, plan.goal_id)
         if goal is None:
-            _refund(db, user_id, spent_day)
+            _refund(db, user_id, spent)
             return
         goal_text = f"{goal.title}. {goal.description}".strip()
         try:
@@ -303,7 +297,7 @@ def generate_reinforcement_task(
                 adaptive = _generate_adaptive_content(db, llm, session, plan, goal_text, config, recorder)
                 if not _claim_publication(db, session_id, run_token):
                     db.rollback()
-                    _refund(db, user_id, spent_day)
+                    _refund(db, user_id, spent)
                     return
                 _publish_adaptive_content(db, session, adaptive)
                 db.commit()
@@ -332,7 +326,7 @@ def generate_reinforcement_task(
                 raise LLMError("La IA no devolvió material de refuerzo válido.", code="LLM_INVALID_RESPONSE")
             if not _claim_publication(db, session_id, run_token):
                 db.rollback()
-                _refund(db, user_id, spent_day)
+                _refund(db, user_id, spent)
                 return
             db.refresh(session)
             session.material.content_markdown = content.material_markdown
@@ -349,7 +343,7 @@ def generate_reinforcement_task(
                 db, session_id, Status.FAILED, only_if=[Status.PROCESSING],
                 error=message, run_token=run_token,
             )
-            _refund(db, user_id, spent_day)
+            _refund(db, user_id, spent)
             logger.error(
                 "Reinforcement failed for session %s (code=%s)", session_id, getattr(exc, "code", "UNKNOWN")
             )

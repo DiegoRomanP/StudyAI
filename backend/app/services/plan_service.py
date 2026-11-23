@@ -56,6 +56,7 @@ from app.services.session_content_builder import build_session_content
 from app.models.document import DocumentStatus
 from app.models.assistant_message import AssistantMessage
 from app.models.flashcard import FlashcardReview
+from app.models.credit_ledger import CreditReason
 from app.models.goal import Goal, GoalType
 from app.models.plan import GenerationStage, Plan, PlanStatus, PlanTopic
 from app.models.quiz import QuestionType, Quiz, QuizQuestion
@@ -66,6 +67,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.goal_repository import GoalRepository
 from app.repositories.plan_repository import PlanRepository
 from app.rag.retriever import Retriever
+from app.services.credit_service import CreditService
 from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
 from app.pedagogy.contracts import LearningObjective, PedagogySnapshot, ProfileId
 from app.pedagogy.registry import resolve_profile, snapshot_profile
@@ -160,7 +162,27 @@ class PlanService:
                 winner, request_hash, legacy_v2_request_hash
             ), False
         self.db.refresh(plan)
+        if get_settings().is_saas:
+            self._charge_credit(plan)
         return plan, True
+
+    def _charge_credit(self, plan: Plan) -> None:
+        """saas: the plan row exists first (its id keys the charge); no credit deletes it, nothing is spent."""
+        charge_id = None
+        try:
+            charge_id = CreditService(self.db).consume(
+                plan.user_id, reason=CreditReason.PLAN, reference_type="plan", reference_id=plan.id,
+                idempotency_key=f"plan:{plan.id}:charge",
+            )
+            self.db.execute(update(Plan).where(Plan.id == plan.id).values(charge_ledger_id=charge_id))
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            if charge_id is not None:
+                CreditService(self.db).refund(charge_id)
+            self.repo.delete(self.db.get(Plan, plan.id))
+            raise
+        plan.charge_ledger_id = charge_id
 
     def _require_indexed_documents(self, user_id: int, document_ids: list[int]) -> None:
         """Only the caller's INDEXED documents can back a plan.
@@ -331,26 +353,37 @@ def _refund_use(db: Session, user_id: int, day: date) -> None:
         logger.warning("Could not refund the free AI use for user %s", user_id)
 
 
-def _refund_plan_use(db: Session, plan_id: int, user_id: int, fallback_day: date | None) -> None:
-    """Give back the free use this plan spent, exactly once and on the day it was spent."""
+def _refund_plan_use(
+    db: Session, plan_id: int, user_id: int, fallback_day: date | None, fallback_charge: int | None = None
+) -> None:
+    """Give back what this plan spent (a free use or a credit), exactly once."""
     try:
         exists = db.scalar(select(Plan.id).where(Plan.id == plan_id)) is not None
         if not exists:  # deleted mid-run: nobody else can refund it
             if fallback_day is not None:
                 FreeAiQuota(db).refund(user_id, fallback_day)
+            if fallback_charge is not None:
+                CreditService(db).refund(fallback_charge)
             return
-        day = db.scalar(select(Plan.free_ai_use_date).where(Plan.id == plan_id))
-        if day is None:
+        day, charge = db.execute(
+            select(Plan.free_ai_use_date, Plan.charge_ledger_id).where(Plan.id == plan_id)
+        ).one()
+        if day is None and charge is None:
             return
         cleared = db.execute(
-            update(Plan).where(Plan.id == plan_id, Plan.free_ai_use_date == day).values(free_ai_use_date=None)
+            update(Plan)
+            .where(Plan.id == plan_id, Plan.free_ai_use_date == day, Plan.charge_ledger_id == charge)
+            .values(free_ai_use_date=None, charge_ledger_id=None)
         )
         db.commit()
         if cleared.rowcount == 1:
-            FreeAiQuota(db).refund(user_id, day)
+            if day is not None:
+                FreeAiQuota(db).refund(user_id, day)
+            if charge is not None:
+                CreditService(db).refund(charge)
     except Exception:  # noqa: BLE001 - bookkeeping must never hide the real outcome
         db.rollback()
-        logger.warning("Could not refund the free AI use for plan %s", plan_id)
+        logger.warning("Could not refund the AI charge for plan %s", plan_id)
 
 
 _INTERRUPTED_MESSAGE = (
@@ -446,7 +479,7 @@ class _Generator:
         if plan is None or plan.status != PlanStatus.PROCESSING:
             logger.warning("generate_plan_task: plan %s not found or not processing", plan_id)
             return
-        user_id, spent_day = plan.user_id, plan.free_ai_use_date
+        user_id, spent_day, charge_id = plan.user_id, plan.free_ai_use_date, plan.charge_ledger_id
         try:
             self.llm = get_llm_provider(self.db, user_id)
             self.recorder = UsageRecorder(user_id=user_id, plan_id=plan_id)
@@ -454,7 +487,7 @@ class _Generator:
             self._finish(plan_id)
         except _PlanGone:
             self.db.rollback()
-            _refund_plan_use(self.db, plan_id, user_id, spent_day)
+            _refund_plan_use(self.db, plan_id, user_id, spent_day, charge_id)
         except Exception as exc:  # noqa: BLE001 - record a safe failure for the client
             # A failed flush leaves the session usable only for a rollback.
             self.db.rollback()
@@ -474,7 +507,7 @@ class _Generator:
                 type(exc).__name__,
             )
             self._fail(plan_id, error_message[:1000])
-            _refund_plan_use(self.db, plan_id, user_id, spent_day)
+            _refund_plan_use(self.db, plan_id, user_id, spent_day, charge_id)
         finally:
             if self.llm is not None:
                 self.llm.close()
@@ -704,7 +737,7 @@ class _Generator:
         result = self.db.execute(
             update(Plan)
             .where(Plan.id == plan_id, Plan.status == PlanStatus.PROCESSING)
-            .values(status=PlanStatus.READY, error_message="", free_ai_use_date=None)
+            .values(status=PlanStatus.READY, error_message="", free_ai_use_date=None, charge_ledger_id=None)
         )
         if result.rowcount == 0:
             raise _PlanGone
