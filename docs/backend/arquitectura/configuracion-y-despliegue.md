@@ -32,4 +32,22 @@ Hiding in the UI is courtesy; the backend enforces.
 
 Los agentes CLI de terminal son **solo self-hosted** (ver [llm/agentes-cli.md](../llm/agentes-cli.md)).
 
+## Variables de despliegue SaaS
+
+Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vacías/seguras.
+
+| Variable | Default | Uso |
+|---|---|---|
+| `APP_ENV` | `development` | `development` \| `production` |
+| `PUBLIC_APP_URL` / `PUBLIC_API_URL` | `http://localhost:5173` / `http://localhost:8001` | URLs públicas (enlaces, redirecciones, webhooks) |
+| `AUTH_MODE` | `demo` | `demo` (usuario único) \| `supabase` (valida JWT) |
+| `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_PUBLISHABLE_KEY` | vacío | Supabase Auth; solo clave publicable |
+| `STORAGE_BACKEND` | `local` | `local` (`UPLOAD_DIR`) \| `s3` (compatible S3, p. ej. R2) |
+| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 |
+| `PAYMENT_GATEWAY` | `fake` | `fake` \| `mercadopago` |
+| `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | vacío | Mercado Pago |
+
+`CLAUDE_API_KEY` se acepta como alias de `ANTHROPIC_API_KEY` (gana `ANTHROPIC_API_KEY`). Los secretos son
+`str` (como el resto del archivo), no `SecretStr`. Dependencias nuevas en `requirements-saas.txt`: `pyjwt[crypto]`, `boto3`.
+
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).

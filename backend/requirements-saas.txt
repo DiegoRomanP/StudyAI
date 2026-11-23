@@ -1,3 +1,5 @@
 # --- SaaS deployment extras (Postgres / Supabase) ---------------------------
 # Not needed for the self-hosted SQLite MVP.
 psycopg[binary]>=3.2,<4
+pyjwt[crypto]>=2.8,<3
+boto3>=1.34,<2

@@ -12,7 +12,7 @@ import math
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Repository layout anchors so paths in .env can stay relative and portable.
@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     # --- LLM -----------------------------------------------------------------
     # When empty, and no verified user credential is active, the app falls back
     # to the deterministic MockLLMProvider so the MVP remains runnable offline.
-    ANTHROPIC_API_KEY: str = ""
+    # CLAUDE_API_KEY is accepted as an alias (ANTHROPIC_API_KEY wins when both are set).
+    ANTHROPIC_API_KEY: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CLAUDE_API_KEY"))
     # Defaults follow Anthropic's guidance (Opus 4.8 is the current flagship).
     # Cheaper alternatives you may set here: claude-sonnet-5, claude-haiku-4-5.
     LLM_MODEL_PLAN: str = "claude-opus-4-8"
@@ -136,7 +137,9 @@ class Settings(BaseSettings):
     PDF_MAX_IMAGES: int = Field(default=20, ge=0)
 
     # --- App -----------------------------------------------------------------
-    APP_ENV: str = "development"
+    APP_ENV: Literal["development", "production"] = "development"
+    PUBLIC_APP_URL: str = "http://localhost:5173"
+    PUBLIC_API_URL: str = "http://localhost:8001"
     # self_hosted: today's behaviour (demo user, own key, Ollama, mock allowed).
     # saas: server-side Anthropic key only; never the mock, never a learner's own key.
     DEPLOYMENT_MODE: Literal["self_hosted", "saas"] = "self_hosted"
@@ -147,6 +150,25 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173"]
     )
+
+    # --- Auth (demo = single demo user; supabase = verify Supabase JWTs) -------
+    AUTH_MODE: Literal["demo", "supabase"] = "demo"
+    SUPABASE_URL: str = ""
+    SUPABASE_JWKS_URL: str = ""
+    SUPABASE_PUBLISHABLE_KEY: str = ""
+
+    # --- File storage (local = UPLOAD_DIR; s3 = S3-compatible, e.g. Cloudflare R2) ---
+    STORAGE_BACKEND: Literal["local", "s3"] = "local"
+    S3_ENDPOINT_URL: str = ""
+    S3_BUCKET: str = ""
+    S3_ACCESS_KEY_ID: str = ""
+    S3_SECRET_ACCESS_KEY: str = ""
+    S3_REGION: str = "auto"
+
+    # --- Payments (fake = no charges; mercadopago = real) ----------------------
+    PAYMENT_GATEWAY: Literal["fake", "mercadopago"] = "fake"
+    MP_ACCESS_TOKEN: str = ""
+    MP_WEBHOOK_SECRET: str = ""
 
     # --- Study session tuning ------------------------------------------------
     # Ebbinghaus-inspired review offsets (days) used when scheduling sessions.

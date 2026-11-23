@@ -28,6 +28,17 @@ os.environ["ANTHROPIC_API_KEY"] = ""
 # The operator's free-tier key must never reach a test run (no network, no quota).
 # An environment variable beats both .env files, including the repo-root one.
 os.environ["DEEPSEEK_API_KEY"] = ""
+os.environ["CLAUDE_API_KEY"] = ""
+# Deployment/SaaS settings: tests always run self-hosted, demo auth, local files, fake payments.
+for _k in (
+    "SUPABASE_URL", "SUPABASE_JWKS_URL", "SUPABASE_PUBLISHABLE_KEY", "S3_ENDPOINT_URL", "S3_BUCKET",
+    "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET",
+):
+    os.environ[_k] = ""
+os.environ.update(
+    DEPLOYMENT_MODE="self_hosted", AUTH_MODE="demo", STORAGE_BACKEND="local", PAYMENT_GATEWAY="fake",
+    APP_ENV="development", S3_REGION="auto",
+)
 
 import pytest  # noqa: E402 - after the environment redirection above
 
