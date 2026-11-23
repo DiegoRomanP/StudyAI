@@ -17,9 +17,11 @@ from app.core.exceptions import (
     AuthenticationError,
     ConflictError,
     DailyLimitError,
+    InsufficientCreditsError,
     LLMError,
     NotFoundError,
     PlanDocumentsUnavailableError,
+    PlanLimitError,
     StudyAIError,
     UnsupportedFileTypeError,
     ValidationError,
@@ -104,6 +106,14 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(DailyLimitError)
     async def _daily_limit(_: Request, exc: DailyLimitError) -> JSONResponse:
         return JSONResponse(status_code=429, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(InsufficientCreditsError)
+    async def _no_credits(_: Request, exc: InsufficientCreditsError) -> JSONResponse:
+        return JSONResponse(status_code=402, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(PlanLimitError)
+    async def _plan_limit(_: Request, exc: PlanLimitError) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(exc), "code": exc.code})
 
     @app.exception_handler(PlanDocumentsUnavailableError)
     async def _plan_documents(_: Request, exc: PlanDocumentsUnavailableError) -> JSONResponse:

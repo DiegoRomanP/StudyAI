@@ -63,6 +63,7 @@ def test_postgres_enum_backfill_runs_after_create_all_and_commits(monkeypatch):
         "_ensure_plan_generation_columns",
         "_ensure_free_ai_assistant_column",
         "_ensure_user_auth_columns",
+        "_ensure_credit_columns",
         "_ensure_goal_deleted_at_column",
         "_ensure_goal_exam_date_column",
         "_purge_retired_provider_credentials",

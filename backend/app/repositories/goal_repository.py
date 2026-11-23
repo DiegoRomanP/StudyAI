@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.goal import Goal
 from app.repositories.base import BaseRepository
@@ -25,3 +25,11 @@ class GoalRepository(BaseRepository[Goal]):
         if goal is None or goal.user_id != user_id or goal.deleted_at is not None:
             return None
         return goal
+
+    def count_active(self, user_id: int) -> int:
+        """Goals that are neither deleted nor archived (what the tier limit counts)."""
+        return self.db.scalar(
+            select(func.count()).where(
+                Goal.user_id == user_id, Goal.deleted_at.is_(None), Goal.archived_at.is_(None)
+            )
+        ) or 0
