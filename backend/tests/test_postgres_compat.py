@@ -30,7 +30,7 @@ def test_long_filename_is_truncated_keeping_its_extension(client: TestClient):
 
     assert r.status_code == 201
     filename = r.json()["filename"]
-    assert len(filename) == 512
+    assert len(filename) == 255
     assert filename.endswith(".md")
 
 
