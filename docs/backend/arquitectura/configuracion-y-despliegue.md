@@ -51,6 +51,9 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac√
 `CLAUDE_API_KEY` se acepta como alias de `ANTHROPIC_API_KEY` (gana `ANTHROPIC_API_KEY`). Los secretos son
 `str` (como el resto del archivo), no `SecretStr`. Dependencias nuevas en `requirements-saas.txt`: `pyjwt[crypto]`, `boto3`.
 
+Empaquetado y despliegue (`backend/Dockerfile`, `deploy/`, CI): ver [despliegue/operacion.md](../despliegue/operacion.md).
+La imagen ejecuta `alembic upgrade head` solo con `DEPLOYMENT_MODE=saas`.
+
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).
 
 ## Autenticaci√≥n (`AUTH_MODE`)
