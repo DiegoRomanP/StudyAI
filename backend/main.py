@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import (
+    AuthenticationError,
     ConflictError,
     DailyLimitError,
     LLMError,
@@ -93,6 +94,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConflictError)
     async def _conflict(_: Request, exc: ConflictError) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(AuthenticationError)
+    async def _auth(_: Request, exc: AuthenticationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=401, content={"detail": str(exc), "code": exc.code}, headers={"WWW-Authenticate": "Bearer"}
+        )
 
     @app.exception_handler(DailyLimitError)
     async def _daily_limit(_: Request, exc: DailyLimitError) -> JSONResponse:

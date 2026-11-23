@@ -42,6 +42,7 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac�
 | `PUBLIC_APP_URL` / `PUBLIC_API_URL` | `http://localhost:5173` / `http://localhost:8001` | URLs públicas (enlaces, redirecciones, webhooks) |
 | `AUTH_MODE` | `demo` | `demo` (usuario único) \| `supabase` (valida JWT) |
 | `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_PUBLISHABLE_KEY` | vacío | Supabase Auth; solo clave publicable |
+| `SUPABASE_JWT_AUDIENCE` | `authenticated` | `aud` esperado del token |
 | `STORAGE_BACKEND` | `local` | `local` (`UPLOAD_DIR`) \| `s3` (compatible S3, p. ej. R2) |
 | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 |
 | `PAYMENT_GATEWAY` | `fake` | `fake` \| `mercadopago` |
@@ -51,3 +52,21 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac�
 `str` (como el resto del archivo), no `SecretStr`. Dependencias nuevas en `requirements-saas.txt`: `pyjwt[crypto]`, `boto3`.
 
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).
+
+## Autenticación (`AUTH_MODE`)
+
+- `demo` (por defecto): `get_current_user` devuelve el usuario 1; sin login, comportamiento autoalojado intacto.
+- `supabase`: `get_current_user` (`app/api/deps.py`) exige `Authorization: Bearer <access token>`.
+  `SupabaseTokenVerifier` (`app/core/auth.py`) valida con **JWKS asimétrico** (`SUPABASE_JWKS_URL`,
+  solo `ES256`/`RS256`, nunca HS256 ni *JWT secret*), `aud=SUPABASE_JWT_AUDIENCE`,
+  `iss={SUPABASE_URL}/auth/v1`, y exige `exp/iss/aud/sub`. Rechaza tokens anónimos (`is_anonymous`):
+  con «Confirm email» activado, un token no anónimo implica correo verificado.
+- Usuario *just-in-time*: `user_service.get_or_create_supabase_user` busca por `users.supabase_user_id`
+  y lo crea en la primera petición (carrera resuelta con `IntegrityError` → rollback y relectura). Un
+  correo que ya pertenece a otro `sub` da 409. El hook `on_user_created` queda vacío (F1 lo usará).
+- Errores (con `code` estable): `AUTH_REQUIRED` 401, `AUTH_INVALID_TOKEN` 401, `AUTH_EMAIL_CONFLICT` 409.
+- `jwt` (PyJWT) se importa de forma perezosa; `requirements-saas.txt` lo incluye, la app autoalojada
+  arranca sin él. `DEPLOYMENT_MODE=saas` exige `AUTH_MODE=supabase` (validador de `Settings`).
+- `GET /config` expone `auth_mode`. Columnas nuevas de `users`: `supabase_user_id` (único), `email_verified_at`
+  (backfill en `_ensure_user_auth_columns`).
+- Aislamiento entre usuarios: `tests/test_user_isolation.py` recorre todas las rutas con ids ajenos (404).

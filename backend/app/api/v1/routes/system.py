@@ -12,4 +12,4 @@ router = APIRouter(tags=["system"])
 @router.get("/config")
 def get_config() -> dict[str, str]:
     # The backend still enforces every mode; this only lets the UI hide what does not apply.
-    return {"deployment_mode": get_settings().DEPLOYMENT_MODE, "auth_mode": "demo"}
+    return {"deployment_mode": get_settings().DEPLOYMENT_MODE, "auth_mode": get_settings().AUTH_MODE}

@@ -12,7 +12,7 @@ import math
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Repository layout anchors so paths in .env can stay relative and portable.
@@ -155,6 +155,7 @@ class Settings(BaseSettings):
     AUTH_MODE: Literal["demo", "supabase"] = "demo"
     SUPABASE_URL: str = ""
     SUPABASE_JWKS_URL: str = ""
+    SUPABASE_JWT_AUDIENCE: str = "authenticated"
     SUPABASE_PUBLISHABLE_KEY: str = ""
 
     # --- File storage (local = UPLOAD_DIR; s3 = S3-compatible, e.g. Cloudflare R2) ---
@@ -193,6 +194,12 @@ class Settings(BaseSettings):
         if not model:
             raise ValueError("Los modelos de Anthropic no pueden estar vacíos.")
         return model
+
+    @model_validator(mode="after")
+    def _saas_requires_supabase_auth(self) -> "Settings":
+        if self.DEPLOYMENT_MODE == "saas" and self.AUTH_MODE != "supabase":
+            raise ValueError("DEPLOYMENT_MODE=saas exige AUTH_MODE=supabase.")
+        return self
 
     @property
     def is_saas(self) -> bool:

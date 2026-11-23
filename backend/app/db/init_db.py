@@ -91,6 +91,7 @@ def init_db() -> None:
     _ensure_plan_idempotency_columns()
     _ensure_plan_generation_columns()
     _ensure_free_ai_assistant_column()
+    _ensure_user_auth_columns()
     _ensure_goal_deleted_at_column()
     _ensure_goal_exam_date_column()
     _purge_retired_provider_credentials()
@@ -197,6 +198,13 @@ def _add_missing_columns(table: str, definitions: dict[str, str]) -> None:
             if name not in columns:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
                 logger.info("Migrated %s table: added %s column", table, name)
+
+
+def _ensure_user_auth_columns() -> None:
+    _add_missing_columns("users", {"supabase_user_id": "VARCHAR(64)", "email_verified_at": "TIMESTAMP"})
+    if "users" in inspect(engine).get_table_names():
+        with engine.begin() as conn:
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_supabase_user_id ON users (supabase_user_id)"))
 
 
 def _ensure_goal_deleted_at_column() -> None:
