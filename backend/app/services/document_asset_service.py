@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
-from pathlib import Path
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -19,6 +17,7 @@ from app.llm.output_budget import OUTPUT_BUDGETS
 from app.models.document_asset import DocumentAsset
 from app.processors.base import ExtractedDocument
 from app.processors.pdf_processor import IMAGE_REF
+from app.storage import get_file_storage
 
 logger = get_logger(__name__)
 
@@ -32,25 +31,33 @@ _DESCRIBE_SYSTEM = (
 )
 
 
-def assets_dir(document_id: int) -> Path:
-    return Path(get_settings().UPLOAD_DIR) / "assets" / str(document_id)
+def _prefix(document_id: int) -> str:
+    return f"assets/{document_id}"
 
 
 def remove_document_assets(db: Session, document_id: int) -> None:
     """Rows and files; callers own the commit."""
     db.execute(delete(DocumentAsset).where(DocumentAsset.document_id == document_id))
-    shutil.rmtree(assets_dir(document_id), ignore_errors=True)
+    try:
+        get_file_storage().delete_prefix(_prefix(document_id))
+    except Exception:  # noqa: BLE001 - cleanup must not block deletion
+        logger.warning("Could not remove figures of document %s", document_id)
 
 
-def find_asset(db: Session, asset_id: int) -> tuple[int, Path]:
-    """The owning document ID and file of a figure; the caller checks document ownership."""
+def find_asset(db: Session, asset_id: int) -> tuple[int, str]:
+    """The owning document ID and storage key of a figure; the caller checks document ownership."""
     asset = db.get(DocumentAsset, asset_id)
     if asset is None:
         raise NotFoundError("Figura no encontrada.")
-    path = Path(asset.storage_path).resolve()
-    if not path.is_relative_to(assets_dir(asset.document_id).resolve()) or not path.is_file():
-        raise NotFoundError("Figura no encontrada.")
-    return asset.document_id, path
+    return asset.document_id, asset.storage_path
+
+
+def read_asset(key: str) -> bytes:
+    try:
+        with get_file_storage().local_copy(key) as path:
+            return path.read_bytes()
+    except Exception:  # noqa: BLE001 - missing file or storage error: same answer as no figure
+        raise NotFoundError("Figura no encontrada.") from None
 
 
 class FigureDescriber:
@@ -89,10 +96,15 @@ class FigureDescriber:
 
         # Re-indexing starts clean. Rows only: the folder already holds the images just extracted.
         self._db.execute(delete(DocumentAsset).where(DocumentAsset.document_id == self._document_id))
+        storage = get_file_storage()
+        storage.delete_prefix(_prefix(self._document_id))
         markers: dict[str, str] = {}
         for digest, (path, size) in kept.items():
+            key = f"{_prefix(self._document_id)}/{digest}.png"
+            with open(path, "rb") as fh:
+                storage.save(key, fh.read())
             asset = DocumentAsset(
-                document_id=self._document_id, storage_path=path, sha256=digest,
+                document_id=self._document_id, storage_path=key, sha256=digest,
                 width=size[0], height=size[1], description=descriptions[digest],
             )
             self._db.add(asset)

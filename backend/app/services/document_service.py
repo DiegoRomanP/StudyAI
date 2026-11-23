@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import os
+import re
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -14,12 +15,22 @@ from app.core.logging import get_logger
 from app.models.document import Document, DocumentStatus
 from app.processors.factory import SUPPORTED_EXTENSIONS
 from app.processors.pipeline import IngestionPipeline
-from app.services.document_asset_service import FigureDescriber, assets_dir, remove_document_assets
+from app.services.document_asset_service import FigureDescriber, remove_document_assets
+from app.storage import get_file_storage
 from app.rag.vector_store import VectorStore
 from app.repositories.document_repository import DocumentRepository
 from app.db.session import SessionLocal
 
 logger = get_logger(__name__)
+
+_MAX_FILENAME = 255  # T2: Postgres enforces VARCHAR lengths, SQLite does not
+
+
+def sanitize_filename(filename: str) -> str:
+    """Display name only (storage uses a generated key): no directories, no control characters."""
+    name = re.sub(r"[\x00-\x1f\x7f]", "", re.split(r"[\\/]", filename)[-1]).strip().strip(".")
+    suffix = Path(name).suffix[:16]
+    return (name[: _MAX_FILENAME - len(suffix)] + suffix) if len(name) > _MAX_FILENAME else name
 
 
 class DocumentService:
@@ -32,6 +43,7 @@ class DocumentService:
         self, user_id: int, filename: str, content: bytes
     ) -> Document:
         """Validate + persist an uploaded file and its Document row (PENDING)."""
+        filename = sanitize_filename(filename)
         ext = Path(filename).suffix.lower().lstrip(".")
         if ext not in SUPPORTED_EXTENSIONS:
             raise ValidationError(
@@ -44,18 +56,17 @@ class DocumentService:
             )
         if not content:
             raise ValidationError("El archivo está vacío.")
+        if ext == "pdf" and not content.startswith(b"%PDF-"):
+            raise ValidationError("El archivo no es un PDF válido.")
+        if ext != "pdf":
+            try:
+                content.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValidationError("El archivo de texto no es UTF-8 válido.") from None
 
-        os.makedirs(self.settings.UPLOAD_DIR, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}.{ext}"
-        storage_path = os.path.join(self.settings.UPLOAD_DIR, safe_name)
-        with open(storage_path, "wb") as fh:
-            fh.write(content)
+        storage_path = f"users/{user_id}/documents/{uuid.uuid4().hex}.{ext}"
+        get_file_storage().save(storage_path, content)
 
-        # Postgres enforces VARCHAR(512); keep the extension visible when trimming.
-        max_len = Document.__table__.c.filename.type.length
-        if len(filename) > max_len:
-            suffix = Path(filename).suffix[:16]
-            filename = filename[: max_len - len(suffix)] + suffix
         document = Document(
             user_id=user_id,
             filename=filename,
@@ -84,10 +95,10 @@ class DocumentService:
         """
         document = self.get_document(user_id, document_id)
 
-        if document.storage_path and os.path.exists(document.storage_path):
+        if document.storage_path:
             try:
-                os.remove(document.storage_path)
-            except OSError:
+                get_file_storage().delete(document.storage_path)
+            except Exception:  # noqa: BLE001 - cleanup must not block deletion
                 logger.warning("Could not remove stored file for document %s", document_id)
 
         try:
@@ -119,13 +130,12 @@ def index_document_task(document_id: int) -> None:
 
                 # Only a vision-capable provider (the agent CLIs) describes figures.
                 llm = resolve_llm_provider(db, document.user_id).provider
-            folder = assets_dir(document.id)
-            folder.mkdir(parents=True, exist_ok=True)
-            pipeline = IngestionPipeline()
-            pipeline.run(
-                document.id, document.storage_path, document.file_type,
-                assets_dir=str(folder), describe=FigureDescriber(db, document.id, llm),
-            )
+            with tempfile.TemporaryDirectory(prefix="studyai-assets-") as scratch, \
+                    get_file_storage().local_copy(document.storage_path) as source:
+                IngestionPipeline().run(
+                    document.id, str(source), document.file_type,
+                    assets_dir=scratch, describe=FigureDescriber(db, document.id, llm),
+                )
             document.status = DocumentStatus.INDEXED
         except Exception as exc:  # noqa: BLE001 - record failure, don't crash
             logger.exception("Failed to index document %s", document_id)

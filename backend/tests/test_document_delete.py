@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 import main
 from app.db.session import SessionLocal
+from app.core.config import get_settings
 from app.models.document import Document
 
 
@@ -34,6 +35,7 @@ def test_delete_document_removes_record_and_stored_file(client: TestClient):
     db = SessionLocal()
     storage_path = db.get(Document, doc_id).storage_path
     db.close()
+    storage_path = os.path.join(get_settings().UPLOAD_DIR, storage_path)
     assert os.path.exists(storage_path)
 
     r = client.delete(f"/documents/{doc_id}")

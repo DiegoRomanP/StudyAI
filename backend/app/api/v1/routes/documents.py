@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.document import DocumentResponse
-from app.services.document_asset_service import find_asset
+from app.services.document_asset_service import find_asset, read_asset
 from app.services.document_service import DocumentService, index_document_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -66,19 +66,19 @@ def delete_document(
 
 @router.get(
     "/figures/{asset_id}",
-    response_class=FileResponse,
+    response_class=Response,
     responses={200: {"content": {"image/png": {}}}},
 )
 def get_document_figure(
     asset_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> FileResponse:
+) -> Response:
     """A figure extracted from one of the caller's documents (404 for anyone else's)."""
-    document_id, path = find_asset(db, asset_id)
+    document_id, key = find_asset(db, asset_id)
     DocumentService(db).get_document(user.id, document_id)
-    return FileResponse(
-        path,
+    return Response(
+        read_asset(key),
         media_type="image/png",
         headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"},
     )
