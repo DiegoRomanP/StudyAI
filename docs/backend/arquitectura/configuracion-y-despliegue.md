@@ -43,7 +43,7 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac�
 | `AUTH_MODE` | `demo` | `demo` (usuario único) \| `supabase` (valida JWT) |
 | `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_PUBLISHABLE_KEY` | vacío | Supabase Auth; solo clave publicable |
 | `STORAGE_BACKEND` | `local` | `local` (`UPLOAD_DIR`) \| `s3` (compatible S3, p. ej. R2) |
-| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 |
+| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 (`app/storage`; requiere `boto3` de `requirements-saas.txt`; si faltan o `boto3` no está, cae a local con warning). Detalle: [../documentos/ingesta-y-figuras.md](../documentos/ingesta-y-figuras.md) |
 | `PAYMENT_GATEWAY` | `fake` | `fake` \| `mercadopago` |
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | vacío | Mercado Pago |
 

@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from app.core.config import get_settings
 from app.core.exceptions import LLMError
 from app.models.document import Document
 from app.models.document_asset import DocumentAsset
@@ -144,7 +145,7 @@ def test_uploaded_pdf_serves_its_figures_only_to_their_document(client):
     assert client.get(f"/documents/{document_id}").json()["status"] == "INDEXED"
     with main.SessionLocal() as db:
         (asset,) = db.query(DocumentAsset).filter_by(document_id=document_id).all()
-        asset_id, path = asset.id, Path(asset.storage_path)
+        asset_id, path = asset.id, Path(get_settings().UPLOAD_DIR) / asset.storage_path
 
     response = client.get(f"/documents/figures/{asset_id}")
     assert response.status_code == 200
