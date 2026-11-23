@@ -2,10 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 
-import { getApiErrorMessage } from "../../api/errors";
+import { getApiErrorMessage, isInsufficientCreditsError } from "../../api/errors";
 import type { ReviewPoint, SessionDetailDTO } from "../../api/types";
 import { useCancelReinforcement, useLlmRuntime, useStartReinforcement } from "../../hooks/queries";
+import { useCredits } from "../../hooks/useCredits";
 import { useReinforceAlways } from "../../lib/reinforcePreference";
+import { CreditNotice, NoCreditsReason } from "../credits/CreditNotice";
+import { OutOfCreditsDialog } from "../credits/OutOfCreditsDialog";
 import { Alert, Button, Card, Spinner } from "../ui";
 import { SafeMarkdown } from "./SafeMarkdown";
 
@@ -40,20 +43,31 @@ export function ReviewPanel({ session }: { session: SessionDetailDTO }) {
   const start = useStartReinforcement();
   const cancel = useCancelReinforcement();
   const { always, setAlways } = useReinforceAlways();
+  const credits = useCredits();
   const [choosing, setChoosing] = useState(false);
+  const [outOfCredits, setOutOfCredits] = useState(false);
+  const noticeId = useId();
   const autoStarted = useRef(false);
   const reasonId = useId();
   const choicesId = useId();
 
   const status = session.reinforcement_status;
-  const noFreeUses = runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
-  const runtimeKnown = runtime.data !== undefined;
+  // SaaS spends credits instead of the free daily uses.
+  const noFreeUses = credits.enabled
+    ? credits.noCredits
+    : runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
+  const runtimeKnown = credits.enabled ? credits.data !== undefined : runtime.data !== undefined;
+
+  function startReinforcement() {
+    start.mutate(session.id, { onError: (error) => isInsufficientCreditsError(error) && setOutOfCredits(true) });
+  }
 
   // "Siempre": launch once per visit, never on a retry or after the learner skipped the AI.
   useEffect(() => {
     if (!always || autoStarted.current || !runtimeKnown || noFreeUses || status !== "NONE") return;
     autoStarted.current = true;
-    start.mutate(session.id);
+    startReinforcement();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [always, runtimeKnown, noFreeUses, status, session.id, start]);
 
   if (status === "READY") return null;
@@ -61,7 +75,7 @@ export function ReviewPanel({ session }: { session: SessionDetailDTO }) {
   function launch(remember: boolean) {
     if (remember) setAlways(true);
     setChoosing(false);
-    start.mutate(session.id);
+    startReinforcement();
   }
 
   return (
@@ -105,12 +119,14 @@ export function ReviewPanel({ session }: { session: SessionDetailDTO }) {
                 disabled={noFreeUses || start.isPending}
                 aria-expanded={status === "FAILED" ? undefined : choosing}
                 aria-controls={status === "FAILED" ? undefined : choicesId}
-                aria-describedby={noFreeUses ? reasonId : undefined}
+                aria-describedby={noFreeUses ? reasonId : credits.data ? noticeId : undefined}
                 onClick={() => (status === "FAILED" ? launch(false) : setChoosing((open) => !open))}
               >
                 {status === "FAILED" ? "Reintentar con IA" : "Reforzar con IA"}
               </Button>
-              {noFreeUses && (
+              {credits.enabled && noFreeUses && <NoCreditsReason id={reasonId} />}
+              {credits.enabled && credits.data && !noFreeUses && <CreditNotice balance={credits.data} id={noticeId} />}
+              {!credits.enabled && noFreeUses && (
                 <p id={reasonId} className="text-sm text-text-muted">
                   Sin usos gratis hoy.{" "}
                   <Link to="/settings" className="font-medium text-action hover:underline">
@@ -132,6 +148,7 @@ export function ReviewPanel({ session }: { session: SessionDetailDTO }) {
           )}
         </>
       )}
+      <OutOfCreditsDialog open={outOfCredits} onClose={() => setOutOfCredits(false)} />
     </Card>
   );
 }

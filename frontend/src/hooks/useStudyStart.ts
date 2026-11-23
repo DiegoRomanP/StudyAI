@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getApiErrorMessage, isNotFoundError } from "../api/errors";
+import { getApiErrorMessage, isInsufficientCreditsError, isNotFoundError } from "../api/errors";
 import type {
   AdaptivePlanOptions,
   GoalCreate,
@@ -53,7 +53,7 @@ const STORAGE_VERSION = 1;
 type Step =
   | { phase: "idle" }
   | { phase: "saving-goal" | "requesting-plan" }
-  | { phase: "error"; message: string }
+  | { phase: "error"; message: string; outOfCredits?: boolean }
   /** `stage` tells the UI whether a retry is safe ("plan", idempotent) or not ("goal"). */
   | { phase: "uncertain"; stage: "goal" | "plan"; message: string };
 
@@ -217,7 +217,11 @@ export function useStudyStart() {
                   message:
                     "No sabemos si el servidor recibió la solicitud. Puedes reintentar con seguridad: se reutiliza la misma solicitud y no se duplicará el plan.",
                 }
-              : { phase: "error", message: getApiErrorMessage(caught, "No se pudo iniciar la generación del plan.") },
+              : {
+                  phase: "error",
+                  message: getApiErrorMessage(caught, "No se pudo iniciar la generación del plan."),
+                  outOfCredits: isInsufficientCreditsError(caught),
+                },
           );
         }
       } finally {
@@ -239,7 +243,11 @@ export function useStudyStart() {
       setStep(
         axios.isAxiosError(caught) && caught.response?.status === 409
           ? { phase: "idle" }
-          : { phase: "error", message: getApiErrorMessage(caught, "No se pudo continuar la generación.") },
+          : {
+              phase: "error",
+              message: getApiErrorMessage(caught, "No se pudo continuar la generación."),
+              outOfCredits: isInsufficientCreditsError(caught),
+            },
       );
     } finally {
       running.current = false;
@@ -293,5 +301,8 @@ export function useStudyStart() {
     isResuming: resumePlan.isPending,
     canResume: !planMissing && !planLoadFailed && plan?.status === "FAILED",
     reset,
+    /** The last request got a 402: the UI opens the out-of-credits dialog. */
+    outOfCredits: step.phase === "error" && step.outOfCredits === true,
+    dismissOutOfCredits: () => setStep((current) => (current.phase === "error" ? { ...current, outOfCredits: false } : current)),
   };
 }

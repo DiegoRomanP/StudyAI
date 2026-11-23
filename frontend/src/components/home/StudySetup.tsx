@@ -24,6 +24,9 @@ import {
 } from "../../hooks/queries";
 import { parseApiDate } from "../../lib/studyProgress";
 import { useAppConfig } from "../../hooks/useAppConfig";
+import { useCredits } from "../../hooks/useCredits";
+import { CreditNotice, PRICING_PATH } from "../credits/CreditNotice";
+import { OutOfCreditsDialog } from "../credits/OutOfCreditsDialog";
 import { useStudyStart, type StudyStartInput } from "../../hooks/useStudyStart";
 import {
   GOAL_TEMPLATES,
@@ -162,7 +165,11 @@ export function StudySetup({
               ? `Hoy usaste tus ${ai.freeLimit} usos gratis. Conecta tu IA.`
               : "Falta elegir una IA.",
   };
-  const missing = (Object.values(reasons) as (string | null)[]).filter((item): item is string => item !== null);
+  const credits = useCredits();
+  const missing = [
+    ...(Object.values(reasons) as (string | null)[]),
+    credits.noCredits ? "Sin créditos para generar el plan." : null,
+  ].filter((item): item is string => item !== null);
 
   // SaaS: the server picks the AI, so there is no step to choose one.
   const steps = isSaas ? STEPS.filter((item) => item.id !== "ia") : STEPS;
@@ -505,6 +512,14 @@ export function StudySetup({
                 </ul>
               </div>
             )}
+            {step.id === "listo" && credits.data && !credits.noCredits && <CreditNotice balance={credits.data} />}
+            {step.id === "listo" && credits.noCredits && (
+              <div>
+                <ButtonLink to={PRICING_PATH} variant="secondary">
+                  Recargar créditos
+                </ButtonLink>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               {active > 0 ? (
                 <Button type="button" variant="ghost" onClick={() => goTo(active - 1)}>
@@ -614,10 +629,12 @@ function StudyStatus({
 }) {
   const runtime = useLlmRuntime();
   const reasonId = useId();
-  const noFreeUses = runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
+  const creditsEnabled = useCredits().enabled;
+  const noFreeUses = !creditsEnabled && runtime.data?.bundled === true && runtime.data.free_ai?.remaining === 0;
 
   return (
     <div aria-live="polite" className="space-y-3">
+      <OutOfCreditsDialog open={study.outOfCredits} onClose={study.dismissOutOfCredits} />
       {study.phase === "saving-goal" && <ActivityIndicator label="Guardando tu meta…" />}
       {study.phase === "requesting-plan" && <ActivityIndicator label="Solicitando tu plan…" />}
       {study.phase === "processing" && (

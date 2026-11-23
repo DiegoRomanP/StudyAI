@@ -135,6 +135,7 @@ export function AppShell({
   chrome = "default",
   hideAiSettings = false,
   onSignOut,
+  creditChip,
 }: {
   children: ReactNode;
   sidebarFooter?: ReactNode;
@@ -143,6 +144,8 @@ export function AppShell({
   hideAiSettings?: boolean;
   /** Only with a Supabase session: shows «Cerrar sesión». */
   onSignOut?: () => void;
+  /** SaaS only: credit balance chip (the shell stays free of data hooks). */
+  creditChip?: ReactNode;
 }) {
   const navigation = hideAiSettings ? NAVIGATION.filter((item) => item.to !== "/settings") : NAVIGATION;
   const primaryNavigation = navigation.filter((item) => item.primary);
@@ -212,6 +215,7 @@ export function AppShell({
           <NavigationLinks pathname={pathname} items={navigation} />
         </nav>
         <div className="mt-auto space-y-3 pt-6">
+          {creditChip}
           {sidebarFooter}
           {onSignOut && <SignOutButton onClick={onSignOut} className="w-full justify-start" />}
         </div>
@@ -220,7 +224,10 @@ export function AppShell({
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line bg-surface-paper/80 px-4 py-2 md:hidden">
           <BrandLink className="flex items-center gap-2 rounded-control py-2 text-text-primary" />
-          {onSignOut && <SignOutButton onClick={onSignOut} />}
+          <div className="flex items-center gap-1">
+            {creditChip}
+            {onSignOut && <SignOutButton onClick={onSignOut} />}
+          </div>
         </header>
 
         <main
