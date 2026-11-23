@@ -11,7 +11,9 @@ offending `document_ids` and no plan row. A foreign ID is reported exactly like 
 disclose other users' documents). The check runs *after* the idempotency lookup so a replay of an
 already-accepted request still returns its plan. Without it, retrieval silently found nothing and a plan
 reached READY with generic content. Gasta un uso de IA gratuita solo si el proveedor es bundled (ver
-[../llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)).
+[../llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)). En `saas` cobra 1 crédito
+(`plan:{id}:charge`; sin saldo 402 `INSUFFICIENT_CREDITS` y no queda fila), reanudar cuesta 0 y el reembolso
+va por `charge_ledger_id`: ver [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md).
 
 ## Borrar un plan
 

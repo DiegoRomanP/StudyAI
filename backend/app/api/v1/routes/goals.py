@@ -8,12 +8,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.db.session import get_db
 from app.models.goal import Goal
 from app.models.user import User
 from app.repositories.goal_repository import GoalRepository
 from app.schemas.goal import GoalCreate, GoalResponse, GoalUpdate
+from app.services.credit_service import CreditService
 
 router = APIRouter(prefix="/goals", tags=["goals"])
 
@@ -25,6 +27,8 @@ def create_goal(
     user: User = Depends(get_current_user),
 ) -> GoalResponse:
     repo = GoalRepository(db)
+    if get_settings().is_saas:
+        CreditService(db).ensure_goal_slot(user.id)
     goal = Goal(
         user_id=user.id,
         goal_type=payload.goal_type,
@@ -85,6 +89,34 @@ def delete_goal(
     # sessions, results and reviews stay. They are removed only via DELETE /plans/{id}.
     goal.deleted_at = datetime.now(timezone.utc)
     GoalRepository(db).save(goal)
+
+
+@router.post("/{goal_id}/archive", response_model=GoalResponse)
+def archive_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> GoalResponse:
+    goal = _get_owned_goal(db, user.id, goal_id)
+    if goal.archived_at is None:  # idempotent
+        goal.archived_at = datetime.now(timezone.utc)
+        GoalRepository(db).save(goal)
+    return GoalResponse.model_validate(goal)
+
+
+@router.post("/{goal_id}/unarchive", response_model=GoalResponse)
+def unarchive_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> GoalResponse:
+    goal = _get_owned_goal(db, user.id, goal_id)
+    if goal.archived_at is not None:  # idempotent; reactivating needs a free active slot
+        if get_settings().is_saas:
+            CreditService(db).ensure_goal_slot(user.id)
+        goal.archived_at = None
+        GoalRepository(db).save(goal)
+    return GoalResponse.model_validate(goal)
 
 
 def _get_owned_goal(db: Session, user_id: int, goal_id: int) -> Goal:

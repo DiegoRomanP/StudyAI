@@ -33,3 +33,5 @@ class Goal(TimestampMixin, Base):
     # Soft delete: the learner's plans, sessions and practice outlive the goal, and
     # generation, resume and reinforcement still read its title and type.
     deleted_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)
+    # Archived goals keep their plans and history but no longer count against the active-goal limit.
+    archived_at: Mapped[datetime | None] = mapped_column(default=None, nullable=True)

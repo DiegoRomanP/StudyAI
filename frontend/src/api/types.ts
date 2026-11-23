@@ -33,6 +33,8 @@ export interface GoalDTO {
   description: string;
   exam_date?: string | null;
   created_at: string;
+  /** Set when the goal is archived (no longer counts as active). */
+  archived_at?: string | null;
 }
 
 export interface GoalCreate {
@@ -369,3 +371,45 @@ export interface AssistantQuestionDTO {
   answer: string;
   created_at: string;
 }
+
+// Credits and account (saas)
+export type CreditTier = "free" | "credits" | "pass";
+export type CreditReason =
+  | "signup_bonus"
+  | "purchase"
+  | "pass_grant"
+  | "plan"
+  | "reinforcement"
+  | "refund"
+  | "admin_adjustment"
+  | "expiration";
+export type CreditSource = "purchased" | "pass";
+
+export interface CreditBalanceDTO {
+  purchased: number;
+  pass_credits: number;
+  pass_expires_at: string | null;
+  /** Spendable now: purchased + valid pass credits. */
+  total: number;
+  tier: CreditTier;
+  /** null = unlimited (always null in self-hosted). */
+  max_documents: number | null;
+  max_active_goals: number | null;
+  documents_used: number;
+  active_goals_used: number;
+}
+
+export interface CreditLedgerEntryDTO {
+  id: number;
+  delta: number;
+  reason: CreditReason;
+  source: CreditSource;
+  reference_type: "plan" | "session" | "order" | null;
+  reference_id: number | null;
+  balance_after: number;
+  created_at: string;
+}
+
+/** Stable `code` values of the saas-only errors (402 / 403) and of auth (401 / 409). */
+export type CreditErrorCode = "INSUFFICIENT_CREDITS" | "PLAN_LIMIT_REACHED";
+export type AuthErrorCode = "AUTH_REQUIRED" | "AUTH_INVALID_TOKEN" | "AUTH_EMAIL_CONFLICT";

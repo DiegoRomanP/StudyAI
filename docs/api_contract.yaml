@@ -7,6 +7,13 @@ info:
     credenciales LLM y los errores normalizados de proveedores. El backend
     (FastAPI) sirve además el esquema OpenAPI completo y en vivo en /openapi.json
     y Swagger UI en /docs.
+
+    Autenticación: con AUTH_MODE=supabase toda ruta (salvo /health y /config)
+    exige `Authorization: Bearer <JWT de Supabase>` y puede responder 401
+    `AUTH_REQUIRED` (sin token), 401 `AUTH_INVALID_TOKEN` (token inválido o
+    vencido) y 409 `AUTH_EMAIL_CONFLICT` (el correo ya pertenece a otra
+    cuenta); ver `components.responses`. Con AUTH_MODE=demo no hay cabecera y
+    el usuario es siempre el demo.
 servers:
   - url: http://localhost:8001
 
@@ -51,7 +58,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Document" }
-        "400": { description: Tipo o tamaño inválido }
+        "400": { description: "Tipo, tamaño, PDF corrupto, PDF protegido con contraseña o PDF con más de MAX_PDF_PAGES páginas" }
+        "403": { $ref: "#/components/responses/PlanLimitReached" }
 
   /documents:
     get:
@@ -110,6 +118,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Goal" }
+        "403": { $ref: "#/components/responses/PlanLimitReached" }
     get:
       summary: Lista metas
       responses:
@@ -158,6 +167,62 @@ paths:
       responses:
         "204": { description: Eliminada }
         "404": { description: Meta no encontrada }
+
+  /goals/{goal_id}/archive:
+    post:
+      summary: Archiva una meta (deja de contar como activa; conserva planes e historial)
+      description: Idempotente. Una meta archivada sigue en `GET /goals` con `archived_at` informado.
+      parameters:
+        - { name: goal_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: La meta, con `archived_at`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+        "404": { description: Meta no encontrada }
+
+  /goals/{goal_id}/unarchive:
+    post:
+      summary: Reactiva una meta archivada (cuenta de nuevo como activa)
+      description: Idempotente. Si el usuario ya está en su máximo de metas activas responde 403.
+      parameters:
+        - { name: goal_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: La meta, con `archived_at` = null
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Goal" }
+        "403": { $ref: "#/components/responses/PlanLimitReached" }
+        "404": { description: Meta no encontrada }
+
+  /account/credits:
+    get:
+      summary: Saldo de créditos, nivel y límites del usuario
+      description: >-
+        En `saas` el nivel se calcula (pase vigente = pass; alguna compra = credits;
+        si no, free). En `self_hosted` no hay créditos: saldos en 0 y límites null.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditBalance" }
+
+  /account/credits/history:
+    get:
+      summary: Movimientos de créditos del usuario, del más reciente al más antiguo
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CreditLedgerEntry" }
 
   /plans/generate:
     post:
@@ -261,8 +326,9 @@ paths:
                   document_ids:
                     type: array
                     items: { type: integer }
+        "402": { $ref: "#/components/responses/InsufficientCredits" }
         "429":
-          description: Se agotó el cupo diario de la IA gratuita incluida (code FREE_AI_DAILY_LIMIT); no se crea el plan
+          description: Se agotó el cupo diario de la IA gratuita incluida (code FREE_AI_DAILY_LIMIT; solo self_hosted); no se crea el plan
           content:
             application/json:
               schema:
@@ -291,6 +357,7 @@ paths:
         petición mientras está en PROCESSING devuelve el mismo estado sin lanzar
         otra tarea. Con la IA gratuita incluida gasta un uso, que se devuelve si
         vuelve a fallar; con la IA propia, Ollama o el modo demo no cuenta.
+        En `saas` reanudar cuesta 0 créditos.
         Repetir `/plans/generate` con la misma Idempotency-Key no reanuda.
       parameters:
         - { name: plan_id, in: path, required: true, schema: { type: integer } }
@@ -413,7 +480,7 @@ paths:
 
   /sessions/{session_id}/reinforcement:
     post:
-      summary: Refuerza un repaso con IA (1 llamada; gasta 1 uso gratis si la IA es la incluida)
+      summary: Refuerza un repaso con IA (1 llamada; gasta 1 uso gratis, o 1 crédito en saas; se devuelve si falla)
       description: En v2 conserva el perfil y el ID del quiz, y abre una revisión nueva al publicar.
       parameters:
         - { name: session_id, in: path, required: true, schema: { type: integer } }
@@ -426,7 +493,8 @@ paths:
         "404": { description: Sesión no encontrada }
         "409":
           description: REINFORCEMENT_NOT_AVAILABLE o CONTENT_NOT_READY para contenido v2 incompleto
-        "429": { description: FREE_AI_DAILY_LIMIT — sin usos gratis hoy; el estado vuelve a NONE }
+        "402": { $ref: "#/components/responses/InsufficientCredits" }
+        "429": { description: FREE_AI_DAILY_LIMIT — sin usos gratis hoy (solo self_hosted); el estado vuelve a NONE }
 
   /sessions/{session_id}/assistant:
     get:
@@ -838,6 +906,53 @@ paths:
         "502": { description: Ollama no está disponible o devolvió una respuesta inválida }
 
 components:
+  responses:
+    Unauthorized:
+      description: >-
+        401 con AUTH_MODE=supabase. `code` = AUTH_REQUIRED (sin cabecera Authorization)
+        o AUTH_INVALID_TOKEN (token inválido, vencido o anónimo). Lleva `WWW-Authenticate: Bearer`.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ApiError"
+              - type: object
+                properties:
+                  code: { type: string, enum: [AUTH_REQUIRED, AUTH_INVALID_TOKEN] }
+    AuthEmailConflict:
+      description: 409 AUTH_EMAIL_CONFLICT. El correo del token ya pertenece a otra cuenta.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ApiError"
+              - type: object
+                properties:
+                  code: { type: string, example: AUTH_EMAIL_CONFLICT }
+    InsufficientCredits:
+      description: >-
+        402 INSUFFICIENT_CREDITS (solo saas). No quedan créditos; no se gastó nada
+        y no se creó el plan ni se inició el refuerzo.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ApiError"
+              - type: object
+                properties:
+                  code: { type: string, example: INSUFFICIENT_CREDITS }
+    PlanLimitReached:
+      description: >-
+        403 PLAN_LIMIT_REACHED (solo saas). Se alcanzó el máximo de documentos o de
+        metas activas del nivel del usuario.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ApiError"
+              - type: object
+                properties:
+                  code: { type: string, example: PLAN_LIMIT_REACHED }
   schemas:
     AssistantMessage:
       type: object
@@ -884,6 +999,38 @@ components:
           properties:
             id: { type: integer }
             created_at: { type: string, format: date-time }
+            archived_at: { type: string, format: date-time, nullable: true }
+    CreditBalance:
+      type: object
+      required: [purchased, pass_credits, total, tier, documents_used, active_goals_used]
+      properties:
+        purchased: { type: integer, description: Créditos comprados o regalados (no vencen) }
+        pass_credits: { type: integer, description: Créditos del pase vigente (0 si no hay pase) }
+        pass_expires_at: { type: string, format: date-time, nullable: true }
+        total: { type: integer, description: "Gastable ahora: purchased + pass_credits vigentes" }
+        tier: { type: string, enum: [free, credits, pass] }
+        max_documents: { type: integer, nullable: true, description: null = sin límite }
+        max_active_goals: { type: integer, nullable: true, description: null = sin límite }
+        documents_used: { type: integer }
+        active_goals_used: { type: integer, description: Metas no archivadas ni eliminadas }
+    CreditLedgerEntry:
+      type: object
+      required: [id, delta, reason, source, balance_after, created_at]
+      properties:
+        id: { type: integer }
+        delta: { type: integer, description: "+ abonos, - cobros" }
+        reason: { type: string, enum: [signup_bonus, purchase, pass_grant, plan, reinforcement, refund, admin_adjustment, expiration] }
+        source: { type: string, enum: [purchased, pass] }
+        reference_type: { type: string, nullable: true, description: "plan | session | order" }
+        reference_id: { type: integer, nullable: true }
+        balance_after: { type: integer, description: Total gastable tras el movimiento }
+        created_at: { type: string, format: date-time }
+    ApiError:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+        code: { type: string }
     PlanStatus:
       type: object
       properties:

@@ -32,3 +32,4 @@ class GoalResponse(BaseModel):
     description: str
     exam_date: date | None = None
     created_at: datetime
+    archived_at: datetime | None = None

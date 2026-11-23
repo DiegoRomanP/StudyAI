@@ -38,6 +38,8 @@ class FreeAiStatus:
 
 def uses_free_ai(db: Session, user_id: int) -> bool:
     """Whether the next generation for this learner runs on the included free-tier AI."""
+    if get_settings().is_saas:  # saas bills credits (CreditService), never the daily free quota
+        return False
     resolution = resolve_llm_provider(db, user_id)
     resolution.provider.close()
     return resolution.runtime.bundled

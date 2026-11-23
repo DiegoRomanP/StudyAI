@@ -135,6 +135,8 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 25
     # Figures kept (and described by a vision-capable AI) per PDF; the rest are dropped.
     PDF_MAX_IMAGES: int = Field(default=20, ge=0)
+    # Uploads with more pages are refused (parsing and embedding cost grow with every page).
+    MAX_PDF_PAGES: int = Field(default=200, ge=1)
 
     # --- App -----------------------------------------------------------------
     APP_ENV: Literal["development", "production"] = "development"

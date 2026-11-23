@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.models.document import Document
 from app.repositories.base import BaseRepository
@@ -18,6 +18,9 @@ class DocumentRepository(BaseRepository[Document]):
             .order_by(Document.created_at.desc())
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    def count_for_user(self, user_id: int) -> int:
+        return self.db.scalar(select(func.count()).where(Document.user_id == user_id)) or 0
 
     def find_for_user(self, user_id: int, document_ids: list[int]) -> dict[int, Document]:
         """The caller's documents among ``document_ids``, keyed by ID (others are omitted)."""

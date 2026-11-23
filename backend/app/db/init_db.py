@@ -15,6 +15,7 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
+from app.models.credit_ledger import CreditLedger  # noqa: F401 - register before create_all
 from app.models.llm_usage import LLMUsageRecord  # noqa: F401 - register before create_all
 from app.models.plan import Plan
 from app.models.quiz import Quiz, QuizQuestion, QuizResult  # noqa: F401 - register before create_all
@@ -92,6 +93,7 @@ def init_db() -> None:
     _ensure_plan_generation_columns()
     _ensure_free_ai_assistant_column()
     _ensure_user_auth_columns()
+    _ensure_credit_columns()
     _ensure_goal_deleted_at_column()
     _ensure_goal_exam_date_column()
     _purge_retired_provider_credentials()
@@ -205,6 +207,20 @@ def _ensure_user_auth_columns() -> None:
     if "users" in inspect(engine).get_table_names():
         with engine.begin() as conn:
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_supabase_user_id ON users (supabase_user_id)"))
+
+
+def _ensure_credit_columns() -> None:
+    """Credit caches on users and the charge links on plans (F1/F2/F3)."""
+    _add_missing_columns(
+        "users",
+        {
+            "credit_balance": "INTEGER NOT NULL DEFAULT 0",
+            "pass_credits": "INTEGER NOT NULL DEFAULT 0",
+            "pass_expires_at": "TIMESTAMP",
+        },
+    )
+    _add_missing_columns("plans", {"charge_ledger_id": "INTEGER"})
+    _add_missing_columns("goals", {"archived_at": "TIMESTAMP"})
 
 
 def _ensure_goal_deleted_at_column() -> None:

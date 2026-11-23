@@ -43,6 +43,21 @@ class DailyLimitError(StudyAIError):
         self.code = code
 
 
+class InsufficientCreditsError(StudyAIError):
+    """No credits left for an AI generation (HTTP 402)."""
+
+    code = "INSUFFICIENT_CREDITS"
+
+    def __init__(self) -> None:
+        super().__init__("No te quedan créditos. Recarga para seguir generando con IA.")
+
+
+class PlanLimitError(StudyAIError):
+    """The learner's tier has no room for another document or active goal (HTTP 403)."""
+
+    code = "PLAN_LIMIT_REACHED"
+
+
 class PlanDocumentsUnavailableError(StudyAIError):
     """A plan was requested with documents the caller cannot use.
 

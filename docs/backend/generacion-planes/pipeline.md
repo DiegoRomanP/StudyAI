@@ -44,7 +44,7 @@ leaving orphan rows. On any error the generator rolls back first, then sets `FAI
 truncated to 1000 chars, keeping everything already committed. That rollback + guarded UPDATE + startup
 recovery is why the pipeline never leaves a plan stuck in `PROCESSING`. A `BackgroundTask` dies with the
 process (`--reload`, crash), so the `lifespan` runs `recover_interrupted_plans` (PROCESSING → FAILED,
-resumable, free use refunded) and `recover_interrupted_reinforcements` (PROCESSING → FAILED, no refund) at
+resumable, free use or credit refunded) and `recover_interrupted_reinforcements` (PROCESSING → FAILED, no refund) at
 startup. Asume un solo proceso (ver [../arquitectura/base-de-datos.md](../arquitectura/base-de-datos.md#un-solo-proceso)).
 
 **Patrón reutilizable**: las máquinas de estado de trabajos en segundo plano (plan, refuerzo) usan UPDATE

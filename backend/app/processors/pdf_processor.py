@@ -20,6 +20,23 @@ logger = get_logger(__name__)
 IMAGE_REF = re.compile(r"!\[[^\]]*\]\((.+?\.png)\)")
 
 
+def inspect_pdf(content: bytes) -> tuple[bool, int | None]:
+    """``(password_protected, page_count)`` of an uploaded PDF; ``page_count`` is None when unknown.
+
+    PyMuPDF is optional (fallback dual): without it only the ``/Encrypt`` marker is checked.
+    An unreadable file is not rejected here: indexing marks it FAILED with its own message.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return b"/Encrypt" in content[-4096:], None
+    try:
+        with fitz.open(stream=content, filetype="pdf") as pdf:
+            return bool(pdf.needs_pass), None if pdf.needs_pass else pdf.page_count
+    except Exception:  # noqa: BLE001 - corrupt PDFs are the indexer's problem
+        return False, None
+
+
 class PDFProcessor(BaseProcessor):
     def extract_text(self, file_path: str) -> str:
         try:

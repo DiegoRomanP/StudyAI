@@ -13,6 +13,8 @@ boots with no `.env` at all. Note `CORS_ORIGINS` and `REVIEW_INTERVALS_DAYS` use
 `field_validator` to accept plain comma-separated strings — pydantic-settings would otherwise try
 `json.loads()` on them first and crash on boot.
 
+`MAX_PDF_PAGES` (200 por defecto) limita las páginas de un PDF subido (ver [../documentos/ingesta-y-figuras.md](../documentos/ingesta-y-figuras.md)).
+
 `Settings` reads the **repo-root `.env`** and then `backend/.env` (the latter wins; both git-ignored).
 A real environment variable beats both `.env` files (pydantic-settings), so a stale key exported in the
 shell silently overrides them (it showed up as 403 "Authorization failed" with the old NVIDIA tier).

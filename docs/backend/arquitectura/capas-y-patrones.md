@@ -64,6 +64,7 @@ Antes de añadir lógica nueva, busca la existente (el mapa de abajo cubre lo qu
 | Llamar al LLM con presupuesto de salida y reintento por `LLM_OUTPUT_LIMIT` | `complete_within_budget` + `OUTPUT_BUDGETS` (`app/llm/output_budget.py`) |
 | Parsear JSON del LLM | `parse_llm_json` (`app/llm/output_parsers.py`) |
 | Resolver qué proveedor usar | `resolve_llm_provider()` / `get_llm_provider()` (`app/llm/factory.py`) |
+| Cobrar/devolver 1 crédito (saas) | `app/services/credit_service.py` + `ai_charge.py` (ver [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md)) |
 | Gastar/devolver un uso de la IA gratuita | `app/services/free_ai_quota.py` (`uses_free_ai`, ver [llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)) |
 | Registrar tokens/coste | `UsageRecorder` (`app/services/usage_recorder.py`) |
 | Errores de dominio con código | `StudyAIError`, `NotFoundError`, `ValidationError` (`app/core/`) |

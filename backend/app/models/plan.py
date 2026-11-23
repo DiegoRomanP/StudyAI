@@ -60,6 +60,8 @@ class Plan(TimestampMixin, Base):
     progress_total: Mapped[int] = mapped_column(Integer, default=0)
     # UTC day a free-AI use was spent on this plan; cleared once it is refunded or the plan is READY.
     free_ai_use_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # saas: ledger row of the credit this plan spent (soft link, no FK); cleared once refunded or READY.
+    charge_ledger_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     goal = relationship("Goal")
     topics = relationship(
