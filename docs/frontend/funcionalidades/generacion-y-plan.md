@@ -20,3 +20,20 @@
 - El check de cada etapa completada entra con `pop`; la etiqueta de progreso con `reveal` al cambiar de etapa
   (`skipFirst`). Las filas de `SessionTimeline` usan el patrón de presión
   (`transition-interactive duration-micro ease-flow motion-safe:active:scale-press active:duration-press`).
+
+## Créditos y metas archivadas (solo `saas`)
+
+En `self_hosted`/demo nada de esto aparece ni llama a `/account/credits`.
+
+- **Saldo**: `CreditChip` en la cabecera (sidebar y barra móvil). «N créditos», o «Sin créditos» con
+  color de aviso más texto. Al pulsarlo abre un `Dialog` con el aviso y el historial de movimientos
+  (`GET /account/credits/history`, fechas con `parseApiDate`). `/settings` no existe en saas, por eso el
+  historial vive aquí.
+- **Aviso gris antes de gastar** (`CreditNotice`, textos de §3.7 del plan SaaS): paso «Listo» de
+  `StudySetup` y `ReviewPanel` (refuerzo). Sin saldo el botón queda deshabilitado con su motivo
+  (`aria-describedby`); en `StudySetup` aparece además «Recargar créditos».
+- **402 `INSUFFICIENT_CREDITS`** (generar plan, continuar, refuerzo): abre `OutOfCreditsDialog`, que enlaza a
+  `/precios` (ruta futura, la página aún no existe) y se puede cerrar con «Ahora no».
+- **403 `PLAN_LIMIT_REACHED`** (subir documento, crear meta, desarchivar): se muestra el mensaje del servidor.
+- **Metas**: botón archivar/desarchivar en `GoalsPage`; las archivadas van en una sección «Archivadas · N»
+  aparte, atenuadas, con borde discontinuo e insignia, plegadas con `useShowMore` (2 visibles).

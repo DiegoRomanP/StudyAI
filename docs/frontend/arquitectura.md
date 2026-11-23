@@ -54,7 +54,8 @@ app se comporta como siempre (demo / autoalojado): `RequireAuth` renderiza al in
 | Barajar con orden estable | `seededShuffle` (`lib/shuffle.ts`) |
 | Persistir algo por navegador | `localStorage` **siempre en try/catch** (patrón de `lib/onboardingStorage.ts`, `lib/quizDraft.ts`, `lib/reinforcePreference.ts`) |
 | Modo de despliegue | `useAppConfig` (`GET /config`) |
-| Mensajes de error de la API | `src/api/errors.ts` |
+| Créditos (solo `saas`) | `hooks/useCredits.ts` (`useCredits`, clave `["account-credits"]`, deshabilitado fuera de saas: no llama a `/account/credits`), `components/credits/` (`CreditChip` en `AppShell` vía prop `creditChip`, `CreditNotice` aviso gris, `NoCreditsReason`, `OutOfCreditsDialog`). Se invalida al generar/reanudar plan, al pedir refuerzo, al asentarse un plan o refuerzo y al archivar metas; el cierre de sesión limpia toda la caché |
+| Mensajes de error de la API | `src/api/errors.ts` (`isInsufficientCreditsError` para el 402; el 403 `PLAN_LIMIT_REACHED` se muestra con el `detail` del servidor vía `getApiErrorMessage`) |
 | Tiempo relativo | `lib/timeAgo.ts` |
 
 Un botón principal deshabilitado siempre muestra su motivo visible enlazado con `aria-describedby`.
