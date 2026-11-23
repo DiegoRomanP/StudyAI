@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.exceptions import InsufficientCreditsError
+from app.core.exceptions import InsufficientCreditsError, PlanLimitError
 from app.models.credit_ledger import CreditLedger, CreditReason, CreditSource
 from app.models.user import User
 from app.repositories.credit_repository import CreditRepository
@@ -78,6 +78,19 @@ class CreditService:
             documents_used=DocumentRepository(self.db).count_for_user(user_id),
             active_goals_used=GoalRepository(self.db).count_active(user_id),
         )
+
+    def ensure_document_slot(self, user_id: int) -> None:
+        limit = self.balance(user_id).max_documents
+        if limit is not None and DocumentRepository(self.db).count_for_user(user_id) >= limit:
+            raise PlanLimitError(f"Tu plan permite hasta {limit} documentos.")
+
+    def ensure_goal_slot(self, user_id: int) -> None:
+        limit = self.balance(user_id).max_active_goals
+        if limit is not None and GoalRepository(self.db).count_active(user_id) >= limit:
+            raise PlanLimitError(f"Tu plan permite hasta {limit} metas activas. Archiva una para crear otra.")
+
+    def history(self, user_id: int, limit: int = 50) -> list[CreditLedger]:
+        return self.repo.history(user_id, limit)
 
     def consume(
         self, user_id: int, *, reason: CreditReason, reference_type: str, reference_id: int,

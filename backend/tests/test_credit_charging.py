@@ -15,6 +15,7 @@ from app.models.credit_ledger import CreditLedger, CreditReason
 from app.models.free_ai_usage import FreeAiUsage
 from app.models.plan import Plan, PlanStatus
 from app.models.user import User
+from app.services.credit_service import TIER_LIMITS
 from app.services import plan_service, reinforcement_service
 from app.services.plan_service import _refund_plan_use, recover_interrupted_plans
 from tests.helpers import indexed_doc
@@ -48,6 +49,7 @@ def _empty_ledger():
 @pytest.fixture
 def saas(monkeypatch):
     monkeypatch.setattr(get_settings(), "DEPLOYMENT_MODE", "saas")
+    monkeypatch.setitem(TIER_LIMITS, "free", (None, None))  # these tests are about credits, not tier limits
 
 
 def set_credits(n: int) -> None:

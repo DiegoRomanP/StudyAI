@@ -14,7 +14,9 @@ from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.models.document import Document, DocumentStatus
 from app.processors.factory import SUPPORTED_EXTENSIONS
+from app.processors.pdf_processor import inspect_pdf
 from app.processors.pipeline import IngestionPipeline
+from app.services.credit_service import CreditService
 from app.services.document_asset_service import FigureDescriber, remove_document_assets
 from app.storage import get_file_storage
 from app.rag.vector_store import VectorStore
@@ -58,11 +60,20 @@ class DocumentService:
             raise ValidationError("El archivo está vacío.")
         if ext == "pdf" and not content.startswith(b"%PDF-"):
             raise ValidationError("El archivo no es un PDF válido.")
+        if ext == "pdf":
+            encrypted, pages = inspect_pdf(content)
+            if encrypted:
+                raise ValidationError("El PDF está protegido con contraseña.")
+            if pages is not None and pages > self.settings.MAX_PDF_PAGES:
+                raise ValidationError(f"El PDF supera el máximo de {self.settings.MAX_PDF_PAGES} páginas.")
         if ext != "pdf":
             try:
                 content.decode("utf-8")
             except UnicodeDecodeError:
                 raise ValidationError("El archivo de texto no es UTF-8 válido.") from None
+
+        if self.settings.is_saas:  # last check: a refused file must not cost a stored copy
+            CreditService(self.db).ensure_document_slot(user_id)
 
         storage_path = f"users/{user_id}/documents/{uuid.uuid4().hex}.{ext}"
         get_file_storage().save(storage_path, content)

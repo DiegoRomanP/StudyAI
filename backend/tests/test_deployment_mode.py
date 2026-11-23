@@ -15,6 +15,7 @@ from app.llm.mock_provider import MockLLMProvider
 from app.llm.openai_compatible_provider import OpenAICompatibleProvider
 from app.llm.unavailable_provider import UnavailableLLMProvider
 from app.models.user import User
+from app.services.credit_service import TIER_LIMITS
 from tests.helpers import indexed_doc
 
 
@@ -88,7 +89,8 @@ def test_saas_without_key_never_uses_mock_or_free_tier(client, saas, monkeypatch
     assert runtime["source"] == "UNAVAILABLE" and runtime["free_ai"] is None
 
 
-def test_saas_plan_without_key_fails_with_llm_unavailable(client, saas):
+def test_saas_plan_without_key_fails_with_llm_unavailable(client, saas, monkeypatch):
+    monkeypatch.setitem(TIER_LIMITS, "free", (None, None))  # not about tier limits
     with SessionLocal() as db:  # saas charges a credit before generating
         db.execute(update(User).where(User.id == 1).values(credit_balance=1))
         db.commit()
