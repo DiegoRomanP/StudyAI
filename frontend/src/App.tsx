@@ -5,6 +5,7 @@ import { AppShell } from "./components/AppShell";
 import { RequireAuth } from "./components/auth/RequireAuth";
 import { PageSkeleton } from "./components/PageSkeleton";
 import { RouteErrorBoundary } from "./components/ErrorBoundary";
+import { CreditChip } from "./components/credits/CreditChip";
 import { StudyStreakCard } from "./components/home/HomeCards";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { useAuth } from "./hooks/useAuth";
@@ -50,6 +51,7 @@ function AppLayout() {
       chrome={focus ? "focus" : "default"}
       sidebarFooter={focus ? undefined : <StudyStreakCard />}
       hideAiSettings={isSaas}
+      creditChip={isSaas ? <CreditChip /> : undefined}
     >
       <RouteErrorBoundary>
         <Lazy>

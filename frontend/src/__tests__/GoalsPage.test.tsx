@@ -13,7 +13,10 @@ const goalHooks = vi.hoisted(() => ({
   refetchGoals: vi.fn(),
 }));
 
+vi.mock("../hooks/useAppConfig", () => ({ useAppConfig: () => ({ isSaas: false }) }));
+
 vi.mock("../hooks/queries", () => ({
+  useArchiveGoal: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCreateGoal: () => ({ mutateAsync: goalHooks.createGoal, isPending: false }),
   useDeleteGoal: () => ({ mutateAsync: goalHooks.deleteGoal, isPending: false }),
   useGoals: () => ({

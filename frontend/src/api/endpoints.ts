@@ -6,6 +6,8 @@ import type {
   AssistantAskInput,
   AssistantHistoryDTO,
   AssistantQuestionDTO,
+  CreditBalanceDTO,
+  CreditLedgerEntryDTO,
   DashboardDTO,
   DocumentDTO,
   GoalCreate,
@@ -56,6 +58,13 @@ export const api = {
     apiClient.put<GoalDTO>(`/goals/${id}`, payload).then((r) => r.data),
   deleteGoal: (id: number) =>
     apiClient.delete<void>(`/goals/${id}`).then(() => undefined),
+  archiveGoal: (id: number) => apiClient.post<GoalDTO>(`/goals/${id}/archive`).then((r) => r.data),
+  unarchiveGoal: (id: number) => apiClient.post<GoalDTO>(`/goals/${id}/unarchive`).then((r) => r.data),
+
+  // Credits (saas only)
+  getCredits: () => apiClient.get<CreditBalanceDTO>("/account/credits").then((r) => r.data),
+  getCreditHistory: (limit = 20) =>
+    apiClient.get<CreditLedgerEntryDTO[]>("/account/credits/history", { params: { limit } }).then((r) => r.data),
 
   // Plans
   listPlans: () => apiClient.get<PlanDTO[]>("/plans").then((r) => r.data),

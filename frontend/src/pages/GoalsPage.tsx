@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Pencil, Target, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Pencil, Target, Trash2 } from "lucide-react";
 
 import type { GoalDTO, GoalType } from "../api/types";
 import { getApiErrorMessage } from "../api/errors";
@@ -9,7 +9,8 @@ import { GoalTemplatePicker } from "../components/goals/GoalTemplatePicker";
 import { AsyncState } from "../components/AsyncState";
 import { EmptyState } from "../components/EmptyState";
 import { PageHeader, Alert, Badge, Button, ButtonLink, Card, Input, Select, Skeleton, Textarea } from "../components/ui";
-import { useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
+import { useAppConfig } from "../hooks/useAppConfig";
+import { useArchiveGoal, useCreateGoal, useDeleteGoal, useGoals, useUpdateGoal } from "../hooks/queries";
 import {
   GOAL_TEMPLATES,
   GOAL_TYPE_DESCRIPTIONS,
@@ -39,7 +40,12 @@ export function GoalsPage() {
   const goalsQuery = useGoals();
   const goals = goalsQuery.data;
   const createGoal = useCreateGoal();
-  const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(goals);
+  const { isSaas } = useAppConfig();
+  // Archived goals do not count as active; they are folded apart (saas only).
+  const active = (goals ?? []).filter((goal) => !goal.archived_at);
+  const archived = (goals ?? []).filter((goal) => goal.archived_at);
+  const { visible, hiddenCount, expanded, showMore, showLess } = useShowMore(active);
+  const archivedList = useShowMore(archived, 2);
 
   const [searchParams] = useSearchParams();
   const wantsNew = searchParams.get("nueva") === "1";
@@ -136,11 +142,11 @@ export function GoalsPage() {
           initialErrorMessage="No se pudieron cargar tus metas."
           updateErrorMessage="No se pudieron actualizar tus metas. Se muestran las últimas cargadas."
         >
-          {(items) => (
+          {() => (
             <>
               <div className="grid gap-3">
                 {visible.map((g) => (
-                  <GoalRow key={g.id} goal={g} />
+                  <GoalRow key={g.id} goal={g} canArchive={isSaas} />
                 ))}
               </div>
               {hiddenCount > 0 && (
@@ -148,7 +154,7 @@ export function GoalsPage() {
                   Mostrar {hiddenCount} más
                 </Button>
               )}
-              {expanded && items.length > 6 && (
+              {expanded && active.length > 6 && (
                 <Button variant="ghost" onClick={showLess}>
                   Mostrar menos
                 </Button>
@@ -157,6 +163,29 @@ export function GoalsPage() {
           )}
         </AsyncState>
       </section>
+
+      {archived.length > 0 && (
+        <section className="space-y-3" aria-labelledby="archived-goals-title">
+          <h2 id="archived-goals-title" className="text-lg font-semibold text-text-muted">
+            Archivadas · {archived.length}
+          </h2>
+          <div className="grid gap-3">
+            {archivedList.visible.map((g) => (
+              <GoalRow key={g.id} goal={g} canArchive={isSaas} />
+            ))}
+          </div>
+          {archivedList.hiddenCount > 0 && (
+            <Button variant="secondary" onClick={archivedList.showMore}>
+              Mostrar {archivedList.hiddenCount} más
+            </Button>
+          )}
+          {archivedList.expanded && archived.length > 2 && (
+            <Button variant="ghost" onClick={archivedList.showLess}>
+              Mostrar menos
+            </Button>
+          )}
+        </section>
+      )}
 
       {formOpen && (
         <div className="space-y-6">
@@ -241,8 +270,10 @@ export function GoalsPage() {
   );
 }
 
-function GoalRow({ goal }: { goal: GoalDTO }) {
+function GoalRow({ goal, canArchive }: { goal: GoalDTO; canArchive: boolean }) {
   const updateGoal = useUpdateGoal();
+  const archiveGoal = useArchiveGoal();
+  const isArchived = Boolean(goal.archived_at);
   const deleteGoal = useDeleteGoal();
   const fieldPrefix = useId();
   const typeId = `${fieldPrefix}-type`;
@@ -279,6 +310,16 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
       setEditing(false);
     } catch (caught: unknown) {
       setError(getApiErrorMessage(caught, "Error al guardar los cambios."));
+    }
+  }
+
+  async function handleArchive() {
+    setError(null);
+    try {
+      await archiveGoal.mutateAsync({ id: goal.id, archive: !isArchived });
+    } catch (caught: unknown) {
+      // 403 PLAN_LIMIT_REACHED carries the server's own message.
+      setError(getApiErrorMessage(caught, isArchived ? "No se pudo desarchivar la meta." : "No se pudo archivar la meta."));
     }
   }
 
@@ -351,7 +392,7 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
   }
 
   return (
-    <Card className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <Card className={`flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${isArchived ? "border-dashed opacity-80" : ""}`}>
       <div className="min-w-0">
         <p className="font-medium text-text-primary">{goal.title}</p>
         {goal.exam_date && (
@@ -364,10 +405,22 @@ function GoalRow({ goal }: { goal: GoalDTO }) {
         {error && <p role="alert" className="mt-1 text-xs text-state-error">{error}</p>}
       </div>
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
-        <Badge color="brand">{TYPE_LABELS[goal.goal_type]}</Badge>
-        <Button variant="ghost" aria-label={`Editar «${goal.title}»`} onClick={startEdit}>
-          <Pencil aria-hidden="true" className="h-4 w-4" />
-        </Button>
+        <Badge color={isArchived ? "slate" : "brand"}>{isArchived ? "Archivada" : TYPE_LABELS[goal.goal_type]}</Badge>
+        {!isArchived && (
+          <Button variant="ghost" aria-label={`Editar «${goal.title}»`} onClick={startEdit}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        )}
+        {canArchive && (
+          <Button
+            variant="ghost"
+            aria-label={`${isArchived ? "Desarchivar" : "Archivar"} «${goal.title}»`}
+            onClick={handleArchive}
+            disabled={archiveGoal.isPending}
+          >
+            {isArchived ? <ArchiveRestore aria-hidden="true" className="h-4 w-4" /> : <Archive aria-hidden="true" className="h-4 w-4" />}
+          </Button>
+        )}
         <Button
           variant="ghost"
           aria-label={`Eliminar «${goal.title}»`}

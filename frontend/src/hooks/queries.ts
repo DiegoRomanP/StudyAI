@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api } from "../api/endpoints";
-import { isNotFoundError, isPlanDocumentsUnavailableError } from "../api/errors";
+import { isInsufficientCreditsError, isNotFoundError, isPlanDocumentsUnavailableError } from "../api/errors";
 import type {
   AssistantAskInput,
   AssistantHistoryDTO,
@@ -25,6 +25,7 @@ import type {
   QuizAnswer,
 } from "../api/types";
 import { adaptiveLearningKeys } from "./useAdaptiveLearning";
+import { CREDITS_QUERY_KEY } from "./useCredits";
 
 function replaceCachedLlmCredential(
   qc: ReturnType<typeof useQueryClient>,
@@ -186,6 +187,19 @@ export function useDeleteGoal() {
   });
 }
 
+export function useArchiveGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, archive }: { id: number; archive: boolean }) =>
+      archive ? api.archiveGoal(id) : api.unarchiveGoal(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["goals"] });
+      // The active-goal count lives in the credit balance.
+      void qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
+    },
+  });
+}
+
 // --- Plans -----------------------------------------------------------------
 export function usePlans() {
   return useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
@@ -209,9 +223,14 @@ export function useGeneratePlan() {
       pedagogy
         ? api.generatePlan(goalId, documentIds, idempotencyKey, pedagogy)
         : api.generatePlan(goalId, documentIds, idempotencyKey),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["plans"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
+      return qc.invalidateQueries({ queryKey: ["plans"] });
+    },
     // The server is the authority: a selection it rejects is stale, so re-read the list.
     onError: (error) => {
+      // A 402 means the cached balance is stale.
+      if (isInsufficientCreditsError(error)) void qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
       if (isPlanDocumentsUnavailableError(error)) {
         void qc.invalidateQueries({ queryKey: DOCUMENTS_QUERY_KEY });
       }
@@ -229,12 +248,14 @@ export function useResumePlan() {
       qc.invalidateQueries({ queryKey: ["plans"] });
       // Resuming may spend a free-AI use.
       qc.invalidateQueries({ queryKey: ["llm-runtime"] });
+      qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
     },
     // A 409 means it was resumed or finished elsewhere: a FAILED plan is not polled, so reload it.
     onError: (_error, planId) => {
       qc.invalidateQueries({ queryKey: ["plan", planId] });
       qc.invalidateQueries({ queryKey: ["plans"] });
       qc.invalidateQueries({ queryKey: ["llm-runtime"] });
+      qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
     },
   });
 }
@@ -263,6 +284,21 @@ export function useDeletePlan() {
 
 /** Fetch a plan and poll every 3s while it is still PROCESSING. */
 export function usePlan(planId: number | null) {
+  const qc = useQueryClient();
+  const query = usePlanQuery(planId);
+  // A plan that settles (READY) or fails (refund) changes the credit balance.
+  const status = query.data?.status;
+  const previous = useRef(status);
+  useEffect(() => {
+    if (previous.current === "PROCESSING" && status !== "PROCESSING") {
+      void qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
+    }
+    previous.current = status;
+  }, [status, qc]);
+  return query;
+}
+
+function usePlanQuery(planId: number | null) {
   return useQuery({
     queryKey: ["plan", planId],
     queryFn: () => api.getPlan(planId as number),
@@ -287,6 +323,9 @@ export function useSession(sessionId: number | null) {
   const status = query.data?.reinforcement_status;
   const previous = useRef(status);
   useEffect(() => {
+    if (previous.current === "PROCESSING" && status !== "PROCESSING") {
+      void qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY });
+    }
     if (previous.current === "PROCESSING" && status === "READY") {
       qc.invalidateQueries({ queryKey: ["quiz", sessionId] });
       qc.invalidateQueries({ queryKey: ["plan"] });
@@ -307,6 +346,7 @@ export function useStartReinforcement() {
   return useMutation({
     mutationFn: (sessionId: number) => api.startReinforcement(sessionId),
     onSuccess: (session) => qc.setQueryData(["session", session.id], session),
+    onSettled: () => qc.invalidateQueries({ queryKey: CREDITS_QUERY_KEY }),
   });
 }
 

@@ -96,3 +96,12 @@ export function isPlanDocumentsUnavailableError(error: unknown): boolean {
     (error.response.data as { code?: unknown } | undefined)?.code === "PLAN_DOCUMENTS_UNAVAILABLE"
   );
 }
+
+/** 402 from a paid action (generate plan, reinforcement): the learner has no credits left. */
+export function isInsufficientCreditsError(error: unknown): boolean {
+  return (
+    axios.isAxiosError(error) &&
+    error.response?.status === 402 &&
+    (error.response.data as { code?: unknown } | undefined)?.code === "INSUFFICIENT_CREDITS"
+  );
+}
