@@ -32,4 +32,7 @@ Hiding in the UI is courtesy; the backend enforces.
 
 Los agentes CLI de terminal son **solo self-hosted** (ver [llm/agentes-cli.md](../llm/agentes-cli.md)).
 
+Empaquetado y despliegue (`backend/Dockerfile`, `deploy/`, CI): ver [despliegue/operacion.md](../despliegue/operacion.md).
+La imagen ejecuta `alembic upgrade head` solo con `DEPLOYMENT_MODE=saas`.
+
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).
