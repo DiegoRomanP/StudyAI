@@ -13,12 +13,14 @@ background task, or a double POST can never apply two writes or spend two uses.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.exceptions import ConflictError, LLMError
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
@@ -40,7 +42,8 @@ from app.rag.retriever import Retriever
 from app.repositories.adaptive_content_repository import AdaptiveContentRepository
 from app.services.adaptive_content_builder import AdaptiveBuiltContent, build_adaptive_session_content
 from app.services.adaptive_learning_service import AdaptiveLearningService
-from app.services.ai_charge import AiCharge, charge_reinforcement, refund_charge
+from app.services.ai_charge import AiCharge, charge_reinforcement_credit, refund_charge
+from app.services.free_ai_quota import FreeAiQuota, uses_free_ai
 from app.services.session_content_builder import build_session_content
 from app.services.session_service import SessionService
 from app.strategies.base import SessionConfig
@@ -97,7 +100,7 @@ class ReinforcementService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, AiCharge | None, str | None]:
+    def start(self, user_id: int, session_id: int) -> tuple[StudySession, bool, date | AiCharge | None, str | None]:
         """Return the session and the scheduling details of this specific claim."""
         session = SessionService(self.db).get_session(user_id, session_id)
         if (
@@ -137,7 +140,10 @@ class ReinforcementService:
             raise _NOT_AVAILABLE
 
         try:
-            spent = charge_reinforcement(self.db, user_id, session_id)
+            if get_settings().is_saas:
+                spent = charge_reinforcement_credit(self.db, user_id, session_id)
+            else:
+                spent = FreeAiQuota(self.db).consume(user_id) if uses_free_ai(self.db, user_id) else None
         except Exception:
             # No task will run (over the limit / no credits, or an unexpected error): release the claim.
             self.db.rollback()
@@ -163,7 +169,7 @@ class ReinforcementService:
         return session
 
 
-def _refund(db: Session, user_id: int, spent: AiCharge | None) -> None:
+def _refund(db: Session, user_id: int, spent: date | AiCharge | None) -> None:
     """Give the charge back: the free use on the day it was spent, or the credit it took."""
     refund_charge(db, user_id, spent)
 
@@ -259,7 +265,7 @@ def _generate_adaptive_content(
 
 
 def generate_reinforcement_task(
-    session_id: int, user_id: int, spent: AiCharge | None, run_token: str | None = None
+    session_id: int, user_id: int, spent: date | AiCharge | None, run_token: str | None = None
 ) -> None:
     """Background worker: builds the reinforcement content for one review session."""
     db = SessionLocal()
