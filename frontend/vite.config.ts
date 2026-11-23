@@ -11,5 +11,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{js,ts,jsx,tsx}"],
+    // Tests never depend on a developer's .env: without these the login activates and the suite breaks.
+    env: { VITE_SUPABASE_URL: "", VITE_SUPABASE_PUBLISHABLE_KEY: "" },
   },
 });
