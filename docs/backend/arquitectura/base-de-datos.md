@@ -36,6 +36,13 @@ borra **explícitamente** en el servicio. Casos actuales (mantenlos al tocar bor
 
 `llm_usage` no tiene FK a planes a propósito: sus filas sobreviven a un plan borrado.
 
+**Compras (saas)**: `products` (sembrada por `init_db._seed_products` solo si está vacía; precios editables en
+la base), `orders` (FK a `users` y `products`; `idempotency_key` y `gateway_payment_id` UNIQUE) y
+`payment_events` (`event_id` UNIQUE, auditoría y deduplicación de webhooks). Las tres son tablas nuevas
+(`create_all`), sin backfill. **Nunca se borran**: son contables, como `credit_ledger`; ningún borrado de
+plan, meta o documento las toca. Enums como `VARCHAR` (`native_enum=False`). Detalle:
+[../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md).
+
 ## Postgres (SaaS / Supabase)
 
 Runs the same code: `pip install -r requirements-saas.txt` (psycopg 3) and

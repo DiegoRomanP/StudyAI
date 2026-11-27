@@ -55,6 +55,12 @@ def get_current_user(
     return user
 
 
+def require_saas() -> None:
+    """404 in self_hosted: there is nothing to buy there."""
+    if not get_settings().is_saas:
+        raise NotFoundError("No encontrado.")
+
+
 def require_self_hosted() -> None:
     """404 in SaaS: bring-your-own-key and Ollama do not exist there (the UI hides them too)."""
     if get_settings().is_saas:

@@ -224,6 +224,157 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/CreditLedgerEntry" }
 
+  /billing/products:
+    get:
+      summary: Paquetes y pase activos (para /precios)
+      description: >-
+        Solo existe en `DEPLOYMENT_MODE=saas`; en `self_hosted` todo `/billing/*` responde 404.
+        Montos en céntimos de sol (`price_cents`), nunca decimales.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+        "404": { description: self_hosted (no hay cobros) }
+
+  /billing/checkout:
+    post:
+      summary: Crea una orden pendiente y devuelve la URL de pago de la pasarela
+      description: >-
+        El monto y la moneda salen siempre de `products` en el servidor; cualquier monto que
+        envíe el cliente se ignora. La misma `idempotency_key` del mismo usuario y producto
+        devuelve la misma orden (y la misma URL). Reusar la clave con otro producto o desde otra
+        cuenta → 409 `IDEMPOTENCY_CONFLICT`. Nunca se acredita desde la redirección del
+        navegador: solo el webhook verificado (o la consulta del backend a la pasarela) marca
+        la orden como pagada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckoutRequest" }
+      responses:
+        "200":
+          description: Orden creada (o la existente para esa clave)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckoutResponse" }
+        "404": { description: Producto inexistente o inactivo; o self_hosted }
+        "409":
+          description: 409 IDEMPOTENCY_CONFLICT (clave reutilizada con otro producto o usuario)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+        "502":
+          description: 502 PAYMENT_GATEWAY_ERROR (la pasarela no creó el checkout; la orden queda pending y un reintento con la misma clave lo vuelve a intentar)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiError" }
+
+  /billing/webhooks/{gateway}:
+    post:
+      summary: Notificación de la pasarela (sin usuario ni cookies; verificada por firma)
+      description: >-
+        `gateway` debe coincidir con `PAYMENT_GATEWAY`, si no → 404. Mercado Pago envía
+        `?data.id=<pago>&type=payment` y las cabeceras `x-signature: ts=<ts>,v1=<hmac>` y
+        `x-request-id`. El backend recalcula HMAC-SHA256(`MP_WEBHOOK_SECRET`,
+        `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`) y lo compara en tiempo constante;
+        firma ausente o inválida → 400 `WEBHOOK_INVALID`. Después consulta el pago a la API de la
+        pasarela (`GET /v1/payments/{id}`) y lo aplica una sola vez (`payment_events.event_id`
+        único + `UPDATE orders ... WHERE status='pending'`). Monto o moneda distintos a los de la
+        orden → no acredita y la orden sigue pending. Notificaciones de otro tipo (no `payment`)
+        se aceptan con 200 y se ignoran.
+      security: []
+      parameters:
+        - { name: gateway, in: path, required: true, schema: { type: string, enum: [mercadopago, fake] } }
+        - { name: data.id, in: query, required: false, schema: { type: string } }
+        - { name: type, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Recibido (procesado, duplicado o ignorado)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received: { type: boolean, example: true }
+        "400":
+          description: 400 WEBHOOK_INVALID (firma ausente o inválida)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiError"
+                  - type: object
+                    properties:
+                      code: { type: string, example: WEBHOOK_INVALID }
+        "404": { description: Pasarela distinta de PAYMENT_GATEWAY; o self_hosted }
+
+  /billing/orders:
+    get:
+      summary: Historial de compras del usuario, de la más reciente a la más antigua
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Order" }
+        "404": { description: self_hosted }
+
+  /billing/orders/{id}:
+    get:
+      summary: Estado de una orden (polling en /pago/resultado hasta paid)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { description: No existe o no es del usuario (no se distingue); o self_hosted }
+
+  /billing/fake/complete/{order_id}:
+    post:
+      summary: "Desarrollo: simula el pago aprobado de una orden (D10)"
+      description: >-
+        Solo existe con `PAYMENT_GATEWAY=fake` y `APP_ENV` distinto de `production` (si no, 404).
+        Recorre el mismo `BillingService.apply_payment` que el webhook: dos llamadas acreditan una vez.
+      parameters:
+        - { name: order_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Orden tras aplicar el pago
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { description: Orden ajena o inexistente; gateway real; producción; o self_hosted }
+
+  /complaints:
+    post:
+      summary: Libro de Reclamaciones (Perú). Público, sin sesión
+      description: >-
+        Registra un reclamo o queja y devuelve su código correlativo por año
+        (`R-<año>-<6 dígitos>`). `amount_cents` es el monto reclamado en céntimos de sol (null si
+        no aplica). Lo implementa la Ola 4 (I-back); aquí solo el contrato.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ComplaintCreate" }
+      responses:
+        "201":
+          description: Registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComplaintCreated" }
+        "422": { description: Campos faltantes o inválidos }
+
   /plans/generate:
     post:
       summary: Inicia la generación asíncrona de un plan
@@ -1024,6 +1175,59 @@ components:
         reference_type: { type: string, nullable: true, description: "plan | session | order" }
         reference_id: { type: integer, nullable: true }
         balance_after: { type: integer, description: Total gastable tras el movimiento }
+        created_at: { type: string, format: date-time }
+    Product:
+      type: object
+      required: [code, name, kind, credits, pass_days, price_cents, currency]
+      properties:
+        code: { type: string, example: pack_10 }
+        name: { type: string }
+        kind: { type: string, enum: [pack, pass], description: "pack = créditos que no vencen; pass = pase con vencimiento" }
+        credits: { type: integer, description: "pack: créditos que se suman; pass: créditos del pase (se reinician, no se acumulan)" }
+        pass_days: { type: integer, nullable: true, description: Solo en pass }
+        price_cents: { type: integer, description: "Céntimos de sol (490 = S/ 4,90)" }
+        currency: { type: string, enum: [PEN] }
+    CheckoutRequest:
+      type: object
+      required: [product_code, idempotency_key]
+      properties:
+        product_code: { type: string }
+        idempotency_key: { type: string, minLength: 1, maxLength: 255, description: Generada una vez por intención de compra y reutilizada en los reintentos }
+    CheckoutResponse:
+      type: object
+      required: [order_id, checkout_url]
+      properties:
+        order_id: { type: integer }
+        checkout_url: { type: string, description: "URL de la pasarela (con fake: {PUBLIC_APP_URL}/pago/resultado?order={id})" }
+    Order:
+      type: object
+      required: [id, product_code, status, amount_cents, currency, created_at, paid_at]
+      properties:
+        id: { type: integer }
+        product_code: { type: string }
+        status: { type: string, enum: [pending, paid, failed, refunded] }
+        amount_cents: { type: integer }
+        currency: { type: string, enum: [PEN] }
+        created_at: { type: string, format: date-time }
+        paid_at: { type: string, format: date-time, nullable: true }
+    ComplaintCreate:
+      type: object
+      required: [name, document_id, address, phone, email, kind, detail, request]
+      properties:
+        name: { type: string }
+        document_id: { type: string, description: "DNI / CE / pasaporte" }
+        address: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        kind: { type: string, enum: [reclamo, queja] }
+        amount_cents: { type: integer, nullable: true }
+        detail: { type: string, description: Detalle del reclamo o queja }
+        request: { type: string, description: Pedido del consumidor }
+    ComplaintCreated:
+      type: object
+      required: [code, created_at]
+      properties:
+        code: { type: string, example: R-2026-000001 }
         created_at: { type: string, format: date-time }
     ApiError:
       type: object

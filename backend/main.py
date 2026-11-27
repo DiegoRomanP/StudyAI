@@ -20,11 +20,13 @@ from app.core.exceptions import (
     InsufficientCreditsError,
     LLMError,
     NotFoundError,
+    PaymentGatewayError,
     PlanDocumentsUnavailableError,
     PlanLimitError,
     StudyAIError,
     UnsupportedFileTypeError,
     ValidationError,
+    WebhookError,
 )
 from app.core.logging import configure_logging, get_logger
 from app.db.init_db import init_db
@@ -114,6 +116,14 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(PlanLimitError)
     async def _plan_limit(_: Request, exc: PlanLimitError) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(WebhookError)
+    async def _webhook(_: Request, exc: WebhookError) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(PaymentGatewayError)
+    async def _gateway(_: Request, exc: PaymentGatewayError) -> JSONResponse:
+        return JSONResponse(status_code=502, content={"detail": str(exc), "code": exc.code})
 
     @app.exception_handler(PlanDocumentsUnavailableError)
     async def _plan_documents(_: Request, exc: PlanDocumentsUnavailableError) -> JSONResponse:

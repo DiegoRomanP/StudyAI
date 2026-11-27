@@ -15,6 +15,7 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
+from app.models.billing import Order, PaymentEvent, Product, ProductKind  # noqa: F401 - register before create_all
 from app.models.credit_ledger import CreditLedger  # noqa: F401 - register before create_all
 from app.models.llm_usage import LLMUsageRecord  # noqa: F401 - register before create_all
 from app.models.plan import Plan
@@ -101,6 +102,7 @@ def init_db() -> None:
     _ensure_adaptive_route_columns()
     _ensure_adaptive_content_columns()
     _seed_default_user()
+    _seed_products()
     sync_id_sequences()
     _enable_row_level_security()
 
@@ -361,6 +363,22 @@ def _ensure_llm_verification_columns() -> None:
         )
         if engine.dialect.name == "sqlite":
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_credential_active_user ON llm_credentials (user_id) WHERE is_active = 1"))
+
+
+# D12 (provisional prices, céntimos de sol). Seeded only into an empty table: edit them in the database.
+SEED_PRODUCTS = (
+    dict(code="pack_10", name="Paquete de 10 créditos", kind=ProductKind.PACK, price_cents=490, credits=10),
+    dict(code="pack_60", name="Paquete de 60 créditos", kind=ProductKind.PACK, price_cents=1990, credits=60),
+    dict(code="pass_30d", name="Pase de 30 días", kind=ProductKind.PASS, price_cents=3490, credits=150, pass_days=30),
+)
+
+
+def _seed_products() -> None:
+    with SessionLocal() as db:
+        if db.query(Product.id).first() is None:
+            db.add_all(Product(currency="PEN", **p) for p in SEED_PRODUCTS)
+            db.commit()
+            logger.info("Seeded %s products", len(SEED_PRODUCTS))
 
 
 def _seed_default_user() -> None:

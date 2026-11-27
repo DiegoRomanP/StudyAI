@@ -58,6 +58,24 @@ class PlanLimitError(StudyAIError):
     code = "PLAN_LIMIT_REACHED"
 
 
+class WebhookError(StudyAIError):
+    """A payment notification failed verification (HTTP 400). Never says why: no oracle for forgers."""
+
+    code = "WEBHOOK_INVALID"
+
+    def __init__(self) -> None:
+        super().__init__("Notificación inválida.")
+
+
+class PaymentGatewayError(StudyAIError):
+    """The payment gateway failed or answered something unusable (HTTP 502)."""
+
+    code = "PAYMENT_GATEWAY_ERROR"
+
+    def __init__(self) -> None:
+        super().__init__("La pasarela de pago no respondió. Inténtalo de nuevo en unos minutos.")
+
+
 class PlanDocumentsUnavailableError(StudyAIError):
     """A plan was requested with documents the caller cannot use.
 
