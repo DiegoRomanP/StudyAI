@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.plan import (
@@ -16,12 +17,15 @@ from app.schemas.plan import (
 from app.services.plan_service import PlanService, generate_plan_task
 
 router = APIRouter(prefix="/plans", tags=["plans"])
+# Resuming spends the same LLM budget as generating, so both share one bucket.
+GENERATE_LIMIT = rate_limit("generate", limit=10, window_seconds=3600)
 
 
 @router.post(
     "/generate",
     response_model=PlanStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(GENERATE_LIMIT)],
     responses={
         400: {
             "description": (
@@ -108,6 +112,7 @@ def _error_response(description: str, code: str) -> dict:
     "/{plan_id}/resume",
     response_model=PlanStatusResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(GENERATE_LIMIT)],
     responses={
         404: {"description": "Plan no encontrado."},
         409: _error_response(

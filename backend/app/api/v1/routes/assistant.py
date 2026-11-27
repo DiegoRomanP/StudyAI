@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.assistant import (
@@ -28,7 +29,10 @@ def get_assistant_history(
     return AssistantService(db).history(user.id, session_id)
 
 
-@router.post("/sessions/{session_id}/assistant", response_model=AssistantAskResponse)
+@router.post(
+    "/sessions/{session_id}/assistant", response_model=AssistantAskResponse,
+    dependencies=[Depends(rate_limit("assistant", limit=60, window_seconds=3600))],
+)
 def ask_assistant(
     session_id: int,
     payload: AssistantAskRequest,

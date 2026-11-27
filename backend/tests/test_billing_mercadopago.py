@@ -95,7 +95,7 @@ def test_checkout_creates_preference_from_server_prices(client, mp):
     assert payload["external_reference"] == str(body["order_id"])
     assert payload["back_urls"]["success"] == f"https://studyinflow.app/pago/resultado?order={body['order_id']}"
     assert payload["auto_return"] == "approved"
-    assert payload["notification_url"] == "https://api.studyinflow.app/billing/webhooks/mercadopago"
+    assert payload["notification_url"] == "https://api.studyinflow.app/billing/webhooks/mercadopago?source_news=webhooks"
     # a retry with the same key reuses the stored page: no second preference
     again = client.post("/billing/checkout", json={"product_code": "pack_60", "idempotency_key": "mp-k1"}).json()
     assert again == body and route.call_count == 1

@@ -5,6 +5,9 @@ services:
     env_file: /opt/studyai/.env
     environment:
       DEPLOYMENT_MODE: saas
+      # api is reachable only through Caddy (expose, not ports), and Caddy overwrites X-Forwarded-For,
+      # so uvicorn may trust it: the rate limit then sees the real client IP, not Caddy's.
+      FORWARDED_ALLOW_IPS: "*"
     expose:
       - "8001"
 

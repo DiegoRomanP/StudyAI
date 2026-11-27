@@ -9,6 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import get_current_user, require_saas
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.billing import CheckoutRequest, CheckoutResponse, OrderResponse, ProductResponse
@@ -33,7 +34,10 @@ def list_products(billing: BillingService = Depends(_billing)) -> list[ProductRe
     return [ProductResponse.model_validate(p) for p in billing.list_products()]
 
 
-@router.post("/checkout", response_model=CheckoutResponse)
+@router.post(
+    "/checkout", response_model=CheckoutResponse,
+    dependencies=[Depends(rate_limit("checkout", limit=10, window_seconds=3600))],
+)
 def checkout(
     body: CheckoutRequest, billing: BillingService = Depends(_billing), user: User = Depends(get_current_user)
 ) -> CheckoutResponse:

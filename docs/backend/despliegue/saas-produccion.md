@@ -668,17 +668,17 @@ misma cuenta. R2 pasa a S3 cambiando el endpoint.
 
 | # | Medida | Detalle |
 |---|---|---|
-| 1 | Rate limiting | Por usuario e IP (slowapi o en el proxy): login, subida, generación, checkout |
+| 1 | Rate limiting | **Hecho** (`app/core/rate_limit.py`, en memoria, 1 worker): generación, refuerzo, subida, checkout, asistente y reclamaciones. Login lo limita Supabase. Ver [../arquitectura/configuracion-y-despliegue.md](../arquitectura/configuracion-y-despliegue.md) |
 | 2 | Antiabuso del regalo | Créditos solo con correo verificado o Google; bloquear dominios de correo desechable; límite de cuentas nuevas por IP/día |
 | 3 | Archivos | Validar tipo real (magic bytes), límite de páginas, timeout de parseo, rechazar PDFs cifrados o con bombas de compresión |
-| 4 | Secretos | `SECRET_KEY` real (rotarlo invalida las credenciales Fernet; en SaaS ya no hay BYOK, así que el impacto es bajo) |
-| 5 | CORS | Solo el dominio de producción en `CORS_ORIGINS` |
+| 4 | Secretos | **El arranque en producción lo exige.** `SECRET_KEY` real (rotarlo invalida las credenciales Fernet; en SaaS ya no hay BYOK, así que el impacto es bajo) |
+| 5 | CORS | Solo el dominio de producción en `CORS_ORIGINS` (**el arranque rechaza `*` y localhost**) |
 | 6 | Aislamiento | Test automático: el usuario B nunca lee ni modifica recursos del usuario A (todas las rutas) |
 | 7 | Webhooks | Firma verificada, endpoint sin cookies, idempotente |
 | 8 | Prompt injection | El texto de los documentos va como dato delimitado en los prompts; el LLM nunca decide enlaces (regla existente de YouTube) ni acciones |
 | 9 | Dependencias | `pip-audit` y `npm audit` en CI |
 | 10 | Encabezados | HSTS, CSP básica, `X-Content-Type-Options` en el frontend |
-| 11 | Docs de API | `/docs` (Swagger) deshabilitado o protegido en producción |
+| 11 | Docs de API | **Hecho**: `/docs`, `/redoc` y `/openapi.json` dan 404 en saas + producción |
 
 ---
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.quiz import QuizResultResponse
@@ -60,6 +61,7 @@ def complete_session(
     "/{session_id}/reinforcement",
     response_model=SessionDetailResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit("reinforce", limit=20, window_seconds=3600))],
 )
 def start_reinforcement(
     session_id: int,

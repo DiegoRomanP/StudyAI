@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.document import DocumentResponse
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
     "/upload",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("upload", limit=30, window_seconds=3600))],
 )
 async def upload_document(
     background_tasks: BackgroundTasks,

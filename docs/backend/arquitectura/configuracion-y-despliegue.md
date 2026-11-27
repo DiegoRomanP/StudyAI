@@ -46,9 +46,10 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac�
 | `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_PUBLISHABLE_KEY` | vacío | Supabase Auth; solo clave publicable |
 | `SUPABASE_JWT_AUDIENCE` | `authenticated` | `aud` esperado del token |
 | `STORAGE_BACKEND` | `local` | `local` (`UPLOAD_DIR`) \| `s3` (compatible S3, p. ej. R2) |
-| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 (`app/storage`; requiere `boto3` de `requirements-saas.txt`; si faltan o `boto3` no está, cae a local con warning). Detalle: [../documentos/ingesta-y-figuras.md](../documentos/ingesta-y-figuras.md) |
+| `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | vacío (`auto`) | Credenciales del almacenamiento S3 (`app/storage`; requiere `boto3` de `requirements-saas.txt`; si faltan o `boto3` no está, cae a local con warning, **salvo en saas + producción**, donde el arranque falla). Detalle: [../documentos/ingesta-y-figuras.md](../documentos/ingesta-y-figuras.md) |
 | `PAYMENT_GATEWAY` | `fake` | `fake` \| `mercadopago` |
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | vacío | Mercado Pago |
+| `RATE_LIMIT_ENABLED` | `true` | Límites por usuario/IP (solo actúan en `saas`); `tests/conftest.py` lo pone a `false` |
 
 `CLAUDE_API_KEY` se acepta como alias de `ANTHROPIC_API_KEY` (gana `ANTHROPIC_API_KEY`). Los secretos son
 `str` (como el resto del archivo), no `SecretStr`. Dependencias nuevas en `requirements-saas.txt`: `pyjwt[crypto]`, `boto3`.
@@ -57,6 +58,42 @@ Empaquetado y despliegue (`backend/Dockerfile`, `deploy/`, CI): ver [despliegue/
 La imagen ejecuta `alembic upgrade head` solo con `DEPLOYMENT_MODE=saas`.
 
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).
+
+## Validación al arrancar (saas + producción)
+
+Con `DEPLOYMENT_MODE=saas` y `APP_ENV=production`, `Settings._saas_production_is_fully_configured`
+(`app/core/config.py`) impide arrancar y lista **todos** los problemas a la vez si: `PAYMENT_GATEWAY=fake`;
+`mercadopago` sin `MP_ACCESS_TOKEN` o `MP_WEBHOOK_SECRET`; faltan `SUPABASE_URL` o `SUPABASE_JWKS_URL`
+(`AUTH_MODE=supabase` ya lo exige cualquier `saas`); `STORAGE_BACKEND` no es `s3` o le falta alguna `S3_*`
+(el disco del contenedor no persiste); `SECRET_KEY` es la de por defecto; `CORS_ORIGINS` contiene `*`,
+`localhost` o `127.0.0.1`. Fuera de producción no cambia nada (invariante del modo demo).
+
+En saas + producción además: `/docs`, `/redoc` y `/openapi.json` dan 404, y la respuesta lleva HSTS. En
+todos los modos: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`
+(middleware de `main.py`).
+
+## Rate limit (`app/core/rate_limit.py`)
+
+Ventana deslizante en memoria (`SlidingWindowLimiter`); **solo en `saas`** y con `RATE_LIMIT_ENABLED`.
+Al pasarse: 429 `RATE_LIMITED` con `Retry-After` (segundos). Límites (por hora):
+
+| Bucket | Ruta | Clave | Límite |
+|---|---|---|---|
+| `generate` | `POST /plans/generate` y `POST /plans/{id}/resume` (comparten cubo) | usuario | 10 |
+| `reinforce` | `POST /sessions/{id}/reinforcement` | usuario | 20 |
+| `upload` | `POST /documents/upload` | usuario | 30 |
+| `checkout` | `POST /billing/checkout` | usuario | 10 |
+| `assistant` | `POST /sessions/{id}/assistant` | usuario | 60 |
+| `complaints` | `POST /complaints` | IP | 5 |
+
+Nuevo límite: `dependencies=[Depends(rate_limit("bucket", limit=..., window_seconds=...))]` (o
+`rate_limit_by_ip` en rutas públicas). Limitación conocida: memoria del proceso, válido con **un solo
+worker** (como la recuperación al arrancar); con varios, pasar a Redis.
+
+IP real: Caddy sobrescribe `X-Forwarded-For` con la IP del cliente (no confía en la que llega) y uvicorn
+corre con `--proxy-headers` y `FORWARDED_ALLOW_IPS="*"` (`deploy/docker-compose.yml`). Es seguro porque
+`api` solo se `expose` a la red interna de Docker: nadie llega sin pasar por Caddy. Sin esa variable,
+uvicorn solo confía en `127.0.0.1` y la cabecera se ignora.
 
 ## Autenticación (`AUTH_MODE`)
 

@@ -114,6 +114,8 @@ def get_file_storage() -> FileStorage:
                     secret_access_key=settings.S3_SECRET_ACCESS_KEY, region=settings.S3_REGION,
                 )
             except ImportError:
+                if settings.is_saas_production:  # local disk in the container would lose every upload
+                    raise RuntimeError("STORAGE_BACKEND=s3 en producción exige boto3 (requirements-saas.txt).")
                 logger.warning("STORAGE_BACKEND=s3 but boto3 is not installed; using local storage.")
         else:
             logger.warning("STORAGE_BACKEND=s3 but the S3_* variables are incomplete; using local storage.")

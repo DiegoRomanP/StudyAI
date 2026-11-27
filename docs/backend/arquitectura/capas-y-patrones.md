@@ -68,6 +68,7 @@ Antes de añadir lógica nueva, busca la existente (el mapa de abajo cubre lo qu
 | Cobrar/devolver 1 crédito (saas) | `app/services/credit_service.py` + `ai_charge.py` (ver [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md)) |
 | Gastar/devolver un uso de la IA gratuita | `app/services/free_ai_quota.py` (`uses_free_ai`, ver [llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)) |
 | Registrar tokens/coste | `UsageRecorder` (`app/services/usage_recorder.py`) |
+| Limitar peticiones caras por usuario/IP (saas) | `rate_limit` / `rate_limit_by_ip` (`app/core/rate_limit.py`, ver [configuracion-y-despliegue.md](configuracion-y-despliegue.md#rate-limit-appcorerate_limitpy)) |
 | Errores de dominio con código | `StudyAIError`, `NotFoundError`, `ValidationError` (`app/core/`) |
 | Validar una URL saliente | `assert_safe_outbound_url` (`app/core/url_safety.py`) |
 | Cifrar/enmascarar secretos | `encrypt_secret`/`decrypt_secret`/`mask_secret` (`app/core/security.py`) |

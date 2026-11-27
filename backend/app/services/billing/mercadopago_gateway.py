@@ -98,7 +98,8 @@ class MercadoPagoGateway(PaymentGateway):
             "external_reference": str(order.id),
             "back_urls": {"success": result_url, "failure": result_url, "pending": result_url},
             "auto_return": "approved",
-            "notification_url": f"{self.api_url}/billing/webhooks/mercadopago",
+            # source_news=webhooks: only signed Webhooks, never legacy IPN (unsigned, fails our check).
+            "notification_url": f"{self.api_url}/billing/webhooks/mercadopago?source_news=webhooks",
         }
         data = self._request(
             "POST", "/checkout/preferences", json=body, headers={"X-Idempotency-Key": f"order-{order.id}"}

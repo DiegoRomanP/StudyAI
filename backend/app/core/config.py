@@ -180,6 +180,10 @@ class Settings(BaseSettings):
     )
     SESSION_DURATION_MINUTES: int = 25
 
+    # --- Abuse limits (saas only; see app/core/rate_limit.py) ------------------
+    # Off in tests (conftest) so suites that loop over expensive endpoints are not throttled.
+    RATE_LIMIT_ENABLED: bool = True
+
     @field_validator("CORS_ORIGINS", "REVIEW_INTERVALS_DAYS", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
@@ -203,9 +207,39 @@ class Settings(BaseSettings):
             raise ValueError("DEPLOYMENT_MODE=saas exige AUTH_MODE=supabase.")
         return self
 
+    @model_validator(mode="after")
+    def _saas_production_is_fully_configured(self) -> "Settings":
+        """Refuse to boot a public deployment that would silently run on demo/dev fallbacks."""
+        if not (self.DEPLOYMENT_MODE == "saas" and self.APP_ENV == "production"):
+            return self
+        problems = []
+        if self.PAYMENT_GATEWAY == "fake":
+            problems.append("PAYMENT_GATEWAY=fake regala créditos: usa mercadopago")
+        elif not (self.MP_ACCESS_TOKEN.strip() and self.MP_WEBHOOK_SECRET.strip()):
+            problems.append("PAYMENT_GATEWAY=mercadopago exige MP_ACCESS_TOKEN y MP_WEBHOOK_SECRET")
+        if not (self.SUPABASE_URL.strip() and self.SUPABASE_JWKS_URL.strip()):
+            problems.append("AUTH_MODE=supabase exige SUPABASE_URL y SUPABASE_JWKS_URL")
+        if self.STORAGE_BACKEND != "s3":
+            problems.append("STORAGE_BACKEND debe ser s3 (el disco del contenedor no persiste)")
+        elif not all(
+            v.strip() for v in (self.S3_ENDPOINT_URL, self.S3_BUCKET, self.S3_ACCESS_KEY_ID, self.S3_SECRET_ACCESS_KEY)
+        ):
+            problems.append("STORAGE_BACKEND=s3 exige S3_ENDPOINT_URL, S3_BUCKET, S3_ACCESS_KEY_ID y S3_SECRET_ACCESS_KEY")
+        if self.SECRET_KEY == "change-me-in-production" or not self.SECRET_KEY.strip():
+            problems.append("SECRET_KEY tiene el valor por defecto")
+        if any(o == "*" or "localhost" in o or "127.0.0.1" in o for o in self.CORS_ORIGINS):
+            problems.append("CORS_ORIGINS no admite '*' ni localhost en producción")
+        if problems:
+            raise ValueError("Configuración de producción incompleta: " + "; ".join(problems) + ".")
+        return self
+
     @property
     def is_saas(self) -> bool:
         return self.DEPLOYMENT_MODE == "saas"
+
+    @property
+    def is_saas_production(self) -> bool:
+        return self.is_saas and self.APP_ENV == "production"
 
     @property
     def has_llm_key(self) -> bool:

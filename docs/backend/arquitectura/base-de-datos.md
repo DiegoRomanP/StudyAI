@@ -43,6 +43,12 @@ la base), `orders` (FK a `users` y `products`; `idempotency_key` y `gateway_paym
 plan, meta o documento las toca. Enums como `VARCHAR` (`native_enum=False`). Detalle:
 [../pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md).
 
+**Libro de Reclamaciones**: `complaints` (sin FK; tabla nueva, sin backfill). Código `R-{año}-{000001}`
+con `year`/`number` y UNIQUE `(year, number)`: `ComplaintService` lee `max(number)+1` del año (en hora de
+Lima, UTC−5) e inserta; si otra petición concurrente se lo lleva, el UNIQUE falla, hace rollback y reintenta
+(hasta 5). Funciona igual en SQLite y Postgres, sin bloqueos ni SQL crudo. **Nunca se borra** (registro
+legal); ningún borrado de usuario, plan o documento la toca.
+
 ## Postgres (SaaS / Supabase)
 
 Runs the same code: `pip install -r requirements-saas.txt` (psycopg 3) and

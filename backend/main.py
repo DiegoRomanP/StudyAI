@@ -23,6 +23,7 @@ from app.core.exceptions import (
     PaymentGatewayError,
     PlanDocumentsUnavailableError,
     PlanLimitError,
+    RateLimitError,
     StudyAIError,
     UnsupportedFileTypeError,
     ValidationError,
@@ -64,7 +65,21 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="AI study-planning backend (MVP).",
         lifespan=lifespan,
+        # The public API is not a browsable catalogue in production.
+        docs_url=None if settings.is_saas_production else "/docs",
+        redoc_url=None if settings.is_saas_production else "/redoc",
+        openapi_url=None if settings.is_saas_production else "/openapi.json",
     )
+
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        if settings.is_saas_production:
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
 
     app.add_middleware(
         CORSMiddleware,
@@ -108,6 +123,14 @@ def _register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(DailyLimitError)
     async def _daily_limit(_: Request, exc: DailyLimitError) -> JSONResponse:
         return JSONResponse(status_code=429, content={"detail": str(exc), "code": exc.code})
+
+    @app.exception_handler(RateLimitError)
+    async def _rate_limited(_: Request, exc: RateLimitError) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": str(exc), "code": exc.code},
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        )
 
     @app.exception_handler(InsufficientCreditsError)
     async def _no_credits(_: Request, exc: InsufficientCreditsError) -> JSONResponse:

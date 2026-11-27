@@ -8,7 +8,7 @@ Organizada por **lado** (backend / frontend) y dentro por **funcionalidad**. Cad
 | Código | Documento |
 |---|---|
 | `backend/app/api/`, `services/`, `repositories/`, `models/`, `schemas/` (estructura, capas, patrones) | [backend/arquitectura/capas-y-patrones.md](backend/arquitectura/capas-y-patrones.md) |
-| `backend/app/core/config.py`, `.env*`, `DEPLOYMENT_MODE` | [backend/arquitectura/configuracion-y-despliegue.md](backend/arquitectura/configuracion-y-despliegue.md) |
+| `backend/app/core/config.py`, `.env*`, `DEPLOYMENT_MODE`, `core/rate_limit.py` | [backend/arquitectura/configuracion-y-despliegue.md](backend/arquitectura/configuracion-y-despliegue.md) |
 | `backend/app/services/credit_service.py`, `ai_charge.py`, `routes/account.py`, `models/credit_ledger.py`, `core/disposable_domains.py`, `services/billing/`, `routes/billing.py`, `models/billing.py` | [backend/pagos/creditos-y-cobros.md](backend/pagos/creditos-y-cobros.md) |
 | `backend/app/db/`, modelos nuevos/columnas, SQL crudo, borrados | [backend/arquitectura/base-de-datos.md](backend/arquitectura/base-de-datos.md) |
 | `backend/app/llm/factory.py`, `default_free_provider.py`, `services/free_ai_quota.py` | [backend/llm/resolucion-y-cuota-gratuita.md](backend/llm/resolucion-y-cuota-gratuita.md) |

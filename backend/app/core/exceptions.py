@@ -43,6 +43,16 @@ class DailyLimitError(StudyAIError):
         self.code = code
 
 
+class RateLimitError(StudyAIError):
+    """Too many requests to an expensive endpoint in its window (HTTP 429 + ``Retry-After``)."""
+
+    code = "RATE_LIMITED"
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__("Demasiadas solicitudes. Espera un poco antes de volver a intentarlo.")
+        self.retry_after_seconds = retry_after_seconds
+
+
 class InsufficientCreditsError(StudyAIError):
     """No credits left for an AI generation (HTTP 402)."""
 

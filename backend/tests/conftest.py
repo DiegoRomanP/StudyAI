@@ -37,7 +37,7 @@ for _k in (
     os.environ[_k] = ""
 os.environ.update(
     DEPLOYMENT_MODE="self_hosted", AUTH_MODE="demo", STORAGE_BACKEND="local", PAYMENT_GATEWAY="fake",
-    APP_ENV="development", S3_REGION="auto",
+    APP_ENV="development", S3_REGION="auto", RATE_LIMIT_ENABLED="false",
 )
 
 import pytest  # noqa: E402 - after the environment redirection above
