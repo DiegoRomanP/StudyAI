@@ -720,24 +720,26 @@ Recomendación: una sesión con un contador (régimen y boletas) y revisión de 
 
 **P0 = bloquea el lanzamiento · P1 = primer mes · P2 = con tracción**
 
+Marcado = hecho en código (rama `feat/deploy-ola1`, verificado en la Ola 6, 2026-11-27); aún no desplegado (Ola 7).
+
 ### P0
 - [x] Registro de uso de tokens y costo por llamada (`llm_usage`)
 - [x] `DEPLOYMENT_MODE` con mock prohibido y BYOK/Ollama bloqueados en SaaS
-- [ ] Supabase Auth en backend (`get_current_user`) y frontend (login, registro, recuperar, rutas protegidas)
-- [ ] Postgres + Alembic + pgvector + almacenamiento de archivos en la nube
-- [ ] `credit_ledger`, `CreditService`, 402 `INSUFFICIENT_CREDITS`, reembolso exactamente una vez
-- [ ] Regalo de 3 créditos con correo verificado
-- [ ] Límites de documentos y metas activas; archivar metas
-- [ ] Texto gris de créditos y saldo en la cabecera
+- [x] Supabase Auth en backend (`get_current_user`) y frontend (login, registro, recuperar, rutas protegidas)
+- [x] Postgres + Alembic + pgvector + almacenamiento de archivos en la nube
+- [x] `credit_ledger`, `CreditService`, 402 `INSUFFICIENT_CREDITS`, reembolso exactamente una vez
+- [x] Regalo de 3 créditos con correo verificado
+- [x] Límites de documentos y metas activas; archivar metas
+- [x] Texto gris de créditos y saldo en la cabecera
 - [ ] RUC
-- [ ] Mercado Pago (sandbox → producción) con webhook verificado e idempotente; `FakeGateway` para tests
-- [ ] Página `/precios`, checkout, resultado del pago, historial
+- [ ] Mercado Pago (sandbox → producción) con webhook verificado e idempotente; `FakeGateway` para tests — código y `FakeGateway` hechos; falta sandbox → producción (track M)
+- [x] Página `/precios`, checkout, resultado del pago, historial
 - [ ] Boletas electrónicas
-- [ ] Términos, privacidad, Libro de Reclamaciones
+- [x] Términos, privacidad, Libro de Reclamaciones
 - [ ] Cola de trabajos con worker separado y recuperación por heartbeat
-- [ ] Rate limiting, validación de archivos, antiabuso del regalo, CORS y `SECRET_KEY`
-- [ ] Test de aislamiento entre usuarios
-- [ ] Docker, CI, staging, backups
+- [x] Rate limiting, validación de archivos, antiabuso del regalo, CORS y `SECRET_KEY`
+- [x] Test de aislamiento entre usuarios
+- [ ] Docker, CI, staging, backups — Docker y CI hechos; faltan staging y backups
 - [ ] Sentry y monitoreo de disponibilidad
 
 ### P1
@@ -746,7 +748,7 @@ Recomendación: una sesión con un contador (régimen y boletas) y revisión de 
 - [ ] Correos transaccionales
 - [ ] Eliminar cuenta y exportar datos
 - [ ] Registro del banco de datos personales
-- [ ] Pase de 30 días prepagado
+- [x] Pase de 30 días prepagado
 - [ ] Conciliación diaria de órdenes pendientes
 - [ ] Revisión móvil / PWA
 - [ ] Preguntas frecuentes y canal de soporte

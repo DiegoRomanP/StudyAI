@@ -327,11 +327,11 @@ paths:
                 items: { $ref: "#/components/schemas/Order" }
         "404": { description: self_hosted }
 
-  /billing/orders/{id}:
+  /billing/orders/{order_id}:
     get:
       summary: Estado de una orden (polling en /pago/resultado hasta paid)
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: order_id, in: path, required: true, schema: { type: integer } }
       responses:
         "200":
           description: OK
@@ -555,6 +555,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanStatus" }
+
+  /plans:
+    get:
+      summary: Planes del usuario
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Plan" } }
 
   /plans/{plan_id}:
     get:

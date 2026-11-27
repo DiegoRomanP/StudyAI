@@ -66,4 +66,7 @@ despliegue SaaS. Complementa [saas-produccion.md](saas-produccion.md) y `plans/S
 - [ ] Error 28P01 de Supabase resuelto.
 - [ ] `api.studyinflow.app` y frontend desplegados.
 
+El código del login (backend y frontend) está hecho y verificado en `feat/deploy-ola1` (Ola 6,
+2026-11-27); lo que queda arriba son pasos de consola (track M) y el despliegue (Ola 7).
+
 Actualizar esta lista al avanzar. Si algo de aquí contradice el código, manda el código.
