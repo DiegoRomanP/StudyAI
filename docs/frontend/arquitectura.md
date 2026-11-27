@@ -14,12 +14,12 @@ directamente: usan un hook. Lógica pura en `src/lib/` (con tests).
 
 ## Rutas (`App.tsx`)
 
-Públicas: `/` (landing), `/login`, `/registro`, `/recuperar`, `/restablecer` (ver «Capa de autenticación») y `/demo` (recorrido simulado con datos locales — **nunca importa el cliente de
-API**). Dentro de `AppShell`: `/inicio` (home + asistente de configuración + coordinador «Estudiar»,
+Públicas: `/` (landing), `/login`, `/registro`, `/recuperar`, `/restablecer` (ver «Capa de autenticación»), `/demo` (recorrido simulado con datos locales — **nunca importa el cliente de
+API**), `/precios` (solo saas), `/terminos`, `/privacidad` y `/reclamaciones` (marco `components/PublicLayout.tsx`; ver [funcionalidades/precios-pagos-y-legal.md](funcionalidades/precios-pagos-y-legal.md)). Dentro de `AppShell`: `/inicio` (home + asistente de configuración + coordinador «Estudiar»,
 `useStudyStart`), `/plan`, `/plan/:planId`, `/session/:sessionId` (`?fase=test` abre el test; se renderiza
 con `AppShell chrome="focus"`: solo `<main>`, sin navegación), `/practica` (práctica de solo lectura; nunca
 escribe), `/temas` («Temas clave»), `/documents` («Recursos»), `/goals`, `/dashboard` («Estadísticas»),
-`/preguntas` («Mis preguntas») y `/settings` («Conectar IA»).
+`/preguntas` («Mis preguntas»), `/settings` («Conectar IA», solo self_hosted), `/cuenta` y `/pago/resultado?order=` (solo saas; en self_hosted `SaasOnly` pinta `NotFoundPage`).
 
 ## Capa de autenticación (Supabase)
 
@@ -35,7 +35,7 @@ app se comporta como siempre (demo / autoalojado): `RequireAuth` renderiza al in
   `Authorization: Bearer`; el token no se guarda en variables. Un 401 con `AUTH_REQUIRED` /
   `AUTH_INVALID_TOKEN` redirige a `/login?next=…`.
 - **T7**: `signOut` y el cambio de `user.id` (o el evento `SIGNED_OUT`) ejecutan `queryClient.clear()`.
-- El registro enlaza a `/terminos` y `/privacidad` (páginas pendientes de otra fase). `/demo` sigue sin
+- El registro enlaza a `/terminos` y `/privacidad`. `/demo` sigue sin
   importar `api/client`. «Cerrar sesión» aparece en `AppShell` (`onSignOut`) solo con sesión.
 
 ## Convenciones que hay que reutilizar
@@ -55,6 +55,8 @@ app se comporta como siempre (demo / autoalojado): `RequireAuth` renderiza al in
 | Persistir algo por navegador | `localStorage` **siempre en try/catch** (patrón de `lib/onboardingStorage.ts`, `lib/quizDraft.ts`, `lib/reinforcePreference.ts`) |
 | Modo de despliegue | `useAppConfig` (`GET /config`) |
 | Créditos (solo `saas`) | `hooks/useCredits.ts` (`useCredits`, clave `["account-credits"]`, deshabilitado fuera de saas: no llama a `/account/credits`), `components/credits/` (`CreditChip` en `AppShell` vía prop `creditChip`, `CreditNotice` aviso gris, `NoCreditsReason`, `OutOfCreditsDialog`). Se invalida al generar/reanudar plan, al pedir refuerzo, al asentarse un plan o refuerzo y al archivar metas; el cierre de sesión limpia toda la caché |
+| Compras (solo `saas`) | `hooks/useBilling.ts` (`useProducts`, `useCheckout`, `useOrder` con polling, `useOrders`, `formatPrice` en soles); clave `["billing-orders"]` |
+| Enlaces legales en pies | `LegalLinks` (`components/PublicLayout.tsx`): landing, páginas públicas y `AppShell` (prop `footer`, solo saas) |
 | Mensajes de error de la API | `src/api/errors.ts` (`isInsufficientCreditsError` para el 402; el 403 `PLAN_LIMIT_REACHED` se muestra con el `detail` del servidor vía `getApiErrorMessage`) |
 | Tiempo relativo | `lib/timeAgo.ts` |
 

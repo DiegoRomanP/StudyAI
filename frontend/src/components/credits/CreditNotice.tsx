@@ -5,7 +5,7 @@ import { parseApiDate } from "../../lib/studyProgress";
 
 export const FREE_CREDITS = 3;
 export const PASS_MONTHLY_CREDITS = 150;
-export const PRICING_PATH = "/precios"; // future route: the pricing page does not exist yet
+export const PRICING_PATH = "/precios";
 
 const PRICING_LINK = (
   <Link to={PRICING_PATH} className="font-medium text-action hover:underline">

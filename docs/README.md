@@ -31,6 +31,7 @@ Organizada por **lado** (backend / frontend) y dentro por **funcionalidad**. Cad
 | `usePlan`, `GenerationProgress`, `PlanDetailPage`, `useStudyStart` | [frontend/funcionalidades/generacion-y-plan.md](frontend/funcionalidades/generacion-y-plan.md) |
 | `SessionPage`, `QuizPhase`, `SessionTimeline`, `AssistantPanel` | [frontend/funcionalidades/sesion-y-test.md](frontend/funcionalidades/sesion-y-test.md) |
 | `components/help/`, `EmptyState`, `StudySetup` | [frontend/funcionalidades/ayuda-y-onboarding.md](frontend/funcionalidades/ayuda-y-onboarding.md) |
+| `PricingPage`, `PaymentResultPage`, `AccountPage`, `useBilling`, `pages/legal/`, `PublicLayout` | [frontend/funcionalidades/precios-pagos-y-legal.md](frontend/funcionalidades/precios-pagos-y-legal.md) |
 
 ## Comandos
 

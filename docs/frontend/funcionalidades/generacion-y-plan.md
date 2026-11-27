@@ -33,7 +33,7 @@ En `self_hosted`/demo nada de esto aparece ni llama a `/account/credits`.
   `StudySetup` y `ReviewPanel` (refuerzo). Sin saldo el botón queda deshabilitado con su motivo
   (`aria-describedby`); en `StudySetup` aparece además «Recargar créditos».
 - **402 `INSUFFICIENT_CREDITS`** (generar plan, continuar, refuerzo): abre `OutOfCreditsDialog`, que enlaza a
-  `/precios` (ruta futura, la página aún no existe) y se puede cerrar con «Ahora no».
+  `/precios` y se puede cerrar con «Ahora no».
 - **403 `PLAN_LIMIT_REACHED`** (subir documento, crear meta, desarchivar): se muestra el mensaje del servidor.
 - **Metas**: botón archivar/desarchivar en `GoalsPage`; las archivadas van en una sección «Archivadas · N»
   aparte, atenuadas, con borde discontinuo e insignia, plegadas con `useShowMore` (2 visibles).

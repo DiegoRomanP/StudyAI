@@ -6,6 +6,9 @@ import type {
   AssistantAskInput,
   AssistantHistoryDTO,
   AssistantQuestionDTO,
+  CheckoutDTO,
+  ComplaintCreate,
+  ComplaintReceiptDTO,
   CreditBalanceDTO,
   CreditLedgerEntryDTO,
   DashboardDTO,
@@ -21,8 +24,10 @@ import type {
   LLMProviderKey,
   LLMRuntimeDTO,
   OllamaModel,
+  OrderDTO,
   PlanDTO,
   PlanStatusDTO,
+  ProductDTO,
   ProviderCatalogEntry,
   QuizAnswer,
   QuizDTO,
@@ -65,6 +70,20 @@ export const api = {
   getCredits: () => apiClient.get<CreditBalanceDTO>("/account/credits").then((r) => r.data),
   getCreditHistory: (limit = 20) =>
     apiClient.get<CreditLedgerEntryDTO[]>("/account/credits/history", { params: { limit } }).then((r) => r.data),
+
+  // Billing (saas only)
+  listProducts: () => apiClient.get<ProductDTO[]>("/billing/products").then((r) => r.data),
+  createCheckout: (product_code: string, idempotency_key: string) =>
+    apiClient.post<CheckoutDTO>("/billing/checkout", { product_code, idempotency_key }).then((r) => r.data),
+  listOrders: () => apiClient.get<OrderDTO[]>("/billing/orders").then((r) => r.data),
+  getOrder: (id: number) => apiClient.get<OrderDTO>(`/billing/orders/${id}`).then((r) => r.data),
+  /** Development only, with the fake gateway (the backend answers 404 otherwise). */
+  fakeCompleteOrder: (id: number) =>
+    apiClient.post<OrderDTO>(`/billing/fake/complete/${id}`).then((r) => r.data),
+
+  // Libro de Reclamaciones (public)
+  submitComplaint: (payload: ComplaintCreate) =>
+    apiClient.post<ComplaintReceiptDTO>("/complaints", payload).then((r) => r.data),
 
   // Plans
   listPlans: () => apiClient.get<PlanDTO[]>("/plans").then((r) => r.data),

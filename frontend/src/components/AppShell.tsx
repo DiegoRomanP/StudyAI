@@ -11,6 +11,7 @@ import {
   LogOut,
   MessageCircleQuestion,
   Target,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { Link, matchPath, useLocation } from "react-router-dom";
@@ -33,6 +34,8 @@ interface NavigationItem {
   /** Extra routes that belong to this destination. */
   activePatterns?: string[];
   title: string;
+  /** Only in this deployment mode (saas = the shell got `hideAiSettings`). */
+  mode?: "saas" | "self_hosted";
 }
 
 // Order follows the mockup's sidebar; URLs are the existing routes.
@@ -52,7 +55,8 @@ export const NAVIGATION: NavigationItem[] = [
   { to: "/preguntas", label: "Mis preguntas", shortLabel: "Preguntas", icon: MessageCircleQuestion, title: "Mis preguntas" },
   { to: "/documents", label: "Recursos", icon: FolderOpen, title: "Recursos" },
   { to: "/goals", label: "Metas", icon: Target, title: "Metas" },
-  { to: "/settings", label: "Conectar IA", icon: KeyRound, title: "Conectar IA" },
+  { to: "/settings", label: "Conectar IA", icon: KeyRound, title: "Conectar IA", mode: "self_hosted" },
+  { to: "/cuenta", label: "Cuenta", icon: UserRound, activePatterns: ["/pago/resultado"], title: "Cuenta", mode: "saas" },
   { to: "/dashboard", label: "Estadísticas", icon: ChartColumn, primary: true, title: "Estadísticas" },
 ];
 
@@ -64,6 +68,7 @@ function matchesRoute(path: string, pathname: string) {
 function pageTitle(pathname: string) {
   if (matchesRoute("/plan/:planId", pathname)) return "Detalle del plan | StudyAI";
   if (matchesRoute("/session/:sessionId", pathname)) return "Sesión de estudio | StudyAI";
+  if (matchesRoute("/pago/resultado", pathname)) return "Resultado del pago | StudyAI";
   const item = NAVIGATION.find((entry) => matchesRoute(entry.to, pathname));
   return item ? `${item.title} | StudyAI` : "Página no encontrada | StudyAI";
 }
@@ -136,6 +141,7 @@ export function AppShell({
   hideAiSettings = false,
   onSignOut,
   creditChip,
+  footer,
 }: {
   children: ReactNode;
   sidebarFooter?: ReactNode;
@@ -146,8 +152,11 @@ export function AppShell({
   onSignOut?: () => void;
   /** SaaS only: credit balance chip (the shell stays free of data hooks). */
   creditChip?: ReactNode;
+  /** SaaS only: legal links under the page content. */
+  footer?: ReactNode;
 }) {
-  const navigation = hideAiSettings ? NAVIGATION.filter((item) => item.to !== "/settings") : NAVIGATION;
+  const mode = hideAiSettings ? "saas" : "self_hosted";
+  const navigation = NAVIGATION.filter((item) => !item.mode || item.mode === mode);
   const primaryNavigation = navigation.filter((item) => item.primary);
   const overflowNavigation = navigation.filter((item) => !item.primary);
   const { pathname } = useLocation();
@@ -238,6 +247,7 @@ export function AppShell({
         >
           <div className="mx-auto max-w-6xl px-4 pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-8">
             <PageTransition routeKey={pathname}>{children}</PageTransition>
+            {footer && <footer className="mt-12 border-t border-line pt-2">{footer}</footer>}
           </div>
         </main>
       </div>

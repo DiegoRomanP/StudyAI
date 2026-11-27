@@ -413,3 +413,49 @@ export interface CreditLedgerEntryDTO {
 /** Stable `code` values of the saas-only errors (402 / 403) and of auth (401 / 409). */
 export type CreditErrorCode = "INSUFFICIENT_CREDITS" | "PLAN_LIMIT_REACHED";
 export type AuthErrorCode = "AUTH_REQUIRED" | "AUTH_INVALID_TOKEN" | "AUTH_EMAIL_CONFLICT";
+
+// Billing (saas)
+export interface ProductDTO {
+  code: string;
+  name: string;
+  kind: "pack" | "pass";
+  credits: number;
+  pass_days: number | null;
+  price_cents: number;
+  currency: "PEN";
+}
+
+export interface CheckoutDTO {
+  order_id: number;
+  checkout_url: string;
+}
+
+export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
+
+export interface OrderDTO {
+  id: number;
+  product_code: string;
+  status: OrderStatus;
+  amount_cents: number;
+  currency: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
+// Libro de Reclamaciones (public)
+export interface ComplaintCreate {
+  name: string;
+  document_id: string;
+  address: string;
+  phone: string;
+  email: string;
+  kind: "reclamo" | "queja";
+  amount_cents: number | null;
+  detail: string;
+  request: string;
+}
+
+export interface ComplaintReceiptDTO {
+  code: string;
+  created_at: string;
+}
