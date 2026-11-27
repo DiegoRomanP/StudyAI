@@ -1,7 +1,7 @@
 # Créditos y cobros (saas)
 
 Leer antes de tocar `credit_service.py`, `ai_charge.py`, el cobro en `plan_service.py` /
-`reinforcement_service.py`, los límites por nivel o `/account/*`. Decisiones de producto:
+`reinforcement_service.py`, los límites por nivel, `/account/*`, `app/services/billing/` o `/billing/*`. Decisiones de producto:
 [../despliegue/saas-produccion.md](../despliegue/saas-produccion.md) §3 y §6.
 
 ## Qué cuesta
@@ -37,6 +37,8 @@ Cada método hace commit propio, como `FreeAiQuota`.
   una gana, la otra 402; nunca saldo negativo (probado con hilos en SQLite y Postgres).
 - `refund(charge_id)`: clave `refund:{charge_id}` → exactamente una vez; vuelve a la misma `source`.
 - `grant(...)`: abono idempotente por clave.
+- `grant_pass(...)`: inicia o extiende el pase: `pass_credits` se **reinicia** a los del producto (no se acumulan)
+  y `pass_expires_at = max(ahora, vencimiento actual) + días`; asiento `pass_grant`, idempotente por clave.
 - `balance(user_id)` → `CreditBalance` (con `total`, límites y usos). `ensure_document_slot` /
   `ensure_goal_slot` lanzan `PlanLimitError` (403 `PLAN_LIMIT_REACHED`).
 
@@ -77,8 +79,51 @@ Los límites se comprueban antes de guardar (blandos ante subidas simultáneas).
 
 ## Endpoints
 
-`GET /account/credits` → saldo, nivel, límites y usos. `GET /account/credits/history?limit=50` → movimientos del
+Compras: ver «Compras» arriba. `GET /account/credits` → saldo, nivel, límites y usos. `GET /account/credits/history?limit=50` → movimientos del
 usuario, recientes primero. Contrato: `docs/api_contract.yaml`. En `self_hosted` el saldo es 0 y los límites `null`.
+
+## Compras (`app/services/billing/`, `/billing/*`)
+
+Solo en `saas`: en `self_hosted` todo `/billing/*` es 404 (`require_saas`). Contrato: `docs/api_contract.yaml`.
+
+**Productos** (D12, sembrados si la tabla está vacía, céntimos de sol): `pack_10` S/ 4,90 → 10 créditos,
+`pack_60` S/ 19,90 → 60, `pass_30d` S/ 34,90 → pase de 30 días con 150 créditos.
+
+**Pasarela** (Strategy `PaymentGateway`, factory `get_payment_gateway()` según `PAYMENT_GATEWAY`):
+
+| | `FakeGateway` (`fake`, por defecto) | `MercadoPagoGateway` (`mercadopago`) |
+|---|---|---|
+| Checkout | `{PUBLIC_APP_URL}/pago/resultado?order={id}` | `POST /checkout/preferences` (Checkout Pro): `external_reference=order.id`, `back_urls` → `/pago/resultado?order={id}`, `auto_return=approved`, `notification_url={PUBLIC_API_URL}/billing/webhooks/mercadopago`, `X-Idempotency-Key: order-{id}`; devuelve `init_point` |
+| Webhook | JSON sin firma `{event_id, order_id, amount_cents}`; solo fuera de `production` | `x-signature: ts=..,v1=..` = HMAC-SHA256(`MP_WEBHOOK_SECRET`, `id:{data.id};request-id:{x-request-id};ts:{ts};`), `hmac.compare_digest`. Sin secreto, sin firma o firma mala → 400 `WEBHOOK_INVALID` (falla cerrado). Tipo ≠ `payment` → 200 ignorado |
+| Consultar pago | el id lleva `order_id:amount` | `GET /v1/payments/{id}` (id solo dígitos): estado, `transaction_amount` (soles → céntimos con `Decimal`), `currency_id`, `external_reference` |
+
+`httpx` se importa perezosamente; un cliente compartido por proceso con timeout 10 s (connect 5 s). Error
+de red o HTTP ≥ 400 → `PaymentGatewayError` (502 `PAYMENT_GATEWAY_ERROR`) sin el cuerpo de la pasarela.
+
+**Flujo y reglas de dinero** (`BillingService`):
+
+1. `checkout(user, product_code, idempotency_key)`: monto y moneda **siempre** de `products` (un `amount`
+   del cliente se ignora). La misma clave del mismo usuario y producto devuelve la misma orden y la misma
+   `checkout_url` guardada (no crea otra preferencia); con otro producto u otro usuario → 409
+   `IDEMPOTENCY_CONFLICT`. Si la pasarela falla, la orden queda `pending` sin URL y un reintento con la
+   misma clave vuelve a pedirla.
+2. **Nunca se acredita desde la redirección** a `/pago/resultado`: la página solo hace polling de
+   `GET /billing/orders/{id}`.
+3. `handle_webhook`: verifica la firma, registra `payment_events.event_id` (`mp:{x-request-id}`) —una
+   entrega ya procesada se descarta sin llamar a la API—, consulta el pago y llama a `apply_payment`. Si la
+   consulta falla, el evento guarda `error`, la respuesta es 502 y el reintento de la pasarela (mismo
+   `event_id`) se procesa de nuevo.
+4. `apply_payment(payment)`: solo `approved`; monto o moneda distintos a los de la orden → log y nada (la
+   orden sigue `pending`). `UPDATE orders SET status='paid' WHERE id=:id AND status='pending'`
+   (`BillingRepository.claim_paid`, sin commit) y, si ganó, el abono con clave `order:{id}:credit`
+   (`grant` para paquetes, `grant_pass` para el pase) confirma ambas cosas en **una** transacción. Dos
+   eventos distintos del mismo pago acreditan una vez.
+5. `POST /billing/fake/complete/{order_id}` (D10): solo con `PAYMENT_GATEWAY=fake` y `APP_ENV != production`;
+   recorre el mismo `apply_payment`.
+
+Órdenes de otro usuario responden 404, igual que las inexistentes. Pagos rechazados o reembolsados dejan la
+orden `pending` (`shortcut:` en el código): los reembolsos son manuales en la beta (§7.8) y no hay
+conciliación diaria de pendientes todavía.
 
 ## Subida de PDF
 

@@ -25,6 +25,7 @@ la `Session` de SQLAlchemy) → `models` (entidades ORM) / `schemas` (DTOs Pydan
 |---|---|---|
 | **Factory** | `DocumentProcessorFactory` (`app/processors/factory.py`, ext → processor), `GoalStrategyFactory` (`app/strategies/goal_strategies.py`), `get_llm_provider(db, user_id)` (`app/llm/factory.py`, ver [llm/resolucion-y-cuota-gratuita.md](../llm/resolucion-y-cuota-gratuita.md)) | Elegir implementación por tipo sin `if` repartidos |
 | **Strategy** | `GoalStrategy` (Exam/Learning/Memorization) | Da forma al prompt de ponderación de temas y al `SessionConfig` por sesión (duración, mezcla flashcard/MC) |
+| **Strategy + Factory (pagos)** | `PaymentGateway` (`app/services/billing/gateway.py`): `FakeGateway`, `MercadoPagoGateway`; `get_payment_gateway()` elige por `PAYMENT_GATEWAY` | `BillingService` no sabe de vendors: una pasarela nueva (Culqi) es otra subclase + una rama en la factory. Ver [pagos/creditos-y-cobros.md](../pagos/creditos-y-cobros.md) |
 | **Pipeline** | Ingesta: Validate → Parse (Factory) → Describe → Chunk → Embed → Store (`app/processors/pipeline.py`) | Pasos encadenables y degradables |
 | **Repository** | ver arriba | Aislar el acceso a datos |
 | **Observer** | `EventBus` (`app/events/session_events.py`), singleton `event_bus` | Completar una sesión publica `session.completed`; `ProgressService.register_handlers()` (en el `lifespan` de `main.py`) actualiza SM-2. Los handlers corren síncronos en la transacción del llamador; la excepción de uno nunca rompe a otro. Deduplica handlers y corre cada uno en un SAVEPOINT. |
