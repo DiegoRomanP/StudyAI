@@ -16,5 +16,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=4).status == 200 else 1)"
 
-# En saas se migra antes de arrancar. Mientras H2 no añada versiones de Alembic, `upgrade head` no hace nada.
+# En saas el esquema es de Alembic: `upgrade head` (idempotente) antes de arrancar; init_db solo siembra datos.
 CMD ["sh", "-c", "if [ \"$DEPLOYMENT_MODE\" = \"saas\" ]; then alembic upgrade head; fi && exec uvicorn main:app --host 0.0.0.0 --port 8001 --workers 1 --proxy-headers"]

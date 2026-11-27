@@ -3,18 +3,43 @@
 > **Leer antes de** añadir/cambiar un modelo o columna, escribir SQL crudo, o implementar un borrado.
 > Reglas obligatorias resumidas: `.claude/rules/backend-datos.md`.
 
-## Esquema sin `alembic upgrade`
+## Quién pone el esquema: `create_all` (self_hosted) o Alembic (saas)
 
-SQLAlchemy models + `init_db()` (`app/db/init_db.py`) call `Base.metadata.create_all()` at FastAPI
-startup — there is no `alembic upgrade` step in the normal dev loop, even though Alembic is configured
-(`alembic.ini`, `app/db/migrations/`) for when the schema stabilizes. Because `create_all` never alters
-existing tables, `init_db.py` also hand-rolls additive column backfills (see
-`_ensure_document_error_message_column`) for anyone with a pre-existing `studyai.db`. If you add a column
-to an existing model, add a matching backfill here rather than relying on `create_all` (the plan progress
-columns and `free_ai_use_date` come from `_ensure_plan_generation_columns`).
+`init_db()` (`app/db/init_db.py`, en el `lifespan`) depende de `DEPLOYMENT_MODE`:
 
-`init_db` also deletes leftover credentials of retired providers (`RETIRED_PROVIDER_NAMES`: Zhipu GLM,
-Hugging Face) before any ORM read, since the enum can no longer load those rows.
+- **self_hosted / demo (SQLite)**: `_create_schema()` = `Base.metadata.create_all()` + backfills
+  aditivos a mano (`_ensure_*`, `_add_missing_columns`) para un `studyai.db` antiguo, porque `create_all`
+  nunca altera tablas existentes. Sin pasos de migración: invariante del modo demo.
+- **saas (Postgres)**: **no** hay `create_all` ni backfills. El esquema lo pone `alembic upgrade head`,
+  que la imagen ejecuta antes de `uvicorn` (ver [operacion.md](../despliegue/operacion.md)).
+
+En ambos modos el arranque sigue haciendo lo idempotente de datos: borra credenciales de proveedores
+retirados (`RETIRED_PROVIDER_NAMES`: Zhipu GLM, Hugging Face, antes de cualquier lectura ORM porque el
+enum ya no carga esas filas), siembra el usuario demo y los productos, sincroniza secuencias y activa RLS.
+
+`app/db/base.py` importa **todos** los modelos (autogenerate y `create_all` dependen de ello): un modelo
+nuevo se añade allí.
+
+### Cambiar el esquema desde ahora (columna o tabla nueva)
+
+Hay que hacer **las dos cosas** en el mismo cambio:
+
+1. Migración Alembic (para saas). Con el Postgres de `docker-compose.dev.yml` levantado y vacío:
+   ```bash
+   cd backend
+   export DATABASE_URL=postgresql+psycopg://studyai:studyai@localhost:5433/studyai
+   alembic upgrade head
+   alembic revision --autogenerate --rev-id 0002_<tema> -m "<tema>"
+   ```
+   Revisa el archivo en `app/db/migrations/versions/` a mano: `Enum(..., native_enum=False)` se queda
+   como `VARCHAR` (un valor nuevo no necesita migración); un enum nativo que crece necesita
+   `op.execute("ALTER TYPE ... ADD VALUE IF NOT EXISTS ...")`; columna `NOT NULL` en tabla con filas ⇒
+   `server_default`. Comprueba con `alembic upgrade head && alembic check`.
+2. Backfill aditivo en `_create_schema()` de `init_db.py` (solo para los SQLite existentes en self_hosted).
+
+`tests/test_alembic_baseline.py` (Postgres) falla si las migraciones no coinciden con los modelos.
+La línea base `0001_baseline` recoge el esquema completo; también crea la extensión `vector` si el
+servidor la tiene (la tabla `document_chunks` la crea el propio `_PgVectorStore`, fuera de `Base.metadata`).
 
 ## SQLite
 

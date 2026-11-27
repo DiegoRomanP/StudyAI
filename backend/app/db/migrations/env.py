@@ -16,9 +16,10 @@ from app.db.base import Base  # imports all models as a side effect
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)  # keep the app loggers alive when run in-process
 
-config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL)
+# "%%": configparser would read a URL-encoded password ("%40") as interpolation.
+config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL.replace("%", "%%"))
 target_metadata = Base.metadata
 
 

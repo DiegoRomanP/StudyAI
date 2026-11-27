@@ -55,7 +55,10 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac√
 `str` (como el resto del archivo), no `SecretStr`. Dependencias nuevas en `requirements-saas.txt`: `pyjwt[crypto]`, `boto3`.
 
 Empaquetado y despliegue (`backend/Dockerfile`, `deploy/`, CI): ver [despliegue/operacion.md](../despliegue/operacion.md).
-La imagen ejecuta `alembic upgrade head` solo con `DEPLOYMENT_MODE=saas`.
+La imagen ejecuta `alembic upgrade head` solo con `DEPLOYMENT_MODE=saas`, y en ese modo `init_db` no llama a
+`create_all` ni a los backfills (solo siembra datos); en `self_hosted` el arranque crea el esquema solo.
+`env.py` de Alembic lee la URL de `get_settings().DATABASE_URL`. Ver
+[base-de-datos.md](base-de-datos.md#qui√©n-pone-el-esquema-create_all-self_hosted-o-alembic-saas).
 
 Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/saas-produccion.md).
 

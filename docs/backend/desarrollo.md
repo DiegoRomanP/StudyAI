@@ -29,5 +29,6 @@ python -m pytest tests/test_sm2.py::test_third_review_multiplies_by_ef -q   # si
 - Postgres: ver [arquitectura/base-de-datos.md](arquitectura/base-de-datos.md#postgres-saas--supabase).
 - Coste por plan/refuerzo: `python scripts/usage_report.py`.
 
-No hay `alembic upgrade` en el flujo normal (ver base-de-datos.md). No hay linter/formatter/typecheck de
+En local (SQLite) no hay `alembic upgrade`: el arranque crea el esquema. Alembic solo pone el esquema en
+`saas`; cómo crear una migración: ver base-de-datos.md. No hay linter/formatter/typecheck de
 backend configurado.

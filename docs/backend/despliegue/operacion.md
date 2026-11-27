@@ -11,8 +11,9 @@ Estado: H3 y H4 de `plans/SaaS_SinCredenciales.md`. Los pasos de la VM están en
 - `CMD`: si `DEPLOYMENT_MODE=saas` ejecuta `alembic upgrade head` y luego
   `uvicorn main:app --host 0.0.0.0 --port 8001 --workers 1 --proxy-headers`. Un solo worker: la
   generación corre en segundo plano dentro del proceso (sin cola en la beta).
-- **Pendiente H2**: aún no hay versiones de Alembic, así que `upgrade head` no hace nada; H2 aporta la
-  línea base y hace que `init_db` deje de llamar a `create_all` en `saas`.
+- Migración en cada deploy: `upgrade head` corre en cada arranque del contenedor (idempotente; si falla, el
+  contenedor no arranca y `restart: unless-stopped` reintenta). En `saas` `init_db` no crea tablas.
+  `alembic.ini` y `app/db/migrations/` entran en la imagen (el `.dockerignore` no los excluye).
 - `.dockerignore` deja fuera `.env`, `storage/`, `tests/`, bases SQLite y entornos virtuales.
 
 ## Despliegue (`deploy/`)
@@ -23,6 +24,23 @@ Estado: H3 y H4 de `plans/SaaS_SinCredenciales.md`. Los pasos de la VM están en
 - `deploy.sh usuario@host`: `rsync` sin `.env`, `storage`, `node_modules` ni `frontend/` y
   `docker compose up -d --build` por ssh. El `.env` de producción vive solo en la VM.
 - DNS `api` en modo "DNS only" (si no, Caddy no emite el certificado).
+
+## Base de datos existente (Supabase) y Alembic
+
+Antes del primer deploy con la línea base `0001_baseline`, mira la base de Supabase:
+
+- **Vacía** (sin tablas en `public`): no hagas nada; el contenedor ejecuta `alembic upgrade head`.
+- **Ya tiene el esquema** (creado por `create_all` en pruebas): adóptala sin recrear tablas. Desde
+  `backend/`, con el `DATABASE_URL` de producción en el entorno:
+  ```bash
+  alembic stamp 0001_baseline   # escribe alembic_version sin tocar tablas
+  alembic check                 # "No new upgrade operations detected." = coincide con los modelos
+  ```
+  Si `alembic check` muestra diferencias, la base no coincide: si es de pruebas, lo más simple es vaciar
+  `public` y dejar que `upgrade head` la cree; si tiene datos reales, escribe una migración de ajuste.
+  Sin `stamp`, `upgrade head` fallaría al intentar crear tablas que ya existen y el API no arrancaría.
+- Ver la versión aplicada: `alembic current`. Nuevas migraciones: ver
+  [base-de-datos.md](../arquitectura/base-de-datos.md#cambiar-el-esquema-desde-ahora-columna-o-tabla-nueva).
 
 ## Frontend (Cloudflare Pages)
 

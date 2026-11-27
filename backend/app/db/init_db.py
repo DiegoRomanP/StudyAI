@@ -1,8 +1,7 @@
 """Database bootstrap.
 
-For the MVP we create tables directly from the ORM metadata so the app runs with
-zero migration steps. Alembic is still configured (see ``alembic.ini``) for when
-the schema stabilises and you want versioned migrations.
+self_hosted (SQLite/demo): tables come from ``create_all`` plus additive backfills, zero migration steps.
+saas: the schema is Alembic's (``alembic upgrade head`` runs before the API); startup only seeds data.
 """
 
 from __future__ import annotations
@@ -10,17 +9,14 @@ from __future__ import annotations
 from sqlalchemy import Index, bindparam, inspect, text
 
 from app.api.deps import DEFAULT_USER_EMAIL, DEFAULT_USER_ID
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.llm.credential_state import verification_fingerprint
 from app.models.llm_credential import LLMCredential, LLMProviderName, RETIRED_PROVIDER_NAMES
-from app.models.billing import Order, PaymentEvent, Product, ProductKind  # noqa: F401 - register before create_all
-from app.models.credit_ledger import CreditLedger  # noqa: F401 - register before create_all
-from app.models.llm_usage import LLMUsageRecord  # noqa: F401 - register before create_all
+from app.models.billing import Product, ProductKind
 from app.models.plan import Plan
-from app.models.quiz import Quiz, QuizQuestion, QuizResult  # noqa: F401 - register before create_all
-from app.models.session import Session as StudySession, SessionMaterial  # noqa: F401 - register before create_all
 from app.models.user import User
 
 logger = get_logger(__name__)
@@ -85,7 +81,19 @@ def _purge_retired_provider_credentials() -> None:
 
 
 def init_db() -> None:
-    """Create all tables and seed the default (demo) user."""
+    """Prepare the schema (self_hosted only) and seed the data every mode needs."""
+    if get_settings().is_saas:
+        _purge_retired_provider_credentials()
+    else:
+        _create_schema()
+    _seed_default_user()
+    _seed_products()
+    sync_id_sequences()
+    _enable_row_level_security()
+
+
+def _create_schema() -> None:
+    """create_all plus additive backfills for SQLite files older than a column; saas uses Alembic."""
     Base.metadata.create_all(bind=engine)
     _ensure_provider_enum_values()
     _ensure_document_error_message_column()
@@ -97,14 +105,10 @@ def init_db() -> None:
     _ensure_credit_columns()
     _ensure_goal_deleted_at_column()
     _ensure_goal_exam_date_column()
-    _purge_retired_provider_credentials()
+    _purge_retired_provider_credentials()  # before the verification backfill loads credential rows
     _ensure_llm_verification_columns()
     _ensure_adaptive_route_columns()
     _ensure_adaptive_content_columns()
-    _seed_default_user()
-    _seed_products()
-    sync_id_sequences()
-    _enable_row_level_security()
 
 
 def _enable_row_level_security() -> None:
