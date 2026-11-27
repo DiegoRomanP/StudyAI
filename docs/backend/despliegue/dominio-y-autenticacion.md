@@ -63,7 +63,7 @@ despliegue SaaS. Complementa [saas-produccion.md](saas-produccion.md) y `plans/S
 - [ ] Dominio verificado en Resend y API key creada.
 - [ ] SMTP personalizado guardado en Supabase.
 - [ ] Cliente OAuth de Google creado y pegado en Supabase.
-- [ ] Error 28P01 de Supabase resuelto.
+- [x] Error 28P01 de Supabase resuelto (reset de la contraseña de la base, 2026-11-27). Esquema `public` vaciado: el primer deploy aplica `alembic upgrade head` sin `stamp`.
 - [ ] `api.studyinflow.app` y frontend desplegados.
 
 El código del login (backend y frontend) está hecho y verificado en `feat/deploy-ola1` (Ola 6,
