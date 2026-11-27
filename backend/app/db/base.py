@@ -19,6 +19,7 @@ class Base(DeclarativeBase):
 # The `noqa` keeps linters from removing these "unused" imports.
 from app.models import (  # noqa: E402,F401  (side-effect imports)
     assistant_message,
+    complaint,
     document,
     document_asset,
     flashcard,
