@@ -55,6 +55,16 @@ def test_limiter_window_slides():
     lim.hit("b", "u", limit=1, window_seconds=10)  # the first hit left the window
 
 
+def test_limiter_forgets_idle_keys():
+    now = [0.0]
+    lim = SlidingWindowLimiter(clock=lambda: now[0])
+    for i in range(100):
+        lim.hit("b", f"ip:{i}", limit=1, window_seconds=10)
+    now[0] = 100.0
+    lim.hit("b", "fresh", limit=1, window_seconds=10)
+    assert list(lim._hits) == [("b", "fresh")]
+
+
 def test_eleventh_generation_in_an_hour_is_429_with_retry_after(client, saas_limited):
     for _ in range(10):
         assert client.post("/plans/generate", json={}).status_code == 422  # counted, then body rejected
@@ -105,6 +115,12 @@ def test_complete_production_config_boots():
 def test_incomplete_production_config_refuses_to_boot(override, message):
     with pytest.raises(ValueError, match=message):
         Settings(_env_file=None, **{**_PRODUCTION_OK, **override})
+
+
+def test_boot_error_does_not_echo_secrets():
+    with pytest.raises(ValueError) as exc:
+        Settings(_env_file=None, **{**_PRODUCTION_OK, "PAYMENT_GATEWAY": "fake", "MP_ACCESS_TOKEN": "APP_USR-leak"})
+    assert "APP_USR-leak" not in str(exc.value) and "input_value" not in str(exc.value)
 
 
 def test_outside_production_the_demo_defaults_still_boot():

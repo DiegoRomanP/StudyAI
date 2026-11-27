@@ -61,6 +61,8 @@ Hoja de ruta hacia SaaS de pago: [despliegue/saas-produccion.md](../despliegue/s
 
 ## Validación al arrancar (saas + producción)
 
+El error lista lo que falta sin repetir el entorno (`hide_input_in_errors`): ningún secreto acaba en los logs.
+
 Con `DEPLOYMENT_MODE=saas` y `APP_ENV=production`, `Settings._saas_production_is_fully_configured`
 (`app/core/config.py`) impide arrancar y lista **todos** los problemas a la vez si: `PAYMENT_GATEWAY=fake`;
 `mercadopago` sin `MP_ACCESS_TOKEN` o `MP_WEBHOOK_SECRET`; faltan `SUPABASE_URL` o `SUPABASE_JWKS_URL`
@@ -88,7 +90,8 @@ Al pasarse: 429 `RATE_LIMITED` con `Retry-After` (segundos). Límites (por hora)
 
 Nuevo límite: `dependencies=[Depends(rate_limit("bucket", limit=..., window_seconds=...))]` (o
 `rate_limit_by_ip` en rutas públicas). Limitación conocida: memoria del proceso, válido con **un solo
-worker** (como la recuperación al arrancar); con varios, pasar a Redis.
+worker** (como la recuperación al arrancar); con varios, pasar a Redis. Cada 60 s se borran las claves
+sin golpes en su ventana, así que rotar IPs no hace crecer la memoria sin límite.
 
 IP real: Caddy sobrescribe `X-Forwarded-For` con la IP del cliente (no confía en la que llega) y uvicorn
 corre con `--proxy-headers` y `FORWARDED_ALLOW_IPS="*"` (`deploy/docker-compose.yml`). Es seguro porque

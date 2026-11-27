@@ -20,6 +20,8 @@ from app.core.config import get_settings
 from app.core.exceptions import RateLimitError
 from app.models.user import User
 
+_SWEEP_EVERY_SECONDS = 60
+
 
 class SlidingWindowLimiter:
     """shortcut: en memoria, un solo worker; pasar a Redis si hay varios workers."""
@@ -27,11 +29,18 @@ class SlidingWindowLimiter:
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
         self._hits: dict[tuple[str, str], deque[float]] = {}
+        self._windows: dict[str, int] = {}
+        self._next_sweep = 0.0
         self._lock = threading.Lock()  # sync routes run in a thread pool
 
     def hit(self, bucket: str, key: str, *, limit: int, window_seconds: int) -> None:
         now = self._clock()
         with self._lock:
+            self._windows[bucket] = window_seconds
+            if now >= self._next_sweep:  # drop idle keys so rotating IPs cannot grow the dict forever
+                self._next_sweep = now + _SWEEP_EVERY_SECONDS
+                for k in [k for k, h in self._hits.items() if not h or h[-1] <= now - self._windows[k[0]]]:
+                    del self._hits[k]
             hits = self._hits.setdefault((bucket, key), deque())
             while hits and hits[0] <= now - window_seconds:
                 hits.popleft()

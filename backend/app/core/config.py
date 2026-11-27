@@ -57,6 +57,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # A boot error must not echo the env (keys, tokens) into the container logs.
+        hide_input_in_errors=True,
     )
 
     # --- LLM -----------------------------------------------------------------
