@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Coins } from "lucide-react";
 
-import type { CreditReason } from "../../api/types";
+import type { CreditLedgerEntryDTO, CreditReason } from "../../api/types";
 import { useCreditHistory, useCredits } from "../../hooks/useCredits";
+import { useShowMore } from "../../hooks/useShowMore";
 import { parseApiDate } from "../../lib/studyProgress";
 import { Dialog } from "../Dialog";
 import { Button } from "../ui";
@@ -19,14 +20,21 @@ const REASON_LABELS: Record<CreditReason, string> = {
   expiration: "Créditos vencidos",
 };
 
-function CreditHistory() {
+/** Latest credit movements (dialog of the chip and `/cuenta`). */
+export function CreditHistory() {
   const history = useCreditHistory(true);
   if (history.isPending) return <p className="text-sm text-text-muted">Cargando movimientos…</p>;
   if (history.isError) return <p className="text-sm text-state-error">No se pudo cargar el historial.</p>;
   if (history.data.length === 0) return <p className="text-sm text-text-muted">Aún no tienes movimientos.</p>;
+  return <CreditHistoryList entries={history.data} />;
+}
+
+function CreditHistoryList({ entries }: { entries: CreditLedgerEntryDTO[] }) {
+  const { visible, hiddenCount, showMore } = useShowMore(entries);
   return (
+    <>
     <ul className="divide-y divide-line">
-      {history.data.map((entry) => (
+      {visible.map((entry) => (
         <li key={entry.id} className="flex items-center justify-between gap-3 py-2 text-sm">
           <span className="min-w-0">
             <span className="block text-text-primary">{REASON_LABELS[entry.reason] ?? entry.reason}</span>
@@ -38,6 +46,12 @@ function CreditHistory() {
         </li>
       ))}
     </ul>
+    {hiddenCount > 0 && (
+      <Button type="button" variant="ghost" onClick={showMore}>
+        Mostrar {hiddenCount} más
+      </Button>
+    )}
+    </>
   );
 }
 
