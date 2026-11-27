@@ -9,7 +9,14 @@ import { CreditChip } from "./components/credits/CreditChip";
 import { StudyStreakCard } from "./components/home/HomeCards";
 import { useAppConfig } from "./hooks/useAppConfig";
 import { useAuth } from "./hooks/useAuth";
+import { LegalLinks } from "./components/PublicLayout";
+import { AccountPage } from "./pages/AccountPage";
 import { DocumentsPage } from "./pages/DocumentsPage";
+import { ComplaintsPage } from "./pages/legal/ComplaintsPage";
+import { PrivacyPage } from "./pages/legal/PrivacyPage";
+import { TermsPage } from "./pages/legal/TermsPage";
+import { PaymentResultPage } from "./pages/PaymentResultPage";
+import { PricingPage } from "./pages/PricingPage";
 import { GoalsPage } from "./pages/GoalsPage";
 import { HomePage } from "./pages/HomePage";
 import { LandingPage } from "./pages/LandingPage";
@@ -40,6 +47,13 @@ function SettingsRoute() {
   return isSaas ? <NotFoundPage /> : <SettingsPage />;
 }
 
+// Billing exists only in SaaS: in self-hosted the backend has no such routes, so the UI answers 404 too.
+function SaasOnly({ children }: { children: ReactNode }) {
+  const { isSaas, isPending } = useAppConfig();
+  if (isPending) return <PageSkeleton />;
+  return isSaas ? <>{children}</> : <NotFoundPage />;
+}
+
 function AppLayout() {
   const focus = useMatch("/session/:sessionId") !== null;
   const { isSaas, hasLogin } = useAppConfig();
@@ -52,6 +66,7 @@ function AppLayout() {
       sidebarFooter={focus ? undefined : <StudyStreakCard />}
       hideAiSettings={isSaas}
       creditChip={isSaas ? <CreditChip /> : undefined}
+      footer={isSaas ? <LegalLinks /> : undefined}
     >
       <RouteErrorBoundary>
         <Lazy>
@@ -89,6 +104,11 @@ export default function App() {
       <Route path="/registro" element={<SignupPage />} />
       <Route path="/recuperar" element={<RecoverPage />} />
       <Route path="/restablecer" element={<ResetPasswordPage />} />
+      {/* Public pages: pricing (saas only) and the legal texts. */}
+      <Route path="/precios" element={<SaasOnly><PricingPage /></SaasOnly>} />
+      <Route path="/terminos" element={<TermsPage />} />
+      <Route path="/privacidad" element={<PrivacyPage />} />
+      <Route path="/reclamaciones" element={<ComplaintsPage />} />
       <Route
         element={
           <RequireAuth>
@@ -107,6 +127,8 @@ export default function App() {
         <Route path="/session/:sessionId" element={<SessionPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/settings" element={<SettingsRoute />} />
+        <Route path="/cuenta" element={<SaasOnly><AccountPage /></SaasOnly>} />
+        <Route path="/pago/resultado" element={<SaasOnly><PaymentResultPage /></SaasOnly>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

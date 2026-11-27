@@ -19,6 +19,7 @@ import { FlowRiver } from "../components/brand/FlowRiver";
 import { Logo } from "../components/brand/Logo";
 import { APP_HOME_PATH } from "../components/AppShell";
 import { Reveal } from "../components/motion/Reveal";
+import { LegalLinks } from "../components/PublicLayout";
 import { ButtonLink, IconTile } from "../components/ui";
 
 const FEATURES: { icon: LucideIcon; title: string; detail: string }[] = [
@@ -234,6 +235,7 @@ export function LandingPage() {
         <Link to="/demo" className="inline-flex min-h-11 items-center underline hover:text-text-primary">
           Ver demo
         </Link>
+        <LegalLinks />
       </footer>
     </div>
   );
