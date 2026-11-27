@@ -44,6 +44,8 @@ Organizada por **lado** (backend / frontend) y dentro por **funcionalidad**. Cad
   ejecutado (contexto histórico; el código actual manda).
 - [backend/despliegue/saas-produccion.md](backend/despliegue/saas-produccion.md) — hoja de ruta a SaaS de pago.
 - [backend/despliegue/operacion.md](backend/despliegue/operacion.md) — Docker, deploy a la VM y CI.
+- [backend/despliegue/dominio-y-autenticacion.md](backend/despliegue/dominio-y-autenticacion.md) — dominio
+  `studyinflow.app`, SMTP (Resend), Google OAuth y URLs de Supabase; checklist de estado.
 - [backend/generacion-planes/piloto-perfiles.md](backend/generacion-planes/piloto-perfiles.md) — piloto de
   perfiles académicos.
 - `../studyai_multiagent_plan.md` — documento histórico de planificación (no es el flujo actual).
