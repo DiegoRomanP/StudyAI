@@ -60,6 +60,8 @@ ROUTES = [
     ("GET", "/goals/{goal}", None),
     ("PUT", "/goals/{goal}", {"title": "Robado"}),
     ("DELETE", "/goals/{goal}", None),
+    ("POST", "/goals/{goal}/archive", None),
+    ("POST", "/goals/{goal}/unarchive", None),
     ("GET", "/plans/{plan}", None),
     ("GET", "/plans/{plan}/status", None),
     ("POST", "/plans/{plan}/resume", None),
@@ -88,11 +90,22 @@ def test_other_user_gets_404(world, method, path, body):
     assert r.status_code == 404, r.text
 
 
+def test_b_cannot_generate_a_plan_from_a_goal_or_document(world):
+    client, ids = world
+    hb = {"X-Test-User": "b"}
+    own_goal = client.post("/goals", json={"goal_type": "LEARNING", "title": "Mía"}, headers=hb).json()["id"]
+    for body in ({"goal_id": ids["goal"], "document_ids": []}, {"goal_id": own_goal, "document_ids": [ids["doc"]]}):
+        r = client.post("/plans/generate", json=body, headers=hb)
+        assert r.status_code in (400, 404, 422), r.text
+    assert client.get("/plans", headers=hb).json() == []
+
+
 def test_b_lists_and_dashboard_are_empty(world):
     client, ids = world
     hb = {"X-Test-User": "b"}
-    for path in ("/documents", "/goals", "/plans"):
+    for path in ("/documents", "/plans"):
         assert client.get(path, headers=hb).json() == []
+    assert all(g["title"] == "Mía" for g in client.get("/goals", headers=hb).json())
     dash = client.get("/dashboard", headers=hb).json()
     assert dash["sessions_completed"] == 0
     # A's data is intact after all the failed attempts above (runs last: DELETE routes ran as B).
