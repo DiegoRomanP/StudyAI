@@ -1,3 +1,7 @@
 api.{$DOMAIN} {
+	# Uploads are capped at MAX_UPLOAD_MB (25) in the app, but only after the body is read into memory.
+	request_body {
+		max_size 30MB
+	}
 	reverse_proxy api:8001
 }
