@@ -89,6 +89,7 @@ _PRODUCTION_OK = dict(
     STORAGE_BACKEND="s3", S3_ENDPOINT_URL="https://r2.example", S3_BUCKET="b",
     S3_ACCESS_KEY_ID="k", S3_SECRET_ACCESS_KEY="s",
     SECRET_KEY="a-long-random-secret", CORS_ORIGINS=["https://studyinflow.app"],
+    DATABASE_URL="postgresql+psycopg://u:p@db.example:5432/postgres",
 )
 
 
@@ -108,6 +109,8 @@ def test_complete_production_config_boots():
         ({"STORAGE_BACKEND": "local"}, "STORAGE_BACKEND"),
         ({"S3_BUCKET": ""}, "S3_BUCKET"),
         ({"SECRET_KEY": "change-me-in-production"}, "SECRET_KEY"),
+        ({"DATABASE_URL": "sqlite:///./studyai.db"}, "DATABASE_URL"),
+        ({"DATABASE_URL": " SQLite:///x.db"}, "DATABASE_URL"),
         ({"CORS_ORIGINS": ["*"]}, "CORS_ORIGINS"),
         ({"CORS_ORIGINS": ["http://localhost:5173"]}, "CORS_ORIGINS"),
     ],

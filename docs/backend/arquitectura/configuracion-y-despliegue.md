@@ -70,7 +70,7 @@ Con `DEPLOYMENT_MODE=saas` y `APP_ENV=production`, `Settings._saas_production_is
 (`app/core/config.py`) impide arrancar y lista **todos** los problemas a la vez si: `PAYMENT_GATEWAY=fake`;
 `mercadopago` sin `MP_ACCESS_TOKEN` o `MP_WEBHOOK_SECRET`; faltan `SUPABASE_URL` o `SUPABASE_JWKS_URL`
 (`AUTH_MODE=supabase` ya lo exige cualquier `saas`); `STORAGE_BACKEND` no es `s3` o le falta alguna `S3_*`
-(el disco del contenedor no persiste); `SECRET_KEY` es la de por defecto; `CORS_ORIGINS` contiene `*`,
+(el disco del contenedor no persiste); `DATABASE_URL` es SQLite; `SECRET_KEY` es la de por defecto; `CORS_ORIGINS` contiene `*`,
 `localhost` o `127.0.0.1`. Fuera de producción no cambia nada (invariante del modo demo).
 
 En saas + producción además: `/docs`, `/redoc` y `/openapi.json` dan 404, y la respuesta lleva HSTS. En

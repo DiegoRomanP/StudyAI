@@ -233,6 +233,8 @@ class Settings(BaseSettings):
             v.strip() for v in (self.S3_ENDPOINT_URL, self.S3_BUCKET, self.S3_ACCESS_KEY_ID, self.S3_SECRET_ACCESS_KEY)
         ):
             problems.append("STORAGE_BACKEND=s3 exige S3_ENDPOINT_URL, S3_BUCKET, S3_ACCESS_KEY_ID y S3_SECRET_ACCESS_KEY")
+        if self.DATABASE_URL.strip().lower().startswith("sqlite"):
+            problems.append("DATABASE_URL no puede ser SQLite en producción (usa Postgres)")
         if self.SECRET_KEY == "change-me-in-production" or not self.SECRET_KEY.strip():
             problems.append("SECRET_KEY tiene el valor por defecto")
         if any(o == "*" or "localhost" in o or "127.0.0.1" in o for o in self.CORS_ORIGINS):
