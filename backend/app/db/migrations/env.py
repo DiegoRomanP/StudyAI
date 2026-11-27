@@ -22,11 +22,21 @@ if config.config_file_name is not None:
 config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL.replace("%", "%%"))
 target_metadata = Base.metadata
 
+# Created at first use by _PgVectorStore (app/rag/vector_store.py), outside Base.metadata:
+# without this, autogenerate would emit drop_table("document_chunks") and `alembic check` would fail.
+_UNMANAGED_TABLES = {"document_chunks"}
+
+
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    table = name if type_ == "table" else getattr(getattr(obj, "table", None), "name", None)
+    return table not in _UNMANAGED_TABLES
+
 
 def run_migrations_offline() -> None:
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
         target_metadata=target_metadata,
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,  # SQLite-friendly ALTERs
@@ -45,6 +55,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            include_object=include_object,
             render_as_batch=True,
         )
         with context.begin_transaction():

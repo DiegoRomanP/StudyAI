@@ -39,7 +39,8 @@ Hay que hacer **las dos cosas** en el mismo cambio:
 
 `tests/test_alembic_baseline.py` (Postgres) falla si las migraciones no coinciden con los modelos.
 La línea base `0001_baseline` recoge el esquema completo; también crea la extensión `vector` si el
-servidor la tiene (la tabla `document_chunks` la crea el propio `_PgVectorStore`, fuera de `Base.metadata`).
+servidor la tiene (la tabla `document_chunks` la crea el propio `_PgVectorStore`, fuera de `Base.metadata`;
+`env.py` la excluye con `include_object` para que autogenerate no proponga borrarla).
 
 ## SQLite
 

@@ -63,13 +63,20 @@ def test_upgrade_head_on_an_empty_database_matches_the_models(monkeypatch):
         monkeypatch.setattr(
             get_settings(), "DATABASE_URL", scratch_url.render_as_string(hide_password=False)
         )
-        command.upgrade(Config(str(_ALEMBIC_INI)), "head")
+        cfg = Config(str(_ALEMBIC_INI))
+        command.upgrade(cfg, "head")
 
         scratch = create_engine(scratch_url)
         with scratch.connect() as conn:
             diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
-        scratch.dispose()
         assert diff == []
+
+        # A used database also has _PgVectorStore's table; Alembic must leave it alone.
+        with scratch.begin() as conn:
+            conn.execute(text("CREATE TABLE document_chunks (id TEXT PRIMARY KEY, document_id INTEGER NOT NULL)"))
+            conn.execute(text("CREATE INDEX ix_document_chunks_document_id ON document_chunks (document_id)"))
+        scratch.dispose()
+        command.check(cfg)  # raises if env.py would autogenerate anything
     finally:
         with admin.connect() as conn:
             conn.execute(text("DROP DATABASE IF EXISTS studyai_alembic_check WITH (FORCE)"))
