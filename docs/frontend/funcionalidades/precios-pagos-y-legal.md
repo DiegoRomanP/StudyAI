@@ -13,7 +13,7 @@ En `self_hosted` las tres rutas pasan por `SaasOnly` (`App.tsx`) y pintan `NotFo
   `formatPrice` (`Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" })` → `S/ 4.90`).
   «Comprar» sin sesión (Supabase activo) → `/login?next=/precios`. Con sesión → `POST /billing/checkout`
   con una clave nueva de `createIdempotencyKey()` por clic (el doble clic lo evita el botón deshabilitado
-  mientras se abre el pago) y luego `window.location.assign(checkout_url)`.
+  mientras se abre el pago) y luego `window.location.assign(checkout_url)`, solo si la URL es `https:` o del propio origen (`isSafeCheckoutUrl`; si no, error y no navega).
 - **`/pago/resultado?order=`** (dentro de `AppShell`, activa «Cuenta»): `useOrder` consulta
   `GET /billing/orders/{id}` cada 3 s mientras esté `pending`; a los 5 min deja de consultar y muestra
   «Seguimos esperando la confirmación…» con «Consultar de nuevo». En `paid` invalida

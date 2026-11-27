@@ -22,7 +22,7 @@ vi.mock("../lib/supabase", () => ({ supabase: { auth } }));
 vi.mock("../api/endpoints", () => ({ api }));
 
 import { CREDITS_QUERY_KEY } from "../hooks/useCredits";
-import { formatPrice, ORDER_POLL_MS } from "../hooks/useBilling";
+import { formatPrice, isSafeCheckoutUrl, ORDER_POLL_MS } from "../hooks/useBilling";
 import { PaymentResultPage } from "../pages/PaymentResultPage";
 import { PricingPage } from "../pages/PricingPage";
 
@@ -110,6 +110,28 @@ describe("PricingPage", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith("https://pago.example/abc"));
     expect(api.createCheckout).toHaveBeenCalledWith("pack_10", expect.any(String));
     vi.unstubAllGlobals();
+  });
+
+  it("never navigates to a checkout URL that is not https or this app", async () => {
+    withSession({ access_token: "t", user: { id: "u1" } });
+    api.createCheckout.mockResolvedValue({ order_id: 5, checkout_url: "javascript:alert(1)" });
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    renderAt("/precios");
+    await waitFor(() => expect(auth.getSession).toHaveBeenCalled());
+    const [buy] = await screen.findAllByRole("button", { name: "Comprar" });
+    await act(async () => {});
+    fireEvent.click(buy);
+    expect(await screen.findByText("No se pudo iniciar el pago. Inténtalo de nuevo.")).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("accepts https gateway URLs and same-origin fake URLs only", () => {
+    expect(isSafeCheckoutUrl("https://www.mercadopago.com.pe/checkout/v1/redirect?pref_id=1")).toBe(true);
+    expect(isSafeCheckoutUrl(`${window.location.origin}/pago/resultado?order=1`)).toBe(true);
+    expect(isSafeCheckoutUrl("http://evil.example/pay")).toBe(false);
+    expect(isSafeCheckoutUrl("data:text/html,hi")).toBe(false);
   });
 });
 

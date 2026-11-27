@@ -26,9 +26,22 @@ export function useOrders(enabled = true) {
 
 export function useCheckout() {
   return useMutation({
-    mutationFn: ({ productCode, idempotencyKey }: { productCode: string; idempotencyKey: string }) =>
-      api.createCheckout(productCode, idempotencyKey),
+    mutationFn: async ({ productCode, idempotencyKey }: { productCode: string; idempotencyKey: string }) => {
+      const checkout = await api.createCheckout(productCode, idempotencyKey);
+      if (!isSafeCheckoutUrl(checkout.checkout_url)) throw new Error("Unsafe checkout URL");
+      return checkout;
+    },
   });
+}
+
+/** The page we navigate to must be https (the gateway) or this app (the fake gateway): never `javascript:`. */
+export function isSafeCheckoutUrl(url: string) {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === "https:" || parsed.origin === window.location.origin;
+  } catch {
+    return false;
+  }
 }
 
 /**
