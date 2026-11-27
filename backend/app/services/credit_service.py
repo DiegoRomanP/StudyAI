@@ -8,7 +8,7 @@ The valid monthly pass is spent before purchased credits.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from sqlalchemy import select, update
@@ -140,6 +140,26 @@ class CreditService:
             .execution_options(synchronize_session=False)
         )
         return self._record(user_id, delta, reason, source, reference_type, reference_id, idempotency_key)
+
+    def grant_pass(
+        self, user_id: int, *, credits: int, days: int, idempotency_key: str,
+        reference_type: str | None = None, reference_id: int | None = None,
+    ) -> int:
+        """Start or extend the monthly pass: its credits reset to ``credits`` (they never stack) and the
+        expiry moves to ``max(now, current expiry) + days``. Idempotent per key."""
+        existing = self.repo.find_id_by_key(idempotency_key)
+        if existing is not None:
+            return existing
+        current = self._columns(user_id).pass_expires_at
+        expires = max(_now(), current or _now()) + timedelta(days=days)
+        self.db.execute(
+            update(User).where(User.id == user_id).values(pass_credits=credits, pass_expires_at=expires)
+            .execution_options(synchronize_session=False)
+        )
+        return self._record(
+            user_id, credits, CreditReason.PASS_GRANT, CreditSource.PASS, reference_type, reference_id,
+            idempotency_key,
+        )
 
     def _record(
         self, user_id: int, delta: int, reason: CreditReason, source: CreditSource,

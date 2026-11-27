@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import account, adaptive_assessment, adaptive_learning, assistant, dashboard, documents, goals, llm_settings, plans, quizzes, sessions, system
+from app.api.v1.routes import account, adaptive_assessment, adaptive_learning, assistant, billing, dashboard, documents, goals, llm_settings, plans, quizzes, sessions, system
 
 api_router = APIRouter()
 api_router.include_router(account.router)
+api_router.include_router(billing.router)
 api_router.include_router(documents.router)
 api_router.include_router(goals.router)
 api_router.include_router(plans.router)
