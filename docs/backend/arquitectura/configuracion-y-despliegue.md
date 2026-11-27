@@ -40,7 +40,7 @@ Todas con default seguro (self-hosted/demo); `tests/conftest.py` las fuerza vac�
 
 | Variable | Default | Uso |
 |---|---|---|
-| `APP_ENV` | `development` | `development` \| `production` |
+| `APP_ENV` | `development` | texto libre (`development`, `qa`…); solo `production` (sin distinguir mayúsculas) activa las comprobaciones de arranque |
 | `PUBLIC_APP_URL` / `PUBLIC_API_URL` | `http://localhost:5173` / `http://localhost:8001` | URLs públicas (enlaces, redirecciones, webhooks) |
 | `AUTH_MODE` | `demo` | `demo` (usuario único) \| `supabase` (valida JWT) |
 | `SUPABASE_URL`, `SUPABASE_JWKS_URL`, `SUPABASE_PUBLISHABLE_KEY` | vacío | Supabase Auth; solo clave publicable |

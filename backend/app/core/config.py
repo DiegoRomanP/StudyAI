@@ -141,7 +141,8 @@ class Settings(BaseSettings):
     MAX_PDF_PAGES: int = Field(default=200, ge=1)
 
     # --- App -----------------------------------------------------------------
-    APP_ENV: Literal["development", "production"] = "development"
+    # Free-form (QA runs use "qa", older .env files other labels); only "production" (any case) is special.
+    APP_ENV: str = "development"
     PUBLIC_APP_URL: str = "http://localhost:5173"
     PUBLIC_API_URL: str = "http://localhost:8001"
     # self_hosted: today's behaviour (demo user, own key, Ollama, mock allowed).
@@ -194,6 +195,11 @@ class Settings(BaseSettings):
             items = [item.strip() for item in value.split(",") if item.strip()]
             return items
         return value
+
+    @field_validator("APP_ENV")
+    @classmethod
+    def _normalize_app_env(cls, value: str) -> str:
+        return value.strip().lower()
 
     @field_validator("LLM_MODEL_PLAN", "LLM_MODEL_QUIZ")
     @classmethod

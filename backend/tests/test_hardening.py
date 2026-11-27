@@ -165,3 +165,10 @@ def test_dev_keeps_docs_and_sends_basic_security_headers(client):
     assert health.headers["X-Content-Type-Options"] == "nosniff"
     assert health.headers["X-Frame-Options"] == "DENY"
     assert "Strict-Transport-Security" not in health.headers
+
+
+def test_app_env_accepts_any_label_and_production_in_any_case():
+    """QA runs set APP_ENV=qa: a free label must boot, and " Production " must still trigger the checks."""
+    assert Settings(_env_file=None, APP_ENV="qa").APP_ENV == "qa"
+    with pytest.raises(ValueError, match="producción incompleta"):
+        Settings(_env_file=None, DEPLOYMENT_MODE="saas", AUTH_MODE="supabase", APP_ENV=" Production ")
